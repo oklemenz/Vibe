@@ -1,0 +1,3243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>2.5D Metroidvania Prototype</title>
+  <style>
+      body {
+          margin: 0;
+          overflow: hidden;
+          background: #000;
+      }
+      canvas {
+          display: block;
+      }
+      #bossAnnouncement {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          font-family: 'Arial Black', sans-serif;
+          font-size: 72px;
+          color: #ff0000;
+          text-shadow:
+            0 0 20px #ff0000,
+            0 0 40px #ff0000,
+            0 0 60px #ff0000,
+            0 0 80px #ff0000,
+            4px 4px 8px #000000;
+          text-align: center;
+          z-index: 1000;
+          display: none;
+          animation: bossGlow 1s ease-in-out infinite alternate;
+          pointer-events: none;
+      }
+      @keyframes bossGlow {
+          from {
+              text-shadow:
+                0 0 20px #ff0000,
+                0 0 40px #ff0000,
+                0 0 60px #ff0000,
+                0 0 80px #ff0000,
+                4px 4px 8px #000000;
+          }
+          to {
+              text-shadow:
+                0 0 30px #ff0000,
+                0 0 60px #ff0000,
+                0 0 90px #ff0000,
+                0 0 120px #ff0000,
+                4px 4px 8px #000000;
+          }
+      }
+  </style>
+</head>
+<body>
+<!-- Boss-Ankündigung -->
+<div id="bossAnnouncement">THE RED DEVIL</div>
+
+<!-- Tutorial-Anleitung -->
+<div id="tutorialOverlay" style="
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+  font-family: 'Arial', sans-serif;
+">
+  <div style="
+    background: linear-gradient(135deg, #1a0f3e 0%, #2d1b5e 50%, #4a2c6f 100%);
+    padding: 40px 60px;
+    border-radius: 20px;
+    border: 3px solid #00ffff;
+    box-shadow: 0 0 40px rgba(0, 255, 255, 0.6);
+    max-width: 700px;
+    text-align: center;
+  ">
+    <h1 style="
+      color: #00ffff;
+      font-size: 48px;
+      margin: 0 0 30px 0;
+      text-shadow: 0 0 20px #00ffff;
+    ">Steuerung</h1>
+
+    <div style="text-align: left; color: #ffffff; font-size: 20px; line-height: 2;">
+      <p style="margin: 10px 0;"><strong style="color: #00ffff;">← / →</strong> oder <strong style="color: #00ffff;">A / D</strong> - Bewegen</p>
+      <p style="margin: 10px 0;"><strong style="color: #00ffff;">↑</strong>, <strong style="color: #00ffff;">W</strong> oder <strong style="color: #00ffff;">Leertaste</strong> - Springen (Doppelsprung!)</p>
+      <p style="margin: 10px 0;"><strong style="color: #00ffff;">↓</strong> oder <strong style="color: #00ffff;">S</strong> - Rutschen (schneller gleiten)</p>
+      <p style="margin: 10px 0;"><strong style="color: #00ffff;">Shift</strong> - Dash (schnelle Ausweichbewegung)</p>
+      <p style="margin: 10px 0;"><strong style="color: #00ffff;">X</strong> - Schießen</p>
+      <p style="margin: 10px 0;"><strong style="color: #00ffff;">Y</strong> oder <strong style="color: #00ffff;">Z</strong> - Grappling Hook (leuchtende Perlen)</p>
+    </div>
+
+    <div style="
+      margin-top: 30px;
+      padding: 20px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 10px;
+      border: 2px solid #ff00ff;
+    ">
+      <p style="color: #ffff00; font-size: 18px; margin: 0;">
+        💡 <strong>Tipp:</strong> Springe auf Gegner, um sie zu besiegen!<br>
+        Weiche ihren Lasern aus oder nutze den Dash!
+      </p>
+    </div>
+
+    <button id="startButton" style="
+      margin-top: 30px;
+      padding: 15px 40px;
+      font-size: 24px;
+      font-weight: bold;
+      color: #000;
+      background: linear-gradient(135deg, #00ffff 0%, #00ff00 100%);
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
+      transition: all 0.3s;
+    ">
+      Spiel Starten
+    </button>
+  </div>
+</div>
+
+<!-- Three.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
+
+<script>
+  // THREE.js SETUP
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+  camera.position.set(0, 200, 600);
+  camera.lookAt(0, 200, 0);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio); // Höhere Auflösung
+  renderer.shadowMap.enabled = true; // Schatten aktivieren
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Weiche Schatten
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; // Besseres Tone Mapping
+  renderer.toneMappingExposure = 1.2;
+  document.body.appendChild(renderer.domElement);
+
+  // === BELEUCHTUNG (AAA-Qualität) ===
+  // Ambient Light - sanftes Grundlicht
+  const ambientLight = new THREE.AmbientLight(0xb3d9ff, 0.6); // Bläulich
+  scene.add(ambientLight);
+
+  // Hauptlicht - wie Sonne (mit Schatten)
+  const sunLight = new THREE.DirectionalLight(0xfff5e6, 1.2);
+  sunLight.position.set(300, 500, 400);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.width = 2048;
+  sunLight.shadow.mapSize.height = 2048;
+  sunLight.shadow.camera.left = -500;
+  sunLight.shadow.camera.right = 500;
+  sunLight.shadow.camera.top = 500;
+  sunLight.shadow.camera.bottom = -500;
+  scene.add(sunLight);
+
+  // Rim Light - von hinten (schöner Outline-Effekt)
+  const rimLight = new THREE.DirectionalLight(0x8bb4ff, 0.5);
+  rimLight.position.set(-200, 300, -300);
+  scene.add(rimLight);
+
+  // Magisches Licht (für Ori-Feeling)
+  const magicLight1 = new THREE.PointLight(0x00ffff, 0.8, 200);
+  magicLight1.position.set(200, -200, 50);
+  scene.add(magicLight1);
+
+  const magicLight2 = new THREE.PointLight(0xff00ff, 0.6, 200);
+  magicLight2.position.set(800, -150, 50);
+  scene.add(magicLight2);
+
+  // Fog für Tiefe
+  scene.fog = new THREE.FogExp2(0x2a3f5f, 0.0008);
+
+  // === DELTA TIME für konstante Geschwindigkeit über alle Browser ===
+  let lastTime = 0;
+  let deltaTime = 0;
+  let dt = 1.0; // Normalisiertes Delta Time (globale Variable für Zugriff überall)
+  const targetFPS = 60;
+  const maxDeltaTime = 0.1; // Begrenze Delta Time bei großen Sprüngen (Tab-Wechsel etc.)
+
+  // Hilfsfunktion für Y-Invertierung (Pseudo-2D)
+  function toThreeY(y) {
+    return -y;
+  }
+
+  // Plattformen Definitionen - ERWEITERTES GROSSES LEVEL (BEREINIGT)
+  const platforms = [
+    // Hauptgang (Boden) - VIEL LÄNGER
+    { x: -1000, y: 500, width: 7000, height: 50 },
+
+    // === LINKER BEREICH (Start) ===
+    // Unterer Tunnel links - OFFEN
+    { x: -800, y: 430, width: 600, height: 30 },   // Boden
+    { x: -800, y: 200, width: 600, height: 30 },   // Decke
+    { x: -800, y: 230, width: 30, height: 200 },   // Nur linke Wand
+    { x: -230, y: 230, width: 30, height: 200 },   // Nur rechte Wand
+
+    // === MITTLERER BEREICH ===
+    // Oberer Gang 1 - OFFEN (angepasst um Überlappung zu vermeiden)
+    { x: 200, y: 360, width: 380, height: 30 },    // Boden Teil 1 (verkürzt)
+    { x: 730, y: 360, width: 670, height: 30 },    // Boden Teil 2 (Platz für Säule bei x:700)
+    { x: 200, y: 130, width: 1200, height: 30 },   // Decke
+
+    // Oberer Gang 2 - OFFEN, sehr hoch
+    { x: 600, y: 160, width: 1100, height: 30 },   // Boden (länger!)
+    { x: 600, y: -90, width: 1100, height: 30 },   // Decke
+
+    // Mittlerer Gang - OFFEN (angepasst um Überlappung zu vermeiden)
+    { x: 1100, y: 330, width: 180, height: 30 },   // Boden Teil 1 (verkürzt, Platz für Säule bei x:1300)
+    { x: 1330, y: 330, width: 770, height: 30 },   // Boden Teil 2
+    { x: 1100, y: 100, width: 1000, height: 30 },  // Decke
+
+    // === RECHTER BEREICH ===
+    // Langer Weg rechts - OFFEN (angepasst um Überlappung zu vermeiden)
+    { x: 2100, y: 390, width: 380, height: 30 },   // Boden Teil 1 (verkürzt, Platz für Säule bei x:2500)
+    { x: 2530, y: 390, width: 970, height: 30 },   // Boden Teil 2
+    { x: 2100, y: 160, width: 1400, height: 30 },  // Decke
+
+    // Hoher Gang rechts - OFFEN (angepasst um Überlappung zu vermeiden)
+    { x: 3500, y: 280, width: 280, height: 30 },   // Boden Teil 1 (verkürzt, Platz für Säule bei x:3800)
+    { x: 3830, y: 280, width: 870, height: 30 },   // Boden Teil 2
+    { x: 3500, y: 50, width: 1200, height: 30 },   // Decke
+
+    // Sehr hoher Gang - OFFEN (angepasst um Überlappung zu vermeiden)
+    { x: 4700, y: 120, width: 480, height: 30 },   // Boden Teil 1 (verkürzt, Platz für Säule bei x:5200)
+    { x: 5230, y: 120, width: 470, height: 30 },   // Boden Teil 2
+    { x: 4700, y: -130, width: 1000, height: 30 }, // Decke
+
+    // === SPRUNGPLATTFORMEN ===
+    { x: -400, y: 380, width: 120, height: 20 },   // Links
+    { x: 450, y: 270, width: 120, height: 20 },
+    { x: 850, y: 220, width: 120, height: 20 },
+    { x: 1500, y: 240, width: 120, height: 20 },
+    { x: 2300, y: 300, width: 120, height: 20 },
+    { x: 2800, y: 250, width: 120, height: 20 },
+    { x: 3300, y: 200, width: 120, height: 20 },
+    { x: 4200, y: 220, width: 120, height: 20 },
+    { x: 5000, y: 180, width: 120, height: 20 },
+
+    // === HINDERNISSE (Säulen) ===
+    { x: 700, y: 360, width: 30, height: 100 },
+    { x: 1300, y: 330, width: 30, height: 100 },
+    { x: 2500, y: 390, width: 30, height: 120 },
+    { x: 3800, y: 280, width: 30, height: 100 },
+    { x: 5200, y: 120, width: 30, height: 100 }
+  ];
+  const platformMeshes = [];
+
+  // Kamera folgt Spieler (seitlich)
+  // Kamera-Smoothing-Variablen
+  let cameraTargetX = 100;
+  let cameraTargetY = 0;
+  const cameraSmoothness = 0.15; // Wie schnell die Kamera folgt (0.15 = 15% pro Frame)
+  const zoomSmoothness = 0.05; // Wie schnell der Zoom sich ändert (langsamer für sanfte Übergänge)
+
+  function updateCamera() {
+    // Ziel-Position der Kamera (folgt dem Spieler horizontal UND vertikal)
+    cameraTargetX = player.x + player.width/2;
+    cameraTargetY = toThreeY(player.y + player.height/2);
+
+    // === Dynamisches Zoom basierend auf Spieler-Position ===
+    // Finde die aktuelle Zoom-Zone
+    const playerCenterX = player.x + player.width/2;
+    let foundZone = false;
+
+    for (let zone of currentZoomZones) {
+      if (playerCenterX >= zone.x && playerCenterX < zone.x + zone.width) {
+        targetZoom = zone.zoom;
+        foundZone = true;
+        break;
+      }
+    }
+
+    // Fallback auf Standard-Zoom wenn keine Zone gefunden
+    if (!foundZone) {
+      targetZoom = 600;
+    }
+
+    // Sanftes Zoom-Smoothing (sehr langsam für cinematischen Effekt)
+    currentZoom += (targetZoom - currentZoom) * zoomSmoothness;
+
+    // Sanftes Smoothing für horizontale UND vertikale Bewegung (Lerp)
+    camera.position.x += (cameraTargetX - camera.position.x) * cameraSmoothness;
+    camera.position.y += (cameraTargetY - camera.position.y) * cameraSmoothness;
+    camera.position.z = currentZoom; // Dynamische Entfernung basierend auf Zoom
+
+    // LookAt direkt auf die Spieler-Position - Figur immer im Fokus
+    camera.lookAt(camera.position.x, camera.position.y, 0);
+
+
+    // Parallax-Effekt für Hintergrund-Elemente
+    // Berge bewegen sich langsamer (0.3x)
+    mountainGroup.position.x = camera.position.x * 0.3;
+
+    // Himmel bewegt sich noch langsamer (0.1x) - zentriert auf größerem Level
+    skyMesh.position.x = camera.position.x * 0.1 + 2500;
+
+    // Wolken bewegen sich in verschiedenen Geschwindigkeiten basierend auf Z-Position
+    cloudGroup.children.forEach(cloud => {
+      const z = cloud.userData.originalZ;
+      // Je weiter weg (höheres -z), desto langsamer bewegen sich Wolken
+      let parallaxFactor;
+      if (z < -550) {
+        parallaxFactor = 0.05; // Sehr weit weg - sehr langsam
+      } else if (z < -400) {
+        parallaxFactor = 0.1; // Weit weg
+      } else if (z < -300) {
+        parallaxFactor = 0.15; // Mittlere Entfernung
+      } else {
+        parallaxFactor = 0.2; // Nah - schneller
+      }
+      cloud.position.x = cloud.userData.originalX + camera.position.x * parallaxFactor;
+    });
+
+    // Bäume bleiben statisch (keine Bewegung)
+  }
+
+  // --- Game Logic ---
+  const player = {
+    x: 100,
+    y: 200,  // Startposition über der Plattform
+    width: 40,
+    height: 60,
+    vx: 0,
+    vy: 0,
+    speed: 4,
+    jumpStrength: 14,
+    onGround: false,
+    maxJumps: 2, // Für Doppelsprung
+    jumpsLeft: 2,
+    jumpPressed: false, // Verhindert mehrfaches Auslösen pro Tastendruck
+    // Dash-Eigenschaften
+    dashSpeed: 15,
+    dashDuration: 15, // Frames
+    dashCooldown: 30, // Frames
+    isDashing: false,
+    dashTimer: 0,
+    dashCooldownTimer: 0,
+    dashDirection: 1,
+    dashPressed: false,
+    // Rutsch-Eigenschaften
+    isSliding: false,
+    slideSpeed: 16, // VIEL schneller: von 10 auf 16 erhöht
+    normalHeight: 60,
+    slideHeight: 25 // Viel flacher beim Rutschen
+  };
+
+  const keys = {};
+  window.addEventListener("keydown", e => keys[e.code] = true);
+  window.addEventListener("keyup", e => keys[e.code] = false);
+
+  // === Feinde ===
+  const enemies = [
+    // Linker Bereich (platformY: 430 → y: 390)
+    { x: -500, y: 390, width: 30, height: 40, vx: -2, patrolStart: -770, patrolEnd: -210, platformY: 430, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+
+    // Mittlerer Bereich (Säule bei x: 700 vermeiden)
+    { x: 300, y: 320, width: 30, height: 40, vx: 2, patrolStart: 220, patrolEnd: 670, platformY: 360, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+    { x: 900, y: 120, width: 30, height: 40, vx: -2, patrolStart: 650, patrolEnd: 1650, platformY: 160, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+    // Feind auf der rechten Seite von Säule x: 1300
+    { x: 1500, y: 290, width: 30, height: 40, vx: 2, patrolStart: 1360, patrolEnd: 2070, platformY: 330, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+
+    // Rechter Bereich (Säule bei x: 2500 vermeiden)
+    { x: 2700, y: 350, width: 30, height: 40, vx: 2, patrolStart: 2560, patrolEnd: 3470, platformY: 390, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+    // Feind auf linker Seite von Säule x: 3800
+    { x: 3600, y: 240, width: 30, height: 40, vx: -2, patrolStart: 3530, patrolEnd: 3770, platformY: 280, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+    // Feind auf rechter Seite von Säule x: 3800
+    { x: 4000, y: 240, width: 30, height: 40, vx: 2, patrolStart: 3860, patrolEnd: 4670, platformY: 280, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+    // Feind auf linker Seite von Säule x: 5200
+    { x: 4900, y: 80, width: 30, height: 40, vx: -2, patrolStart: 4730, patrolEnd: 5170, platformY: 120, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+    // Feind auf rechter Seite von Säule x: 5200
+    { x: 5400, y: 80, width: 30, height: 40, vx: 2, patrolStart: 5260, patrolEnd: 5670, platformY: 120, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+
+    // Zusätzlicher Feind zwischen den Plattformen
+    { x: 800, y: 320, width: 30, height: 40, vx: 2, patrolStart: 760, patrolEnd: 1370, platformY: 360, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 }
+  ];
+
+  // === Feind-Laser ===
+  const enemyLasers = [];
+
+  // === BOSS (The Red Devil) ===
+  const boss = {
+    active: false,           // Boss ist aktiv wenn Spieler Boss-Raum betritt
+    announced: false,        // Boss-Ankündigung gezeigt
+    x: 6900,                 // Mitte des Boss-Raums
+    y: 350,                  // Start-Position (angepasst an neuen Boden bei y:450)
+    width: 80,               // Größer als normale Feinde
+    height: 100,
+    vx: 0,
+    vy: 0,
+    speed: 3,                // Horizontale Geschwindigkeit
+    jumpStrength: 12,        // Sprungkraft
+    onGround: false,
+    maxHealth: 5,            // 5 Treffer zum Besiegen
+    health: 5,
+    lastShootTime: 0,        // Zeitstempel des letzten Schusses
+    shootDelay: 1500,        // Schießt alle 1.5 Sekunden
+    dying: false,
+    dyingTimer: 0,
+    roomLeft: 6400,          // Boss-Raum Grenzen (angepasst - keine linke Wand)
+    roomRight: 7350,
+    roomFloor: 450           // Angepasst an neuen Boden
+  };
+
+  const bossLasers = [];     // Boss-Projektile
+  let bossAnnouncementTimer = 0;
+  let bossAnnouncementActive = false;
+
+  // === Projektile ===
+  const projectiles = [];
+  let shootPressed = false;
+
+  // === Staubwolken ===
+  const dustClouds = [];
+  let wasOnGround = false; // Um Landung zu erkennen
+
+  // === Dash-Effekt-Streifen ===
+  const dashTrails = [];
+  let lastDashTrailTime = 0;
+
+  // === Level-System ===
+  let currentLevel = 1;
+  const goalPoint = { x: 5700, y: 450, width: 80, height: 100, reached: false };
+
+  // === Kamera-Zoom-Zonen ===
+  // Level 1 Zoom-Zonen
+  const level1ZoomZones = [
+    { x: -1000, width: 1000, zoom: 650 },  // Start - etwas näher
+    { x: 0, width: 800, zoom: 700 },       // Normal - weiter weg
+    { x: 800, width: 600, zoom: 550 },     // Enge Stelle - näher ran
+    { x: 1400, width: 1000, zoom: 700 },   // Normal
+    { x: 2400, width: 800, zoom: 500 },    // Action-Bereich - sehr nah
+    { x: 3200, width: 1000, zoom: 750 },   // Weit weg - Überblick
+    { x: 4200, width: 800, zoom: 600 },    // Normal-nah
+    { x: 5000, width: 1000, zoom: 550 }    // Finale - dramatisch nah
+  ];
+
+  // Level 2 Zoom-Zonen
+  const level2ZoomZones = [
+    { x: -1000, width: 800, zoom: 600 },   // Höhlen-Eingang - nah
+    { x: -200, width: 1200, zoom: 550 },   // Enge Tunnel - sehr nah
+    { x: 1000, width: 900, zoom: 800 },    // Große Kammer - weit weg
+    { x: 1900, width: 1200, zoom: 650 },   // Mehrschichtig - mittel
+    { x: 3100, width: 1500, zoom: 550 },   // Lange Höhle - eng
+    { x: 4600, width: 800, zoom: 500 },    // Aufstieg - sehr nah
+    { x: 5400, width: 800, zoom: 600 }     // Finale - nah
+  ];
+
+  let currentZoomZones = [...level1ZoomZones];
+  let targetZoom = 600; // Standard-Zoom
+  let currentZoom = 600;
+
+  // === Perlen/Grappling-Points ===
+  // NUR über oberen Plattformen (Decken, hohe Gänge, Sprungplattformen)
+  const grapplingPoints = [
+    // Linker Bereich - über Decke (y: 200)
+    { x: -500, y: 170, radius: 10 },
+    { x: -200, y: 165, radius: 10 },
+
+    // Mittlerer Bereich - über Decken und hohen Gängen
+    { x: 400, y: 100, radius: 10 },    // Über Decke y:130
+    { x: 800, y: 95, radius: 10 },     // Über Decke y:130
+    { x: 1000, y: 130, radius: 10 },   // Über Oberer Gang 2 Boden y:160
+    { x: 1200, y: 70, radius: 10 },    // Über Decke y:100
+    { x: 1450, y: 65, radius: 10 },    // Über Decke y:100
+
+    // Rechter Bereich - über Decken und sehr hohen Gängen
+    { x: 2300, y: 130, radius: 10 },   // Über Decke y:160
+    { x: 2800, y: 125, radius: 10 },   // Über Decke y:160
+    { x: 3500, y: 20, radius: 10 },    // Über Decke y:50
+    { x: 3900, y: 15, radius: 10 },    // Über Decke y:50
+    { x: 4200, y: 10, radius: 10 },    // Über Decke y:50
+    { x: 4700, y: 90, radius: 10 },    // Über sehr hoher Gang Boden y:120
+    { x: 5000, y: 85, radius: 10 },    // Über sehr hoher Gang Boden y:120
+    { x: 5400, y: -165, radius: 10 },  // Über Decke y:-130
+    { x: 5800, y: -160, radius: 10 }   // Über Decke y:-130
+  ];
+  let grapplingPressed = false;
+  let isGrappling = false;
+  let grapplingTarget = null;
+
+  // Funktion zum Neu-Erstellen der Plattformen
+  function rebuildPlatforms() {
+    // Alte Meshes entfernen
+    platformMeshes.forEach(mesh => scene.remove(mesh));
+    platformMeshes.length = 0;
+
+    // Neue Meshes erstellen
+    platforms.forEach((p, index) => {
+      let useColor, emissiveColor, isWall = false;
+
+      if (p.width > p.height * 3) {
+        if (p.y < 250) {
+          useColor = ceilingColor;
+          emissiveColor = 0x334466;
+        } else {
+          useColor = index === 0 ? floorColor : 0x55bb55;
+          emissiveColor = index === 0 ? 0x225522 : 0x336633;
+        }
+      } else {
+        useColor = wallColor;
+        emissiveColor = 0x442266;
+        isWall = true;
+      }
+
+      const geo = new THREE.BoxGeometry(p.width, p.height, 60);
+      const mat = new THREE.MeshStandardMaterial({
+        color: useColor,
+        emissive: emissiveColor,
+        emissiveIntensity: 0.4,
+        roughness: 0.7,
+        metalness: 0.2
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(p.x + p.width/2, toThreeY(p.y + p.height/2), 0);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+      platformMeshes.push(mesh);
+
+      if (isWall || p.y < 250) {
+        const edgeGeo = new THREE.EdgesGeometry(geo);
+        const edgeMat = new THREE.LineBasicMaterial({
+          color: isWall ? 0xaa88ff : 0x88ccff,
+          opacity: 0.8,
+          transparent: true
+        });
+        const edges = new THREE.LineSegments(edgeGeo, edgeMat);
+        mesh.add(edges);
+      }
+    });
+  }
+
+  function rebuildEnemies() {
+    // Alte Meshes entfernen
+    enemyMeshes.forEach(mesh => scene.remove(mesh));
+    enemyMeshes.length = 0;
+
+    // Neue erstellen (Code wie im ursprünglichen Enemy-Erstellungscode)
+    enemies.forEach(enemy => {
+      const enemyGroup = new THREE.Group();
+
+      const enemyBodyGeometry = new THREE.BoxGeometry(20, 30, 14);
+      const enemyBodyMaterial = new THREE.MeshStandardMaterial({
+        color: 0xff3333,
+        emissive: 0xaa0000,
+        emissiveIntensity: 0.6,
+        roughness: 0.4,
+        metalness: 0.3
+      });
+      const enemyBody = new THREE.Mesh(enemyBodyGeometry, enemyBodyMaterial);
+      enemyBody.position.y = 0;
+      enemyBody.castShadow = true;
+      enemyGroup.add(enemyBody);
+
+      const enemyHeadGeometry = new THREE.SphereGeometry(10, 16, 16);
+      const enemyHeadMaterial = new THREE.MeshStandardMaterial({
+        color: 0xcc0000,
+        emissive: 0x880000,
+        emissiveIntensity: 0.5,
+        roughness: 0.5,
+        metalness: 0.2
+      });
+      const enemyHead = new THREE.Mesh(enemyHeadGeometry, enemyHeadMaterial);
+      enemyHead.position.y = 20;
+      enemyHead.castShadow = true;
+      enemyGroup.add(enemyHead);
+
+      const eyeGeometry = new THREE.SphereGeometry(2.5, 12, 12);
+      const eyeMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffff00,
+        emissive: 0xffff00,
+        emissiveIntensity: 3.0
+      });
+      const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+      leftEye.position.set(-4, 20, 8);
+      enemyGroup.add(leftEye);
+      const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+      rightEye.position.set(4, 20, 8);
+      enemyGroup.add(rightEye);
+
+      const auraGeometry = new THREE.SphereGeometry(18, 16, 16);
+      const auraMaterial = new THREE.MeshBasicMaterial({
+        color: 0xff0000,
+        transparent: true,
+        opacity: 0.15,
+        side: THREE.BackSide
+      });
+      const aura = new THREE.Mesh(auraGeometry, auraMaterial);
+      enemyGroup.add(aura);
+
+      enemyGroup.rotation.y = Math.PI / 2;
+      scene.add(enemyGroup);
+      enemyMeshes.push(enemyGroup);
+    });
+  }
+
+  function rebuildGrapplingPoints() {
+    // Alte Meshes entfernen
+    grapplingMeshes.forEach(item => scene.remove(item.mesh));
+    grapplingMeshes.length = 0;
+
+    grapplingPoints.forEach(point => {
+      const pearlGeometry = new THREE.SphereGeometry(point.radius, 32, 32);
+      const pearlMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        emissive: 0x00ffff,
+        emissiveIntensity: 2.0,
+        roughness: 0.1,
+        metalness: 0.9
+      });
+      const pearlMesh = new THREE.Mesh(pearlGeometry, pearlMaterial);
+      pearlMesh.position.set(point.x, toThreeY(point.y), pearlZPosition);
+      scene.add(pearlMesh);
+      grapplingMeshes.push({ mesh: pearlMesh, point: point });
+
+      const glowGeometry = new THREE.SphereGeometry(point.radius + 5, 32, 32);
+      const glowMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00ffff,
+        transparent: true,
+        opacity: 0.3,
+        side: THREE.BackSide
+      });
+      const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+      glowMesh.position.set(point.x, toThreeY(point.y), pearlZPosition);
+      scene.add(glowMesh);
+      grapplingMeshes.push({ mesh: glowMesh, point: point, isGlow: true });
+
+      const ringGeometry = new THREE.TorusGeometry(point.radius + 3, 1.5, 16, 32);
+      const ringMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffff00,
+        transparent: true,
+        opacity: 0.7
+      });
+      const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
+      ringMesh.position.set(point.x, toThreeY(point.y), pearlZPosition);
+      scene.add(ringMesh);
+      grapplingMeshes.push({ mesh: ringMesh, point: point, isRing: true });
+
+      const particleCount = 30;
+      const particleGeometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(particleCount * 3);
+      for (let i = 0; i < particleCount; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * 30;
+        positions[i * 3 + 1] = (Math.random() - 0.5) * 30;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 30;
+      }
+      particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const particleMaterial = new THREE.PointsMaterial({
+        color: 0x00ffff,
+        size: 2,
+        transparent: true,
+        opacity: 0.6,
+        blending: THREE.AdditiveBlending
+      });
+      const particles = new THREE.Points(particleGeometry, particleMaterial);
+      particles.position.set(point.x, toThreeY(point.y), pearlZPosition);
+      scene.add(particles);
+      grapplingMeshes.push({ mesh: particles, point: point, isParticles: true });
+    });
+  }
+
+  const GRAVITY = 0.6;
+
+  // Funktion um zu prüfen, ob eine Linie durch eine Plattform geht
+  function checkLineOfSight(x1, y1, x2, y2) {
+    // Prüfe für jede Plattform, ob die Linie sie schneidet
+    for (let platform of platforms) {
+      if (lineIntersectsRect(x1, y1, x2, y2, platform)) {
+        return false; // Linie wird blockiert
+      }
+    }
+    return true; // Freie Sicht
+  }
+
+  // Prüft ob eine Linie ein Rechteck schneidet
+  function lineIntersectsRect(x1, y1, x2, y2, rect) {
+    // Prüfe alle 4 Seiten des Rechtecks
+    const left = rect.x;
+    const right = rect.x + rect.width;
+    const top = rect.y;
+    const bottom = rect.y + rect.height;
+
+    // Prüfe Schnittpunkt mit jeder Seite
+    if (lineIntersectsLine(x1, y1, x2, y2, left, top, right, top)) return true; // Oben
+    if (lineIntersectsLine(x1, y1, x2, y2, left, bottom, right, bottom)) return true; // Unten
+    if (lineIntersectsLine(x1, y1, x2, y2, left, top, left, bottom)) return true; // Links
+    if (lineIntersectsLine(x1, y1, x2, y2, right, top, right, bottom)) return true; // Rechts
+
+    // Prüfe ob ein Punkt innerhalb des Rechtecks liegt
+    if (x1 >= left && x1 <= right && y1 >= top && y1 <= bottom) return true;
+    if (x2 >= left && x2 <= right && y2 >= top && y2 <= bottom) return true;
+
+    return false;
+  }
+
+  // Prüft ob zwei Linien sich schneiden
+  function lineIntersectsLine(x1, y1, x2, y2, x3, y3, x4, y4) {
+    const denominator = ((x2 - x1) * (y4 - y3)) - ((y2 - y1) * (x4 - x3));
+    if (denominator === 0) return false; // Parallel
+
+    const ua = (((x4 - x3) * (y1 - y3)) - ((y4 - y3) * (x1 - x3))) / denominator;
+    const ub = (((x2 - x1) * (y1 - y3)) - ((y2 - y1) * (x1 - x3))) / denominator;
+
+    return (ua >= 0 && ua <= 1) && (ub >= 0 && ub <= 1);
+  }
+
+  // Prüft ob Spieler mit neuer Höhe kollidiert
+  function checkCollisionWithHeightChange(x, y, newHeight) {
+    for (let platform of platforms) {
+      if (
+        x + player.width > platform.x &&
+        x < platform.x + platform.width &&
+        y + newHeight > platform.y &&
+        y < platform.y + platform.height
+      ) {
+        return true; // Kollision würde auftreten
+      }
+    }
+    return false; // Kein Hindernis
+  }
+
+  // Reset-Funktion für Spielneustart
+  function resetGame() {
+    player.x = 100;
+    player.y = 200;
+    player.vx = 0;
+    player.vy = 0;
+    player.onGround = false;
+    player.jumpsLeft = 2;
+    player.isDashing = false;
+    player.dashTimer = 0;
+    player.dashCooldownTimer = 0;
+    player.dashDirection = 1;
+    player.isSliding = false;
+    player.height = player.normalHeight;
+
+    // Feinde zurücksetzen
+    enemies.forEach((enemy, index) => {
+      const startPositions = [-500, 300, 900, 1500, 2700, 3600, 4000, 4900, 5400, 800];
+      const startVelocities = [-2, 2, -2, 2, 2, -2, 2, -2, 2, 2];
+
+      if (startPositions[index] !== undefined) {
+        enemy.x = startPositions[index];
+        enemy.vx = startVelocities[index];
+        enemy.alive = true;
+        enemy.dying = false;
+        enemy.dyingTimer = 0;
+      }
+    });
+
+    // Projektile zurücksetzen
+    projectiles.length = 0;
+    enemyLasers.length = 0;
+  }
+
+  function update(dt = 1.0) {
+    // === Rutschen (Pfeil nach unten) ===
+    if (keys["ArrowDown"] && player.onGround && !player.isDashing) {
+      if (!player.isSliding) {
+        // Rutschen starten
+        player.isSliding = true;
+        player.height = player.slideHeight; // Figur wird flacher
+        player.y += (player.normalHeight - player.slideHeight); // Position anpassen
+      }
+      // Rutsch-Bewegung in Blickrichtung
+      player.vx = player.dashDirection * player.slideSpeed;
+    } else if (player.isSliding) {
+      // Rutschen beenden - prüfen ob genug Platz zum Aufstehen
+      const canStandUp = !checkCollisionWithHeightChange(player.x, player.y - (player.normalHeight - player.slideHeight), player.normalHeight);
+
+      if (canStandUp) {
+        player.isSliding = false;
+        player.y -= (player.normalHeight - player.slideHeight); // Position zurück
+        player.height = player.normalHeight; // Normal-Größe
+      }
+      // Wenn kein Platz: weiter rutschen bis Platz da ist
+      else {
+        player.vx = player.dashDirection * player.slideSpeed * 0.5; // Langsamer weiterrutschen
+      }
+    }
+
+    // Dash Cooldown Timer
+    if (player.dashCooldownTimer > 0) {
+      player.dashCooldownTimer--;
+    }
+
+    // Dash aktivieren (nicht während Rutschen)
+    if ((keys["ShiftLeft"] || keys["ShiftRight"]) && !player.isDashing && !player.isSliding && player.dashCooldownTimer === 0 && !player.dashPressed) {
+      player.isDashing = true;
+      player.dashTimer = player.dashDuration;
+      player.dashCooldownTimer = player.dashCooldown;
+      // Dash-Richtung bestimmen (auch wenn Figur steht)
+      if (keys["ArrowLeft"] || keys["KeyA"]) {
+        player.dashDirection = -1;
+      } else if (keys["ArrowRight"] || keys["KeyD"]) {
+        player.dashDirection = 1;
+      }
+      // Wenn keine Richtungstaste gedrückt: dashDirection bleibt wie sie ist
+      player.dashPressed = true;
+    }
+    if (!(keys["ShiftLeft"] || keys["ShiftRight"])) {
+      player.dashPressed = false;
+    }
+
+    // Dash Timer
+    if (player.isDashing) {
+      player.dashTimer--;
+      if (player.dashTimer <= 0) {
+        player.isDashing = false;
+      }
+
+      // Dash-Trail-Effekte erstellen (alle 2 Frames)
+      lastDashTrailTime++;
+      if (lastDashTrailTime >= 2) {
+        dashTrails.push({
+          x: player.x + player.width / 2,
+          y: player.y + player.height / 2,
+          width: player.width,
+          height: player.height,
+          life: 20, // 20 Frames Lebensdauer
+          maxLife: 20,
+          direction: player.dashDirection
+        });
+        lastDashTrailTime = 0;
+      }
+    } else {
+      lastDashTrailTime = 0;
+    }
+
+    // Horizontal movement
+    if (player.isDashing) {
+      // Während Dash: nur Dash-Bewegung
+      player.vx = player.dashSpeed * player.dashDirection;
+    } else if (player.isSliding) {
+      // Während Rutschen: vx wird bereits oben gesetzt
+      // Keine zusätzliche Steuerung erlaubt
+    } else {
+      // Normale Bewegung
+      player.vx = 0;
+      if (keys["ArrowLeft"] || keys["KeyA"]) {
+        player.vx = -player.speed;
+        player.dashDirection = -1; // Richtung merken
+      }
+      if (keys["ArrowRight"] || keys["KeyD"]) {
+        player.vx = player.speed;
+        player.dashDirection = 1; // Richtung merken
+      }
+    }
+
+    // Doppel-Sprung (nicht während Rutschen)
+    if ((keys["ArrowUp"] || keys["Space"] || keys["KeyW"]) && player.jumpsLeft > 0 && !player.jumpPressed && !player.isSliding) {
+      player.vy = -player.jumpStrength;
+      player.jumpsLeft--;
+      player.jumpPressed = true;
+    }
+    if (!(keys["ArrowUp"] || keys["Space"] || keys["KeyW"])) {
+      player.jumpPressed = false;
+    }
+
+    // === Schießen (X-Taste) ===
+    if (keys["KeyX"] && !shootPressed) {
+      // Neues Projektil erstellen
+      const projectile = {
+        x: player.x + (player.dashDirection === 1 ? player.width : 0),
+        y: player.y + player.height / 2,
+        vx: player.dashDirection * 12, // Schnelle Geschwindigkeit in Blickrichtung (dt wird bei Bewegung angewendet)
+        width: 8,
+        height: 8,
+        active: true
+      };
+      projectiles.push(projectile);
+      shootPressed = true;
+    }
+    if (!keys["KeyX"]) {
+      shootPressed = false;
+    }
+
+    // === Grappling (Y-Taste oder Z-Taste) ===
+    if ((keys["KeyY"] || keys["KeyZ"]) && !grapplingPressed && !isGrappling) {
+      console.log("Grappling aktiviert!"); // Debug
+
+      // Finde nächste Perle in Reichweite
+      const grapplingRange = 250;
+      let closestPoint = null;
+      let closestDist = grapplingRange;
+      const playerCenterX = player.x + player.width / 2;
+      const playerCenterY = player.y + player.height / 2;
+
+      grapplingPoints.forEach(point => {
+        const dx = point.x - playerCenterX;
+        const dy = point.y - playerCenterY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        console.log(`Perle bei (${point.x}, ${point.y}), Distanz: ${dist.toFixed(1)}`); // Debug
+
+        // NEUE PRÜFUNG: Perle muss in Blickrichtung liegen
+        const isInFront = (player.dashDirection === 1 && dx > 0) || // Nach rechts schauen und Perle ist rechts
+                          (player.dashDirection === -1 && dx < 0);   // Nach links schauen und Perle ist links
+
+        if (!isInFront) {
+          console.log("Perle liegt hinter der Figur - ignoriert!"); // Debug
+          return; // Überspringe diese Perle
+        }
+
+        if (dist < closestDist) {
+          // Prüfe ob eine Plattform im Weg ist
+          const hasLineOfSight = checkLineOfSight(playerCenterX, playerCenterY, point.x, point.y);
+
+          if (hasLineOfSight) {
+            closestDist = dist;
+            closestPoint = point;
+          } else {
+            console.log("Perle blockiert durch Plattform!"); // Debug
+          }
+        }
+      });
+
+      if (closestPoint) {
+        console.log("Perle gefunden! Grappling startet..."); // Debug
+        isGrappling = true;
+        grapplingTarget = closestPoint;
+        player.grapplingTimer = 0; // Timer starten
+      } else {
+        console.log("Keine Perle vor der Figur in Reichweite oder alle blockiert"); // Debug
+      }
+      grapplingPressed = true;
+    }
+    if (!keys["KeyY"] && !keys["KeyZ"]) {
+      grapplingPressed = false;
+    }
+
+    // Manuelles Abbrechen des Grapplings (X-Taste oder erneut Y/Z drücken)
+    if (isGrappling && ((keys["KeyY"] || keys["KeyZ"]) && !grapplingPressed)) {
+      console.log("Grappling manuell abgebrochen!"); // Debug
+      isGrappling = false;
+      grapplingTarget = null;
+      player.vy = -5; // Kleiner Schub nach oben beim Abbrechen
+    }
+
+    // Grappling-Bewegung (ÜBERARBEITET mit Timeout und besserer Logik)
+    if (isGrappling && grapplingTarget) {
+      player.grapplingTimer = (player.grapplingTimer || 0) + 1;
+
+      // Automatisches Timeout nach 120 Frames (2 Sekunden)
+      if (player.grapplingTimer > 120) {
+        console.log("Grappling Timeout!"); // Debug
+        isGrappling = false;
+        grapplingTarget = null;
+        // Behalte aktuelle Geschwindigkeit als Momentum
+      } else {
+        const dx = grapplingTarget.x - (player.x + player.width / 2);
+        const dy = grapplingTarget.y - (player.y + player.height / 2);
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        console.log(`Grappling aktiv - Distanz: ${dist.toFixed(1)}, Timer: ${player.grapplingTimer}`); // Debug
+
+        if (dist > 30) { // Erhöht auf 30 für bessere Erkennung
+          // Zur Perle hinziehen - folgt der Linie!
+          const speed = 14; // Etwas schneller
+          const moveX = (dx / dist) * speed;
+          const moveY = (dy / dist) * speed;
+
+          player.x += moveX * dt;
+          player.y += moveY * dt;
+
+          // Leichte Steuerung während Grappling ermöglichen
+          if (keys["ArrowLeft"] || keys["KeyA"]) {
+            player.x -= 2 * dt; // Langsame seitliche Bewegung
+          }
+          if (keys["ArrowRight"] || keys["KeyD"]) {
+            player.x += 2 * dt; // Langsame seitliche Bewegung
+          }
+
+          // Setze Geschwindigkeit für Momentum (folgt der Linie!)
+          player.vx = moveX;
+          player.vy = moveY;
+        } else {
+          console.log("Perle erreicht! Launch mit Momentum!"); // Debug
+          // Perle erreicht - SCHLEUDERN in die Bewegungsrichtung!
+          isGrappling = false;
+
+          // Berechne die Richtung der Bewegung zur Perle
+          const launchSpeed = 20; // Stärker für dramatischen Effekt
+          const normalizedDx = dx / dist;
+          const normalizedDy = dy / dist;
+
+          // Schleuder-Vektor: In die Richtung der Bewegung + Extra-Schub
+          player.vx = normalizedDx * launchSpeed;
+          player.vy = normalizedDy * launchSpeed;
+
+          grapplingTarget = null;
+          player.grapplingTimer = 0;
+        }
+      }
+
+      // Während Grappling keine normale Physik
+      player.onGround = false;
+    } else {
+      // Gravity - nur wenn nicht grappling
+      player.vy += GRAVITY * dt;
+    }
+
+    // Apply horizontal movement (nur wenn nicht grappling)
+    if (!isGrappling) {
+      player.x += player.vx * dt;
+    }
+
+    // Check horizontal collisions
+    platforms.forEach(p => {
+      if (
+        player.x + player.width > p.x &&
+        player.x < p.x + p.width &&
+        player.y + player.height > p.y &&
+        player.y < p.y + p.height
+      ) {
+        // Kollision von links
+        if (player.vx > 0) {
+          player.x = p.x - player.width;
+          player.vx = 0;
+        }
+        // Kollision von rechts
+        else if (player.vx < 0) {
+          player.x = p.x + p.width;
+          player.vx = 0;
+        }
+      }
+    });
+
+    // Apply vertical movement (nur wenn nicht grappling)
+    if (!isGrappling) {
+      player.y += player.vy * dt;
+    }
+
+    // Check vertical collisions (nur wenn nicht grappling)
+    player.onGround = false;
+    if (!isGrappling) {
+      platforms.forEach(p => {
+        if (
+          player.x + player.width > p.x &&
+          player.x < p.x + p.width &&
+          player.y + player.height > p.y &&
+          player.y < p.y + p.height
+        ) {
+          // Kollision von oben (Spieler landet auf Plattform)
+          if (player.vy > 0) {
+            player.y = p.y - player.height;
+            player.vy = 0;
+            player.onGround = true;
+          }
+          // Kollision von unten (Spieler stößt Kopf an) - VERBESSERT
+          else if (player.vy < 0) {
+            // Stelle sicher, dass Kopf nicht in Plattform ragt
+            player.y = p.y + p.height + 1; // +1 als Puffer
+            player.vy = 0.5; // Kleine positive Geschwindigkeit nach unten
+            console.log("Kopf-Kollision! Position korrigiert."); // Debug
+          }
+        }
+      });
+    }
+
+    // Sprünge zurücksetzen, wenn auf dem Boden
+    if (player.onGround) {
+      player.jumpsLeft = player.maxJumps;
+
+      // Staubwolke erzeugen beim Landen (nur wenn vorher in der Luft)
+      if (!wasOnGround && player.vy > 5) { // Nur bei schneller Landung
+        // 5-8 Staubpartikel erzeugen (mehr als vorher)
+        const numParticles = 5 + Math.floor(Math.random() * 4);
+        for (let i = 0; i < numParticles; i++) {
+          dustClouds.push({
+            x: player.x + player.width / 2 + (Math.random() - 0.5) * 40,
+            y: player.y + player.height - 5, // Etwas höher, damit sichtbar
+            vx: (Math.random() - 0.5) * 4,
+            vy: -Math.random() * 3 - 2, // Stärker nach oben
+            life: 30 + Math.random() * 15, // 30-45 Frames (länger sichtbar)
+            maxLife: 45,
+            size: 5 + Math.random() * 4 // Größer: 5-9 statt 3-6
+          });
+        }
+      }
+    }
+    wasOnGround = player.onGround;
+
+    // === Feinde Update ===
+    enemies.forEach(enemy => {
+      if (!enemy.alive) return;
+
+      if (enemy.dying) {
+        // Feind fällt um (Rotation)
+        enemy.dyingTimer++;
+        if (enemy.dyingTimer > 30) {
+          enemy.alive = false; // Nach 30 Frames verschwindet Feind
+        }
+        return;
+      }
+
+      // Feind bewegt sich hin und her
+      enemy.x += enemy.vx * dt;
+
+      // Umdrehen an den Patrol-Grenzen
+      if (enemy.x <= enemy.patrolStart || enemy.x >= enemy.patrolEnd) {
+        enemy.vx = -enemy.vx;
+      }
+
+      // === Laser-Schuss-Logik ===
+      // Prüfe ob Spieler in Sichtweite ist (400 Pixel Reichweite)
+      const enemyCenterX = enemy.x + enemy.width / 2;
+      const enemyCenterY = enemy.y + enemy.height / 2;
+      const playerCenterX = player.x + player.width / 2;
+      const playerCenterY = player.y + player.height / 2;
+
+      const distanceToPlayer = Math.sqrt(
+        Math.pow(playerCenterX - enemyCenterX, 2) +
+        Math.pow(playerCenterY - enemyCenterY, 2)
+      );
+
+      // Wenn Spieler in Reichweite und genug Zeit seit letztem Schuss vergangen
+      const shootCooldown = 2000; // 2 Sekunden zwischen Schüssen
+      const now = Date.now();
+      if (distanceToPlayer < 400 && (now - enemy.lastShootTime) > shootCooldown) {
+        // Schießen!
+        const angle = Math.atan2(playerCenterY - enemyCenterY, playerCenterX - enemyCenterX);
+        const laserSpeed = 8;
+
+        enemyLasers.push({
+          x: enemyCenterX,
+          y: enemyCenterY,
+          vx: Math.cos(angle) * laserSpeed,
+          vy: Math.sin(angle) * laserSpeed,
+          width: 6,
+          height: 6,
+          active: true
+        });
+
+        enemy.lastShootTime = now;
+      }
+
+      // Kollision mit Spieler prüfen
+      if (
+        player.x < enemy.x + enemy.width &&
+        player.x + player.width > enemy.x &&
+        player.y < enemy.y + enemy.height &&
+        player.y + player.height > enemy.y
+      ) {
+        // Spieler springt auf Feind (tötet Feind)
+        if (player.vy > 0 && player.y + player.height - enemy.y < 10) {
+          enemy.dying = true;
+          enemy.dyingTimer = 0;
+          player.vy = -10; // Kleiner Sprung nach oben
+        } else {
+          // Spieler wird getroffen - Spiel neu starten
+          if (!player.isDashing) {
+            resetGame();
+          }
+        }
+      }
+    });
+
+    // === BOSS UPDATE ===
+    // Boss aktivieren wenn Spieler Boss-Raum betritt (x > 6400)
+    if (!boss.active && player.x > 6400 && currentLevel === 2) {
+      console.log("🔥 BOSS AKTIVIERT! The Red Devil erscheint!");
+      boss.active = true;
+      bossAnnouncementActive = true;
+      bossAnnouncementTimer = 180; // 3 Sekunden Ankündigung (60 FPS * 3)
+    }
+
+    if (boss.active && !boss.dying) {
+      // Boss-Ankündigung läuft
+      if (bossAnnouncementActive) {
+        bossAnnouncementTimer--;
+        if (bossAnnouncementTimer <= 0) {
+          bossAnnouncementActive = false;
+        }
+      }
+
+      // Boss-Physik (nur nach Ankündigung)
+      if (!bossAnnouncementActive) {
+        // Gravitation
+        boss.vy += GRAVITY * dt;
+
+        // Boss verfolgt Spieler horizontal
+        const playerCenterX = player.x + player.width / 2;
+        const bossCenterX = boss.x + boss.width / 2;
+
+        if (playerCenterX < bossCenterX) {
+          boss.vx = -boss.speed;
+        } else {
+          boss.vx = boss.speed;
+        }
+
+        // Boss springt zufällig
+        if (boss.onGround && Math.random() < 0.02) { // 2% Chance pro Frame
+          boss.vy = -boss.jumpStrength;
+        }
+
+        // Horizontale Bewegung
+        boss.x += boss.vx * dt;
+
+        // Boss-Raum-Grenzen
+        if (boss.x < boss.roomLeft) {
+          boss.x = boss.roomLeft;
+          boss.vx = 0;
+        }
+        if (boss.x + boss.width > boss.roomRight) {
+          boss.x = boss.roomRight - boss.width;
+          boss.vx = 0;
+        }
+
+        // Vertikale Bewegung
+        boss.y += boss.vy * dt;
+
+        // Boden-Kollision
+        boss.onGround = false;
+        if (boss.y + boss.height >= boss.roomFloor) {
+          boss.y = boss.roomFloor - boss.height;
+          boss.vy = 0;
+          boss.onGround = true;
+        }
+
+        // Boss schießt auf Spieler
+        const now = Date.now();
+        if (now - boss.lastShootTime > boss.shootDelay) {
+          const bossCenterY = boss.y + boss.height / 2;
+          const playerCenterY = player.y + player.height / 2;
+
+          const angle = Math.atan2(playerCenterY - bossCenterY, playerCenterX - bossCenterX);
+          const laserSpeed = 10;
+
+          bossLasers.push({
+            x: bossCenterX,
+            y: bossCenterY,
+            vx: Math.cos(angle) * laserSpeed,
+            vy: Math.sin(angle) * laserSpeed,
+            width: 10,
+            height: 10,
+            active: true
+          });
+
+          boss.lastShootTime = now;
+        }
+
+        // Boss-Kollision mit Spieler
+        if (
+          player.x < boss.x + boss.width &&
+          player.x + player.width > boss.x &&
+          player.y < boss.y + boss.height &&
+          player.y + player.height > boss.y
+        ) {
+          // Spieler wird getroffen
+          if (!player.isDashing) {
+            resetGame();
+          }
+        }
+      }
+    }
+
+    // Boss stirbt
+    if (boss.dying) {
+      boss.dyingTimer++;
+      if (boss.dyingTimer > 120) { // 2 Sekunden Tod-Animation
+        // SPIEL GEWONNEN!
+        alert("🎉 Du hast The Red Devil besiegt! Spiel abgeschlossen! 🎉");
+        // Spiel zurücksetzen oder Credits zeigen
+        window.location.reload();
+      }
+    }
+
+    // === Boss-Laser Update ===
+    bossLasers.forEach(laser => {
+      if (!laser.active) return;
+
+      laser.x += laser.vx * dt;
+      laser.y += laser.vy * dt;
+
+      // Laser entfernen wenn außerhalb
+      if (laser.x < 6400 || laser.x > 7400 || laser.y < 50 || laser.y > 450) {
+        laser.active = false;
+      }
+
+      // Kollision mit Spieler
+      if (
+        laser.x < player.x + player.width &&
+        laser.x + laser.width > player.x &&
+        laser.y < player.y + player.height &&
+        laser.y + laser.height > player.y
+      ) {
+        if (!player.isDashing) {
+          resetGame();
+        }
+        laser.active = false;
+      }
+    });
+
+    // Inaktive Boss-Laser entfernen
+    for (let i = bossLasers.length - 1; i >= 0; i--) {
+      if (!bossLasers[i].active) {
+        bossLasers.splice(i, 1);
+      }
+    }
+
+    // === Projektile Update ===
+    projectiles.forEach((proj, projIndex) => {
+      if (!proj.active) return;
+
+      // Projektil bewegen
+      proj.x += proj.vx * dt;
+
+      // Projektil entfernen, wenn es zu weit geflogen ist
+      if (proj.x < -1500 || proj.x > 7000) {
+        proj.active = false;
+      }
+
+      // Kollision mit Plattformen prüfen
+      platforms.forEach(p => {
+        if (
+          proj.x < p.x + p.width &&
+          proj.x + proj.width > p.x &&
+          proj.y < p.y + p.height &&
+          proj.y + proj.height > p.y
+        ) {
+          // Projektil trifft Plattform - verschwindet
+          proj.active = false;
+        }
+      });
+
+      // Kollision mit Feinden prüfen
+      enemies.forEach(enemy => {
+        if (!enemy.alive || enemy.dying) return;
+
+        if (
+          proj.x < enemy.x + enemy.width &&
+          proj.x + proj.width > enemy.x &&
+          proj.y < enemy.y + enemy.height &&
+          proj.y + proj.height > enemy.y
+        ) {
+          // Feind wurde getroffen
+          enemy.dying = true;
+          enemy.dyingTimer = 0;
+          enemy.vx = 0; // Bewegung stoppen
+          proj.active = false;
+        }
+      });
+
+      // Kollision mit Boss prüfen
+      if (boss.active && !boss.dying) {
+        if (
+          proj.x < boss.x + boss.width &&
+          proj.x + proj.width > boss.x &&
+          proj.y < boss.y + boss.height &&
+          proj.y + proj.height > boss.y
+        ) {
+          // Boss wurde getroffen!
+          boss.health--;
+          proj.active = false;
+
+          if (boss.health <= 0) {
+            boss.dying = true;
+            boss.dyingTimer = 0;
+            boss.vx = 0;
+            boss.vy = 0;
+          }
+        }
+      }
+    });
+
+    // Inaktive Projektile entfernen
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+      if (!projectiles[i].active) {
+        projectiles.splice(i, 1);
+      }
+    }
+
+    // === Feind-Laser Update ===
+    enemyLasers.forEach((laser, laserIndex) => {
+      if (!laser.active) return;
+
+      // Laser bewegen
+      laser.x += laser.vx * dt;
+      laser.y += laser.vy * dt;
+
+      // Laser entfernen, wenn er zu weit geflogen ist
+      if (laser.x < -1500 || laser.x > 7000 || laser.y < -500 || laser.y > 1000) {
+        laser.active = false;
+      }
+
+      // Kollision mit Plattformen prüfen
+      platforms.forEach(p => {
+        if (
+          laser.x < p.x + p.width &&
+          laser.x + laser.width > p.x &&
+          laser.y < p.y + p.height &&
+          laser.y + laser.height > p.y
+        ) {
+          // Laser trifft Plattform - verschwindet
+          laser.active = false;
+        }
+      });
+
+      // Kollision mit Spieler prüfen
+      if (
+        laser.x < player.x + player.width &&
+        laser.x + laser.width > player.x &&
+        laser.y < player.y + player.height &&
+        laser.y + laser.height > player.y
+      ) {
+        // Spieler wurde getroffen!
+        if (!player.isDashing) { // Dash macht immun
+          resetGame();
+        }
+        laser.active = false;
+      }
+    });
+
+    // Inaktive Laser entfernen
+    for (let i = enemyLasers.length - 1; i >= 0; i--) {
+      if (!enemyLasers[i].active) {
+        enemyLasers.splice(i, 1);
+      }
+    }
+
+    // === Staubwolken Update ===
+    dustClouds.forEach(dust => {
+      dust.x += dust.vx * dt;
+      dust.y += dust.vy * dt;
+      dust.vy += 0.1 * dt; // Leichte Schwerkraft
+      dust.vx *= 0.95; // Reibung
+      dust.life--;
+    });
+
+    // Tote Staubwolken entfernen
+    for (let i = dustClouds.length - 1; i >= 0; i--) {
+      if (dustClouds[i].life <= 0) {
+        dustClouds.splice(i, 1);
+      }
+    }
+
+    // === Dash-Trails Update ===
+    dashTrails.forEach(trail => {
+      trail.life--;
+    });
+
+    // Tote Trails entfernen
+    for (let i = dashTrails.length - 1; i >= 0; i--) {
+      if (dashTrails[i].life <= 0) {
+        dashTrails.splice(i, 1);
+      }
+    }
+
+    // === Zielpunkt-Kollision prüfen ===
+    // In Level 2 gibt es keinen Zielpunkt - Boss-Kampf ist das Ende!
+    if (currentLevel === 1 && !goalPoint.reached &&
+        player.x + player.width > goalPoint.x &&
+        player.x < goalPoint.x + goalPoint.width &&
+        player.y + player.height > goalPoint.y &&
+        player.y < goalPoint.y + goalPoint.height) {
+      goalPoint.reached = true;
+      loadNextLevel();
+    }
+  }
+
+  // Level-Wechsel-Funktion
+  function loadNextLevel() {
+    console.log("Level abgeschlossen! Lade nächsten Level...");
+
+    currentLevel++;
+
+    if (currentLevel === 2) {
+      // Level 2 laden
+      loadLevel2();
+    } else {
+      console.log("Spiel abgeschlossen!");
+      alert("Glückwunsch! Du hast beide Level geschafft! 🎉");
+    }
+  }
+
+  function loadLevel2() {
+    // Spieler zurücksetzen
+    player.x = 100;
+    player.y = 200;
+    player.vx = 0;
+    player.vy = 0;
+    player.onGround = false;
+    player.jumpsLeft = 2;
+    player.isDashing = false;
+    player.dashTimer = 0;
+    player.dashCooldownTimer = 0;
+    player.isSliding = false;
+    player.height = player.normalHeight;
+
+    // Zielpunkt für Level 2 deaktiviert - Boss-Kampf ist das Ende
+    goalPoint.x = -1000; // Außerhalb des Spielbereichs
+    goalPoint.y = -1000;
+    goalPoint.reached = false;
+
+    // Zoom-Zonen auf Level 2 umstellen
+    currentZoomZones = [...level2ZoomZones];
+    targetZoom = 600;
+    currentZoom = 600;
+
+    // Level 2 Plattformen (BEREINIGT)
+    platforms.length = 0;
+    platforms.push(
+      // Hauptgang
+      { x: -1000, y: 500, width: 7500, height: 50 },
+
+      // Enge vertikale Abschnitte
+      { x: -600, y: 450, width: 200, height: 30 },
+      { x: -600, y: 300, width: 200, height: 30 },
+      { x: -550, y: 330, width: 30, height: 120 },
+
+      // Labyrinth-Bereich (angepasst um Überlappung mit Säule bei x:600 zu vermeiden)
+      { x: 0, y: 400, width: 580, height: 30 },     // Boden Teil 1 (verkürzt)
+      { x: 630, y: 400, width: 170, height: 30 },   // Boden Teil 2 (Platz für Säule)
+      { x: 0, y: 250, width: 800, height: 30 },
+      { x: 400, y: 280, width: 30, height: 150 },
+
+      // Hohe Kammer
+      { x: 900, y: 200, width: 1000, height: 30 },
+      { x: 900, y: -50, width: 1000, height: 30 },
+
+      // Mehrschichtige Gänge (angepasst um Überlappung mit Säule bei x:2500 zu vermeiden)
+      { x: 1900, y: 380, width: 580, height: 30 },  // Boden 1 Teil 1 (verkürzt)
+      { x: 2530, y: 380, width: 570, height: 30 },  // Boden 1 Teil 2
+      { x: 1900, y: 250, width: 1200, height: 30 },
+      { x: 1900, y: 120, width: 1200, height: 30 },
+      { x: 1900, y: -10, width: 1200, height: 30 },
+
+      // Lange Höhle (angepasst um Überlappung mit Säule bei x:3600 zu vermeiden)
+      { x: 3100, y: 420, width: 480, height: 30 },  // Boden Teil 1 (verkürzt)
+      { x: 3630, y: 420, width: 970, height: 30 },  // Boden Teil 2
+      { x: 3100, y: 280, width: 1500, height: 30 },
+
+      // Finale Aufstieg (angepasst um Überlappung mit Säule bei x:4300 zu vermeiden)
+      { x: 4600, y: 350, width: 600, height: 30 },  // Boden 1 (verkürzt, endet vor Säule)
+      { x: 4600, y: 220, width: 600, height: 30 },
+      { x: 5200, y: 250, width: 500, height: 30 },
+      { x: 5200, y: 100, width: 500, height: 30 },
+      { x: 5700, y: 150, width: 400, height: 30 },
+      { x: 5700, y: 0, width: 400, height: 30 },
+
+      // === BOSS-RAUM ===
+      // Gang zum Boss-Raum (OFFEN - nur Boden, keine Decke)
+      { x: 6100, y: 450, width: 350, height: 30 },   // Gang-Boden verlängert bis Boss-Raum
+
+      // Großer Boss-Raum (6400 - 7400) - Arena (OFFEN von links)
+      { x: 6400, y: 450, width: 1000, height: 50 },  // Boden (angepasst an Gang-Höhe)
+      { x: 6400, y: 50, width: 1000, height: 50 },   // Decke (höher)
+      // KEINE linke Wand - Eingang offen!
+      { x: 7350, y: 100, width: 50, height: 350 },   // Nur rechte Wand
+
+      // Kleine Plattformen
+      { x: 200, y: 330, width: 100, height: 20 },
+      { x: 450, y: 290, width: 100, height: 20 },
+      { x: 1100, y: 130, width: 120, height: 20 },
+      { x: 1500, y: 80, width: 120, height: 20 },
+      { x: 2300, y: 310, width: 100, height: 20 },
+      { x: 2700, y: 190, width: 100, height: 20 },
+      { x: 3500, y: 350, width: 120, height: 20 },
+      { x: 4000, y: 320, width: 120, height: 20 },
+      { x: 4800, y: 280, width: 100, height: 20 },
+      { x: 5400, y: 180, width: 100, height: 20 },
+
+      // Säulen
+      { x: 600, y: 400, width: 30, height: 100 },
+      { x: 1400, y: 200, width: 30, height: 150 },
+      { x: 2500, y: 380, width: 30, height: 120 },
+      { x: 3600, y: 420, width: 30, height: 100 },
+      { x: 4300, y: 350, width: 30, height: 120 },
+      { x: 5500, y: 150, width: 30, height: 100 }
+    );
+
+    // Level 2 Feinde (KORRIGIERT - keine Säulen-Kollisionen)
+    enemies.length = 0;
+    enemies.push(
+      { x: -300, y: 410, width: 30, height: 40, vx: -2, patrolStart: -570, patrolEnd: -180, platformY: 450, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+      // Links von Säule x: 600
+      { x: 200, y: 360, width: 30, height: 40, vx: 2, patrolStart: 20, patrolEnd: 570, platformY: 400, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+      // Links von Säule x: 1400
+      { x: 1050, y: 160, width: 30, height: 40, vx: -2, patrolStart: 930, patrolEnd: 1370, platformY: 200, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+      // Rechts von Säule x: 1400
+      { x: 1650, y: 160, width: 30, height: 40, vx: 2, patrolStart: 1460, patrolEnd: 1870, platformY: 200, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+      // Links von Säule x: 2500 (obere Ebene)
+      { x: 2050, y: 340, width: 30, height: 40, vx: 2, patrolStart: 1930, patrolEnd: 2470, platformY: 380, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+      // Mittlere Ebene (y: 250)
+      { x: 2400, y: 210, width: 30, height: 40, vx: -2, patrolStart: 1930, patrolEnd: 3070, platformY: 250, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+      // Rechts von Säule x: 2500 (obere Ebene)
+      { x: 2750, y: 340, width: 30, height: 40, vx: 2, patrolStart: 2560, patrolEnd: 3070, platformY: 380, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+      // Links von Säule x: 3600
+      { x: 3300, y: 380, width: 30, height: 40, vx: -2, patrolStart: 3130, patrolEnd: 3570, platformY: 420, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+      // Rechts von Säule x: 3600
+      { x: 4100, y: 380, width: 30, height: 40, vx: 2, patrolStart: 3660, patrolEnd: 4570, platformY: 420, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+      // Zwischen Säule x: 4300 und Ende (obere Ebene)
+      { x: 4750, y: 310, width: 30, height: 40, vx: 2, patrolStart: 4630, patrolEnd: 5170, platformY: 350, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+      // Links von Säule x: 5500 (untere Ebene)
+      { x: 5300, y: 210, width: 30, height: 40, vx: -2, patrolStart: 5230, patrolEnd: 5470, platformY: 250, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+      // Rechts von Säule x: 5500 (untere Ebene)
+      { x: 5700, y: 210, width: 30, height: 40, vx: 2, patrolStart: 5560, patrolEnd: 5670, platformY: 250, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 },
+      // Finale Bereich
+      { x: 5900, y: 110, width: 30, height: 40, vx: -2, patrolStart: 5730, patrolEnd: 6070, platformY: 150, alive: true, dying: false, dyingTimer: 0, lastShootTime: 0 }
+    );
+
+    // Level 2 Grappling-Perlen - NUR über oberen Plattformen
+    grapplingPoints.length = 0;
+    grapplingPoints.push(
+      { x: -400, y: 270, radius: 10 },   // Über Decke y:300
+      { x: 100, y: 220, radius: 10 },    // Über Plattform y:250
+      { x: 600, y: 215, radius: 10 },    // Über Plattform y:250
+      { x: 1100, y: 170, radius: 10 },   // Über Hohe Kammer Boden y:200
+      { x: 1500, y: 165, radius: 10 },   // Über Hohe Kammer Boden y:200
+      { x: 1700, y: -85, radius: 10 },   // Über Decke y:-50
+      { x: 2100, y: 90, radius: 10 },    // Über Plattform y:120
+      { x: 2500, y: 85, radius: 10 },    // Über Plattform y:120
+      { x: 2900, y: -45, radius: 10 },   // Über Decke y:-10
+      { x: 3300, y: 250, radius: 10 },   // Über Plattform y:280
+      { x: 3700, y: 245, radius: 10 },   // Über Plattform y:280
+      { x: 4200, y: 190, radius: 10 },   // Über Finale Aufstieg y:220
+      { x: 4800, y: 185, radius: 10 },   // Über Finale Aufstieg y:220
+      { x: 5400, y: 70, radius: 10 },    // Über Plattform y:100
+      { x: 5900, y: -35, radius: 10 }    // Über Decke y:0
+    );
+
+    // Projektile löschen
+    projectiles.length = 0;
+    enemyLasers.length = 0;
+    bossLasers.length = 0;
+    dashTrails.length = 0;
+    dustClouds.length = 0;
+
+    // Boss zurücksetzen
+    boss.active = false;
+    boss.announced = false;
+    boss.health = boss.maxHealth;
+    boss.dying = false;
+    boss.dyingTimer = 0;
+    boss.x = 6900;
+    boss.y = 350; // Angepasst an neuen Boden
+    boss.vx = 0;
+    boss.vy = 0;
+    bossAnnouncementActive = false;
+    bossAnnouncementTimer = 0;
+
+    // Plattform-Meshes neu erstellen
+    rebuildPlatforms();
+    rebuildEnemies();
+    rebuildGrapplingPoints();
+
+    // Zielpunkt-Mesh aktualisieren
+    goalMeshGroup.position.set(goalPoint.x + goalPoint.width/2 - 5740, 0, 0);
+    goalMeshGroup.visible = true;
+    goalMeshGroup.children[0].position.set(goalPoint.x + goalPoint.width/2, toThreeY(goalPoint.y + goalPoint.height/2), 0);
+    goalMeshGroup.children[1].position.set(goalPoint.x + goalPoint.width/2, toThreeY(goalPoint.y + goalPoint.height/2), 0);
+    goalMeshGroup.children[2].position.set(goalPoint.x + goalPoint.width/2, toThreeY(goalPoint.y), 0);
+
+    console.log("Level 2 geladen!");
+  }
+
+  // Spielfigur als Gruppe (Kopf, Körper, Beine, Arme)
+  const playerGroup = new THREE.Group();
+
+  // Körper - mit starkem Glühen wie Ori's Spirit
+  const bodyGeometry = new THREE.BoxGeometry(24, 36, 16);
+  const bodyMaterial = new THREE.MeshStandardMaterial({
+    color: 0x88bbff,
+    emissive: 0x4488ff,
+    emissiveIntensity: 0.8,
+    roughness: 0.3,
+    metalness: 0.5
+  });
+  const bodyMesh = new THREE.Mesh(bodyGeometry, bodyMaterial);
+  bodyMesh.position.y = 0;
+  bodyMesh.castShadow = true;
+  playerGroup.add(bodyMesh);
+
+  // Energie-Aura um den Körper (Ori-Style)
+  const auraGeometry = new THREE.BoxGeometry(28, 40, 20);
+  const auraMaterial = new THREE.MeshBasicMaterial({
+    color: 0x88ddff,
+    transparent: true,
+    opacity: 0.2,
+    side: THREE.BackSide
+  });
+  const auraMesh = new THREE.Mesh(auraGeometry, auraMaterial);
+  auraMesh.position.y = 0;
+  playerGroup.add(auraMesh);
+
+  // Kopf
+  const headGeometry = new THREE.SphereGeometry(12, 16, 16);
+  const headMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffe0b2,
+    roughness: 0.6,
+    metalness: 0.1
+  });
+  const headMesh = new THREE.Mesh(headGeometry, headMaterial);
+  headMesh.position.y = 30;
+  headMesh.castShadow = true;
+  playerGroup.add(headMesh);
+
+  // Gesicht - Augen
+  const eyeGeometry = new THREE.SphereGeometry(2, 8, 8);
+  const eyeMaterial = new THREE.MeshPhongMaterial({ color: 0x000000 });
+
+  // Linkes Auge
+  const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+  leftEye.position.set(-4, 32, 10); // Links, etwas oben, nach vorne
+  playerGroup.add(leftEye);
+
+  // Rechtes Auge
+  const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+  rightEye.position.set(4, 32, 10); // Rechts, etwas oben, nach vorne
+  playerGroup.add(rightEye);
+
+  // Mund (kleiner Bogen)
+  const mouthGeometry = new THREE.TorusGeometry(3, 0.8, 8, 16, Math.PI);
+  const mouthMaterial = new THREE.MeshPhongMaterial({ color: 0x000000 });
+  const mouth = new THREE.Mesh(mouthGeometry, mouthMaterial);
+  mouth.position.set(0, 26, 10); // Unter den Augen, nach vorne
+  mouth.rotation.z = Math.PI; // Umdrehen für Lächeln
+  mouth.rotation.x = Math.PI / 2; // Nach vorne rotieren
+  playerGroup.add(mouth);
+
+  // Haare (oben auf dem Kopf)
+  const hairGeometry = new THREE.SphereGeometry(13, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+  const hairMaterial = new THREE.MeshPhongMaterial({ color: 0x3d2817 }); // Dunkelbraun
+  const hair = new THREE.Mesh(hairGeometry, hairMaterial);
+  hair.position.y = 36; // Auf dem Kopf
+  playerGroup.add(hair);
+
+  // Linkes Bein - Gruppe für Rotation am oberen Ende
+  const leftLegGroup = new THREE.Group();
+  const legGeometry = new THREE.BoxGeometry(8, 24, 10);
+  const legMaterial = new THREE.MeshPhongMaterial({ color: 0x222244 });
+  const leftLeg = new THREE.Mesh(legGeometry, legMaterial);
+  leftLeg.position.y = -12; // Offset für Rotation am oberen Ende
+  leftLegGroup.add(leftLeg);
+
+  // Linker Schuh
+  const shoeGeometry = new THREE.BoxGeometry(8, 4, 14);
+  const shoeMaterial = new THREE.MeshPhongMaterial({ color: 0x1a1a1a }); // Schwarz
+  const leftShoe = new THREE.Mesh(shoeGeometry, shoeMaterial);
+  leftShoe.position.y = -26; // Am Ende des Beins
+  leftShoe.position.z = 2; // Etwas nach vorne
+  leftLegGroup.add(leftShoe);
+
+  leftLegGroup.position.x = -6;
+  leftLegGroup.position.y = -18; // Position am Körper
+  playerGroup.add(leftLegGroup);
+
+  // Rechtes Bein - Gruppe für Rotation am oberen Ende
+  const rightLegGroup = new THREE.Group();
+  const rightLeg = new THREE.Mesh(legGeometry, legMaterial);
+  rightLeg.position.y = -12; // Offset für Rotation am oberen Ende
+  rightLegGroup.add(rightLeg);
+
+  // Rechter Schuh
+  const rightShoe = new THREE.Mesh(shoeGeometry, shoeMaterial);
+  rightShoe.position.y = -26; // Am Ende des Beins
+  rightShoe.position.z = 2; // Etwas nach vorne
+  rightLegGroup.add(rightShoe);
+
+  rightLegGroup.position.x = 6;
+  rightLegGroup.position.y = -18; // Position am Körper
+  playerGroup.add(rightLegGroup);
+
+  // Linker Arm - Gruppe für Rotation an der Schulter
+  const leftArmGroup = new THREE.Group();
+  const armGeometry = new THREE.BoxGeometry(6, 20, 8);
+  const armMaterial = new THREE.MeshPhongMaterial({ color: 0x448aff });
+  const leftArm = new THREE.Mesh(armGeometry, armMaterial);
+  leftArm.position.y = -10; // Offset für Rotation an der Schulter
+  leftArmGroup.add(leftArm);
+
+  // Linke Hand
+  const handGeometry = new THREE.SphereGeometry(3.5, 12, 12);
+  const handMaterial = new THREE.MeshPhongMaterial({ color: 0xffe0b2 }); // Hautfarbe
+  const leftHand = new THREE.Mesh(handGeometry, handMaterial);
+  leftHand.position.y = -21; // Am Ende des Arms
+  leftArmGroup.add(leftHand);
+
+  leftArmGroup.position.x = -15;
+  leftArmGroup.position.y = 10; // Position an der Schulter
+  playerGroup.add(leftArmGroup);
+
+  // Rechter Arm - Gruppe für Rotation an der Schulter
+  const rightArmGroup = new THREE.Group();
+  const rightArm = new THREE.Mesh(armGeometry, armMaterial);
+  rightArm.position.y = -10; // Offset für Rotation an der Schulter
+  rightArmGroup.add(rightArm);
+
+  // Rechte Hand
+  const rightHand = new THREE.Mesh(handGeometry, handMaterial);
+  rightHand.position.y = -21; // Am Ende des Arms
+  rightArmGroup.add(rightHand);
+
+  rightArmGroup.position.x = 15;
+  rightArmGroup.position.y = 10; // Position an der Schulter
+  playerGroup.add(rightArmGroup);
+
+  // Figur um 90 Grad drehen, damit sie seitlich steht
+  playerGroup.rotation.y = Math.PI / 2;
+
+  scene.add(playerGroup);
+
+  // === Energie-Partikel um die Spielfigur (Ori-Style) ===
+  const playerParticleCount = 30;
+  const playerParticleGeometry = new THREE.BufferGeometry();
+  const playerParticlePositions = new Float32Array(playerParticleCount * 3);
+
+  for (let i = 0; i < playerParticleCount; i++) {
+    const angle = (i / playerParticleCount) * Math.PI * 2;
+    const radius = 25 + Math.random() * 10;
+    playerParticlePositions[i * 3] = Math.cos(angle) * radius;
+    playerParticlePositions[i * 3 + 1] = (Math.random() - 0.5) * 50;
+    playerParticlePositions[i * 3 + 2] = Math.sin(angle) * radius;
+  }
+
+  playerParticleGeometry.setAttribute('position', new THREE.BufferAttribute(playerParticlePositions, 3));
+
+  const playerParticleMaterial = new THREE.PointsMaterial({
+    color: 0x88ddff,
+    size: 3,
+    transparent: true,
+    opacity: 0.8,
+    blending: THREE.AdditiveBlending
+  });
+
+  const playerParticles = new THREE.Points(playerParticleGeometry, playerParticleMaterial);
+  playerGroup.add(playerParticles);
+
+  // === Hintergrund (Sky) - Ori-Style ===
+const skyGeometry = new THREE.PlaneGeometry(12000, 3000); // Viel größer!
+const skyCanvas = document.createElement('canvas');
+skyCanvas.width = 2;
+skyCanvas.height = 512;
+const skyCtx = skyCanvas.getContext('2d');
+// Schöner Farbverlauf - mystisch wie Ori
+const grad = skyCtx.createLinearGradient(0, 0, 0, 512);
+grad.addColorStop(0, '#1a0f3e'); // Dunkel-Lila oben
+grad.addColorStop(0.3, '#2d1b5e'); // Lila
+grad.addColorStop(0.6, '#4a2c6f'); // Helles Lila
+grad.addColorStop(0.8, '#6b4a8d'); // Rosa-Lila
+grad.addColorStop(1, '#8b7ba8'); // Hell unten
+skyCtx.fillStyle = grad;
+skyCtx.fillRect(0, 0, 2, 512);
+
+// Sterne hinzufügen
+skyCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+for (let i = 0; i < 100; i++) {
+  const x = Math.random() * 2;
+  const y = Math.random() * 256; // Nur obere Hälfte
+  const size = Math.random() * 2;
+  skyCtx.fillRect(x, y, size, size);
+}
+
+const skyTexture = new THREE.CanvasTexture(skyCanvas);
+const skyMaterial = new THREE.MeshBasicMaterial({ map: skyTexture, side: THREE.DoubleSide });
+const skyMesh = new THREE.Mesh(skyGeometry, skyMaterial);
+skyMesh.position.set(2500, 0, -400); // Zentriert auf dem längeren Level
+scene.add(skyMesh);
+
+// === Berge im Hintergrund (erweiterte Berg-Szenerie) ===
+const mountainGroup = new THREE.Group();
+
+// Funktion zum Erstellen eines Berges (Dreieck/Pyramide)
+function createMountain(x, y, width, height, color, z) {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0);
+  shape.lineTo(width / 2, height);
+  shape.lineTo(width, 0);
+  shape.lineTo(0, 0);
+
+  const extrudeSettings = {
+    depth: 50,
+    bevelEnabled: false
+  };
+
+  const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+  const material = new THREE.MeshPhongMaterial({ color: color });
+  const mountain = new THREE.Mesh(geometry, material);
+  mountain.position.set(x, y, z);
+  // Keine Rotation - Berge stehen richtig herum
+  return mountain;
+}
+
+// Funktion zum Erstellen eines Berges mit Schneegipfel
+function createMountainWithSnow(x, y, width, height, baseColor, z) {
+  const group = new THREE.Group();
+
+  // Basis des Berges
+  const baseShape = new THREE.Shape();
+  baseShape.moveTo(0, 0);
+  baseShape.lineTo(width / 2, height);
+  baseShape.lineTo(width, 0);
+  baseShape.lineTo(0, 0);
+
+  const extrudeSettings = { depth: 50, bevelEnabled: false };
+  const baseGeometry = new THREE.ExtrudeGeometry(baseShape, extrudeSettings);
+  const baseMaterial = new THREE.MeshPhongMaterial({ color: baseColor });
+  const baseMesh = new THREE.Mesh(baseGeometry, baseMaterial);
+  // Keine Rotation - Berg steht richtig herum
+  group.add(baseMesh);
+
+  // Schneegipfel (oberes Drittel)
+  const snowHeight = height * 0.4;
+  const snowWidth = width * 0.5;
+  const snowShape = new THREE.Shape();
+  snowShape.moveTo(width / 2 - snowWidth / 2, height * 0.6);
+  snowShape.lineTo(width / 2, height);
+  snowShape.lineTo(width / 2 + snowWidth / 2, height * 0.6);
+  snowShape.lineTo(width / 2 - snowWidth / 2, height * 0.6);
+
+  const snowGeometry = new THREE.ExtrudeGeometry(snowShape, extrudeSettings);
+  const snowMaterial = new THREE.MeshPhongMaterial({ color: 0xf0f8ff, shininess: 30 });
+  const snowMesh = new THREE.Mesh(snowGeometry, snowMaterial);
+  // Keine Rotation - Schneegipfel steht richtig herum
+  snowMesh.position.z = 2; // Leicht nach vorne für bessere Sichtbarkeit
+  group.add(snowMesh);
+
+  group.position.set(x, y, z);
+  return group;
+}
+
+// === EBENE 1: Sehr weit entfernt (hellste, kleinste Berge) ===
+mountainGroup.add(createMountain(-1500, -320, 300, 220, 0x9fb3c8, -450));
+mountainGroup.add(createMountain(-1100, -330, 320, 240, 0x8fa5ba, -480));
+mountainGroup.add(createMountain(-700, -325, 280, 210, 0x9fb3c8, -460));
+mountainGroup.add(createMountain(-300, -320, 340, 250, 0x8fa5ba, -470));
+mountainGroup.add(createMountain(100, -328, 300, 230, 0x9fb3c8, -455));
+mountainGroup.add(createMountain(500, -322, 320, 240, 0x8fa5ba, -465));
+mountainGroup.add(createMountain(900, -330, 290, 220, 0x9fb3c8, -475));
+mountainGroup.add(createMountain(1300, -325, 310, 235, 0x8fa5ba, -460));
+mountainGroup.add(createMountain(1700, -320, 300, 225, 0x9fb3c8, -470));
+mountainGroup.add(createMountain(2100, -328, 320, 240, 0x8fa5ba, -465));
+mountainGroup.add(createMountain(2500, -322, 290, 230, 0x9fb3c8, -455));
+mountainGroup.add(createMountain(2900, -330, 310, 235, 0x8fa5ba, -475));
+mountainGroup.add(createMountain(3300, -325, 300, 220, 0x9fb3c8, -460));
+mountainGroup.add(createMountain(3700, -320, 320, 240, 0x8fa5ba, -470));
+mountainGroup.add(createMountain(4100, -328, 280, 210, 0x9fb3c8, -465));
+mountainGroup.add(createMountain(4500, -322, 340, 250, 0x8fa5ba, -455));
+mountainGroup.add(createMountain(4900, -330, 300, 230, 0x9fb3c8, -475));
+mountainGroup.add(createMountain(5300, -325, 320, 240, 0x8fa5ba, -460));
+
+// === EBENE 2: Weit entfernt mit Schneegipfeln ===
+mountainGroup.add(createMountainWithSnow(-1300, -360, 380, 300, 0x7a8d9e, -380));
+mountainGroup.add(createMountainWithSnow(-800, -355, 420, 330, 0x6b7e91, -400));
+mountainGroup.add(createMountainWithSnow(-300, -360, 400, 320, 0x7a8d9e, -370));
+mountainGroup.add(createMountainWithSnow(200, -350, 390, 310, 0x6b7e91, -390));
+mountainGroup.add(createMountainWithSnow(700, -358, 410, 325, 0x7a8d9e, -375));
+mountainGroup.add(createMountainWithSnow(1200, -355, 400, 315, 0x6b7e91, -385));
+mountainGroup.add(createMountainWithSnow(1700, -360, 390, 320, 0x7a8d9e, -380));
+mountainGroup.add(createMountainWithSnow(2200, -355, 420, 330, 0x6b7e91, -400));
+mountainGroup.add(createMountainWithSnow(2700, -360, 400, 320, 0x7a8d9e, -370));
+mountainGroup.add(createMountainWithSnow(3200, -350, 390, 310, 0x6b7e91, -390));
+mountainGroup.add(createMountainWithSnow(3700, -358, 410, 325, 0x7a8d9e, -375));
+mountainGroup.add(createMountainWithSnow(4200, -355, 400, 315, 0x6b7e91, -385));
+mountainGroup.add(createMountainWithSnow(4700, -360, 390, 320, 0x7a8d9e, -380));
+mountainGroup.add(createMountainWithSnow(5200, -355, 420, 330, 0x6b7e91, -400));
+
+// === EBENE 3: Mittlere Entfernung (dunklere, größere Berge) ===
+mountainGroup.add(createMountainWithSnow(-1200, -400, 450, 350, 0x5a6b7a, -280));
+mountainGroup.add(createMountainWithSnow(-600, -410, 500, 380, 0x4a5b6a, -300));
+mountainGroup.add(createMountainWithSnow(0, -405, 480, 360, 0x5a6b7a, -270));
+mountainGroup.add(createMountainWithSnow(600, -415, 470, 370, 0x4a5b6a, -290));
+mountainGroup.add(createMountainWithSnow(1200, -400, 490, 365, 0x5a6b7a, -285));
+mountainGroup.add(createMountainWithSnow(1800, -410, 480, 375, 0x4a5b6a, -295));
+mountainGroup.add(createMountainWithSnow(2400, -405, 460, 360, 0x5a6b7a, -280));
+mountainGroup.add(createMountainWithSnow(3000, -410, 500, 380, 0x4a5b6a, -300));
+mountainGroup.add(createMountainWithSnow(3600, -405, 480, 360, 0x5a6b7a, -270));
+mountainGroup.add(createMountainWithSnow(4200, -415, 470, 370, 0x4a5b6a, -290));
+mountainGroup.add(createMountainWithSnow(4800, -400, 490, 365, 0x5a6b7a, -285));
+mountainGroup.add(createMountainWithSnow(5400, -410, 480, 375, 0x4a5b6a, -295));
+
+// === EBENE 4: Nahe Berge (dunkelste, größte) ===
+mountainGroup.add(createMountainWithSnow(-1000, -450, 520, 420, 0x3a4b5a, -200));
+mountainGroup.add(createMountainWithSnow(-400, -460, 580, 450, 0x2a3b4a, -220));
+mountainGroup.add(createMountainWithSnow(200, -455, 550, 430, 0x3a4b5a, -190));
+mountainGroup.add(createMountainWithSnow(800, -465, 560, 440, 0x2a3b4a, -210));
+mountainGroup.add(createMountainWithSnow(1400, -458, 540, 435, 0x3a4b5a, -195));
+mountainGroup.add(createMountainWithSnow(2000, -460, 570, 445, 0x2a3b4a, -205));
+mountainGroup.add(createMountainWithSnow(2600, -455, 520, 420, 0x3a4b5a, -200));
+mountainGroup.add(createMountainWithSnow(3200, -460, 580, 450, 0x2a3b4a, -220));
+mountainGroup.add(createMountainWithSnow(3800, -455, 550, 430, 0x3a4b5a, -190));
+mountainGroup.add(createMountainWithSnow(4400, -465, 560, 440, 0x2a3b4a, -210));
+mountainGroup.add(createMountainWithSnow(5000, -458, 540, 435, 0x3a4b5a, -195));
+mountainGroup.add(createMountainWithSnow(5600, -460, 570, 445, 0x2a3b4a, -205));
+
+scene.add(mountainGroup);
+
+// === Bäume im Vordergrund und Mittelgrund ===
+const treeGroup = new THREE.Group();
+
+// Funktion zum Erstellen eines Baumes
+function createTree(x, y, z, scale = 1) {
+  const tree = new THREE.Group();
+
+  // Baumstamm
+  const trunkGeometry = new THREE.CylinderGeometry(4 * scale, 6 * scale, 40 * scale, 8);
+  const trunkMaterial = new THREE.MeshPhongMaterial({ color: 0x5d4037 });
+  const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+  trunk.position.y = 20 * scale;
+  tree.add(trunk);
+
+  // Baumkrone (3 Kegel übereinander)
+  const crownGeometry1 = new THREE.ConeGeometry(25 * scale, 40 * scale, 8);
+  const crownMaterial = new THREE.MeshPhongMaterial({ color: 0x2d5016 });
+  const crown1 = new THREE.Mesh(crownGeometry1, crownMaterial);
+  crown1.position.y = 50 * scale;
+  tree.add(crown1);
+
+  const crown2 = new THREE.Mesh(crownGeometry1, crownMaterial);
+  crown2.position.y = 70 * scale;
+  crown2.scale.set(0.8, 0.8, 0.8);
+  tree.add(crown2);
+
+  const crown3 = new THREE.Mesh(crownGeometry1, crownMaterial);
+  crown3.position.y = 85 * scale;
+  crown3.scale.set(0.6, 0.6, 0.6);
+  tree.add(crown3);
+
+  tree.position.set(x, y, z);
+  return tree;
+}
+
+// Bäume im Hintergrund (kleiner, weiter weg)
+treeGroup.add(createTree(-800, -350, -300, 0.6));
+treeGroup.add(createTree(-600, -360, -320, 0.5));
+treeGroup.add(createTree(-200, -355, -310, 0.55));
+treeGroup.add(createTree(100, -350, -330, 0.6));
+treeGroup.add(createTree(600, -360, -315, 0.52));
+treeGroup.add(createTree(1100, -355, -325, 0.58));
+treeGroup.add(createTree(1600, -350, -310, 0.55));
+treeGroup.add(createTree(2100, -360, -320, 0.5));
+treeGroup.add(createTree(2600, -355, -330, 0.6));
+treeGroup.add(createTree(3100, -350, -315, 0.52));
+treeGroup.add(createTree(3600, -360, -325, 0.58));
+treeGroup.add(createTree(4100, -355, -310, 0.55));
+treeGroup.add(createTree(4600, -350, -320, 0.5));
+treeGroup.add(createTree(5100, -360, -330, 0.6));
+
+// Bäume im Mittelgrund (mittlere Größe)
+treeGroup.add(createTree(-700, -400, -150, 0.8));
+treeGroup.add(createTree(-200, -410, -160, 0.75));
+treeGroup.add(createTree(300, -405, -155, 0.82));
+treeGroup.add(createTree(850, -400, -165, 0.78));
+treeGroup.add(createTree(1400, -408, -158, 0.8));
+treeGroup.add(createTree(1950, -400, -160, 0.75));
+treeGroup.add(createTree(2500, -405, -155, 0.82));
+treeGroup.add(createTree(3050, -400, -165, 0.78));
+treeGroup.add(createTree(3600, -408, -158, 0.8));
+treeGroup.add(createTree(4150, -400, -160, 0.75));
+treeGroup.add(createTree(4700, -405, -155, 0.82));
+treeGroup.add(createTree(5250, -400, -165, 0.78));
+
+// Original-X-Positionen speichern für Parallax
+treeGroup.children.forEach(tree => {
+  tree.userData.originalX = tree.position.x;
+});
+
+scene.add(treeGroup);
+
+// === WOLKEN im Hintergrund (verschiedene Entfernungen) ===
+const cloudGroup = new THREE.Group();
+
+// Funktion zum Erstellen einer Wolke (aus mehreren Kugeln)
+function createCloud(x, y, z, scale = 1) {
+  const cloud = new THREE.Group();
+
+  // Wolken-Material (weich und fluffig)
+  const cloudMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.85,
+    roughness: 1.0,
+    metalness: 0.0,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.1
+  });
+
+  // Haupt-Kugel (Zentrum)
+  const mainSphere = new THREE.SphereGeometry(30 * scale, 16, 16);
+  const mainMesh = new THREE.Mesh(mainSphere, cloudMaterial);
+  cloud.add(mainMesh);
+
+  // Zusätzliche Kugeln für organische Form (5-7 Kugeln)
+  const numPuffs = 5 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < numPuffs; i++) {
+    const size = (20 + Math.random() * 15) * scale;
+    const offsetX = (Math.random() - 0.5) * 60 * scale;
+    const offsetY = (Math.random() - 0.5) * 20 * scale;
+    const offsetZ = (Math.random() - 0.5) * 20 * scale;
+
+    const puffGeometry = new THREE.SphereGeometry(size, 16, 16);
+    const puffMesh = new THREE.Mesh(puffGeometry, cloudMaterial);
+    puffMesh.position.set(offsetX, offsetY, offsetZ);
+    cloud.add(puffMesh);
+  }
+
+  cloud.position.set(x, y, z);
+  return cloud;
+}
+
+// === EBENE 1: Sehr weit entfernte Wolken (höchste Z-Position) ===
+cloudGroup.add(createCloud(-1200, 100, -600, 1.2));
+cloudGroup.add(createCloud(-600, 120, -650, 1.0));
+cloudGroup.add(createCloud(-100, 90, -620, 1.1));
+cloudGroup.add(createCloud(500, 130, -640, 0.9));
+cloudGroup.add(createCloud(1100, 80, -630, 1.15));
+cloudGroup.add(createCloud(1700, 110, -610, 1.05));
+cloudGroup.add(createCloud(2300, 95, -625, 1.0));
+cloudGroup.add(createCloud(2900, 125, -645, 0.95));
+cloudGroup.add(createCloud(3500, 85, -615, 1.1));
+cloudGroup.add(createCloud(4100, 105, -635, 1.0));
+cloudGroup.add(createCloud(4700, 115, -620, 1.05));
+cloudGroup.add(createCloud(5300, 100, -640, 0.9));
+
+// === EBENE 2: Weit entfernte Wolken ===
+cloudGroup.add(createCloud(-1000, 150, -450, 0.9));
+cloudGroup.add(createCloud(-400, 130, -480, 0.85));
+cloudGroup.add(createCloud(200, 160, -460, 0.8));
+cloudGroup.add(createCloud(800, 140, -470, 0.95));
+cloudGroup.add(createCloud(1400, 170, -440, 0.85));
+cloudGroup.add(createCloud(2000, 145, -465, 0.9));
+cloudGroup.add(createCloud(2600, 165, -455, 0.8));
+cloudGroup.add(createCloud(3200, 135, -475, 0.9));
+cloudGroup.add(createCloud(3800, 175, -445, 0.85));
+cloudGroup.add(createCloud(4400, 155, -460, 0.95));
+cloudGroup.add(createCloud(5000, 145, -470, 0.8));
+cloudGroup.add(createCloud(5600, 160, -450, 0.9));
+
+// === EBENE 3: Mittlere Entfernung ===
+cloudGroup.add(createCloud(-800, 200, -350, 0.75));
+cloudGroup.add(createCloud(-200, 190, -370, 0.7));
+cloudGroup.add(createCloud(400, 210, -360, 0.65));
+cloudGroup.add(createCloud(1000, 195, -355, 0.8));
+cloudGroup.add(createCloud(1600, 215, -365, 0.7));
+cloudGroup.add(createCloud(2200, 180, -340, 0.75));
+cloudGroup.add(createCloud(2800, 205, -375, 0.65));
+cloudGroup.add(createCloud(3400, 185, -345, 0.7));
+cloudGroup.add(createCloud(4000, 200, -360, 0.8));
+cloudGroup.add(createCloud(4600, 190, -350, 0.7));
+cloudGroup.add(createCloud(5200, 195, -370, 0.75));
+
+// === EBENE 4: Nah (über den Bergen) ===
+cloudGroup.add(createCloud(-600, 230, -250, 0.6));
+cloudGroup.add(createCloud(100, 225, -270, 0.55));
+cloudGroup.add(createCloud(700, 245, -260, 0.5));
+cloudGroup.add(createCloud(1300, 220, -255, 0.65));
+cloudGroup.add(createCloud(1900, 235, -265, 0.55));
+cloudGroup.add(createCloud(2500, 210, -245, 0.6));
+cloudGroup.add(createCloud(3100, 240, -275, 0.5));
+cloudGroup.add(createCloud(3700, 215, -250, 0.6));
+cloudGroup.add(createCloud(4300, 250, -260, 0.65));
+cloudGroup.add(createCloud(4900, 225, -270, 0.55));
+cloudGroup.add(createCloud(5500, 235, -255, 0.6));
+
+// Original-Positionen speichern für Parallax und Animation
+cloudGroup.children.forEach(cloud => {
+  cloud.userData.originalX = cloud.position.x;
+  cloud.userData.originalY = cloud.position.y; // WICHTIG: originalY direkt speichern
+  cloud.userData.originalZ = cloud.position.z;
+});
+
+scene.add(cloudGroup);
+
+// === Boden unterhalb der Plattformen - AAA-Style ===
+const groundGeometry = new THREE.PlaneGeometry(12000, 1500); // Viel größer!
+const groundMaterial = new THREE.MeshStandardMaterial({
+  color: 0x3a2f2f, // Dunkles Braun
+  roughness: 0.9,
+  metalness: 0.1,
+  emissive: 0x1a1515,
+  emissiveIntensity: 0.2
+});
+const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+groundMesh.rotation.x = Math.PI / 2;
+groundMesh.position.set(2500, toThreeY(700), 0); // Zentriert auf dem längeren Level
+groundMesh.receiveShadow = true;
+scene.add(groundMesh);
+
+// === Plattformen Meshes - AAA-Qualität mit prozeduralen Texturen (Ori-Style) ===
+const floorColor = 0x44dd44; // Grün für Böden
+const ceilingColor = 0x6688bb; // Blau für Decken
+const wallColor = 0x8855bb; // Lila für Wände
+
+// Prozedurale Textur-Funktion für Stein/Gras-Look
+function createProceduralTexture(width, height, baseColor, isGrass = false) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+
+  // Basis-Füllung
+  ctx.fillStyle = baseColor;
+  ctx.fillRect(0, 0, width, height);
+
+  if (isGrass) {
+    // Gras-Textur mit Strichen
+    for (let i = 0; i < 500; i++) {
+      const x = Math.random() * width;
+      const y = Math.random() * height * 0.3; // Nur oben
+      const h = 3 + Math.random() * 8;
+      ctx.strokeStyle = `rgba(${20 + Math.random() * 40}, ${100 + Math.random() * 80}, ${20 + Math.random() * 40}, ${0.3 + Math.random() * 0.4})`;
+      ctx.lineWidth = 1 + Math.random();
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + (Math.random() - 0.5) * 3, y - h);
+      ctx.stroke();
+    }
+  }
+
+  // Stein-Textur mit Punkten und Variationen
+  for (let i = 0; i < 200; i++) {
+    const x = Math.random() * width;
+    const y = Math.random() * height;
+    const size = 1 + Math.random() * 3;
+    ctx.fillStyle = `rgba(0, 0, 0, ${0.1 + Math.random() * 0.2})`;
+    ctx.beginPath();
+    ctx.arc(x, y, size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Hellere Highlights
+  for (let i = 0; i < 100; i++) {
+    const x = Math.random() * width;
+    const y = Math.random() * height;
+    const size = 0.5 + Math.random() * 2;
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.05 + Math.random() * 0.15})`;
+    ctx.beginPath();
+    ctx.arc(x, y, size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  return new THREE.CanvasTexture(canvas);
+}
+
+platformMeshes.length = 0;
+platforms.forEach((p, index) => {
+  // Bestimme Farbe basierend auf Position und Größe
+  let useColor, emissiveColor, isWall = false, isGrass = false;
+
+  if (p.width > p.height * 3) {
+    // Horizontal = Boden oder Decke
+    if (p.y < 250) {
+      useColor = ceilingColor;
+      emissiveColor = 0x334466;
+    } else {
+      useColor = index === 0 ? floorColor : 0x55bb55; // Hauptboden grüner
+      emissiveColor = index === 0 ? 0x225522 : 0x336633;
+      isGrass = true;
+    }
+  } else {
+    // Vertikal = Wand
+    useColor = wallColor;
+    emissiveColor = 0x442266;
+    isWall = true;
+  }
+
+  const geo = new THREE.BoxGeometry(p.width, p.height, 60);
+
+  // Erstelle Textur
+  const texture = createProceduralTexture(256, 256,
+    '#' + useColor.toString(16).padStart(6, '0'),
+    isGrass
+  );
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(p.width / 50, p.height / 50);
+
+  const mat = new THREE.MeshStandardMaterial({
+    map: texture,
+    color: 0xffffff,
+    emissive: emissiveColor,
+    emissiveIntensity: 0.3,
+    roughness: 0.8,
+    metalness: 0.1,
+    normalScale: new THREE.Vector2(0.5, 0.5)
+  });
+
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(p.x + p.width/2, toThreeY(p.y + p.height/2), 0);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  platformMeshes.push(mesh);
+
+  // Leuchtende Kanten für Wände und Decken - dicker und leuchtender
+  if (isWall || p.y < 250) {
+    const edgeGeo = new THREE.EdgesGeometry(geo);
+    const edgeMat = new THREE.LineBasicMaterial({
+      color: isWall ? 0xcc99ff : 0x99ddff,
+      opacity: 0.9,
+      transparent: true,
+      linewidth: 2
+    });
+    const edges = new THREE.LineSegments(edgeGeo, edgeMat);
+    mesh.add(edges);
+
+    // Zusätzliches Glühen
+    const glowGeo = new THREE.BoxGeometry(p.width + 4, p.height + 4, 62);
+    const glowMat = new THREE.MeshBasicMaterial({
+      color: isWall ? 0x8855bb : 0x6688bb,
+      transparent: true,
+      opacity: 0.15,
+      side: THREE.BackSide
+    });
+    const glow = new THREE.Mesh(glowGeo, glowMat);
+    mesh.add(glow);
+  }
+});
+
+// === Feind-Meshes - AAA-Qualität ===
+const enemyMeshes = [];
+enemies.forEach(enemy => {
+  const enemyGroup = new THREE.Group();
+
+  // Feind-Körper (dunkelrot mit Glühen)
+  const enemyBodyGeometry = new THREE.BoxGeometry(20, 30, 14);
+  const enemyBodyMaterial = new THREE.MeshStandardMaterial({
+    color: 0xff3333,
+    emissive: 0xaa0000,
+    emissiveIntensity: 0.6,
+    roughness: 0.4,
+    metalness: 0.3
+  });
+  const enemyBody = new THREE.Mesh(enemyBodyGeometry, enemyBodyMaterial);
+  enemyBody.position.y = 0;
+  enemyBody.castShadow = true;
+  enemyGroup.add(enemyBody);
+
+  // Feind-Kopf (dunkelrot)
+  const enemyHeadGeometry = new THREE.SphereGeometry(10, 16, 16);
+  const enemyHeadMaterial = new THREE.MeshStandardMaterial({
+    color: 0xcc0000,
+    emissive: 0x880000,
+    emissiveIntensity: 0.5,
+    roughness: 0.5,
+    metalness: 0.2
+  });
+  const enemyHead = new THREE.Mesh(enemyHeadGeometry, enemyHeadMaterial);
+  enemyHead.position.y = 20;
+  enemyHead.castShadow = true;
+  enemyGroup.add(enemyHead);
+
+  // Feind-Augen (stark leuchtend)
+  const eyeGeometry = new THREE.SphereGeometry(2.5, 12, 12);
+  const eyeMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffff00,
+    emissive: 0xffff00,
+    emissiveIntensity: 3.0
+  });
+  const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+  leftEye.position.set(-4, 20, 8);
+  enemyGroup.add(leftEye);
+  const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+  rightEye.position.set(4, 20, 8);
+  enemyGroup.add(rightEye);
+
+  // Glüh-Aura um Feind
+  const auraGeometry = new THREE.SphereGeometry(18, 16, 16);
+  const auraMaterial = new THREE.MeshBasicMaterial({
+    color: 0xff0000,
+    transparent: true,
+    opacity: 0.15,
+    side: THREE.BackSide
+  });
+  const aura = new THREE.Mesh(auraGeometry, auraMaterial);
+  enemyGroup.add(aura);
+
+  // Feind seitlich drehen
+  enemyGroup.rotation.y = Math.PI / 2;
+
+  scene.add(enemyGroup);
+  enemyMeshes.push(enemyGroup);
+});
+
+// === BOSS-Mesh (The Red Devil) - RIESIG ===
+let bossMesh = null;
+let bossHealthIndicators = []; // Rote Punkte für Leben
+
+function createBossMesh() {
+  const bossGroup = new THREE.Group();
+
+  // Boss-Körper (RIESIG - 2.5x größer als normale Feinde)
+  const bossBodyGeometry = new THREE.BoxGeometry(60, 80, 40);
+  const bossBodyMaterial = new THREE.MeshStandardMaterial({
+    color: 0xcc0000,
+    emissive: 0x880000,
+    emissiveIntensity: 0.8,
+    roughness: 0.3,
+    metalness: 0.4
+  });
+  const bossBody = new THREE.Mesh(bossBodyGeometry, bossBodyMaterial);
+  bossBody.position.y = 0;
+  bossBody.castShadow = true;
+  bossGroup.add(bossBody);
+
+  // Boss-Kopf (RIESIG)
+  const bossHeadGeometry = new THREE.SphereGeometry(30, 32, 32);
+  const bossHeadMaterial = new THREE.MeshStandardMaterial({
+    color: 0xaa0000,
+    emissive: 0x660000,
+    emissiveIntensity: 0.7,
+    roughness: 0.4,
+    metalness: 0.3
+  });
+  const bossHead = new THREE.Mesh(bossHeadGeometry, bossHeadMaterial);
+  bossHead.position.y = 50;
+  bossHead.castShadow = true;
+  bossGroup.add(bossHead);
+
+  // Boss-Augen (SEHR LEUCHTEND)
+  const bossEyeGeometry = new THREE.SphereGeometry(5, 16, 16);
+  const bossEyeMaterial = new THREE.MeshStandardMaterial({
+    color: 0xff0000,
+    emissive: 0xff0000,
+    emissiveIntensity: 5.0
+  });
+  const leftEye = new THREE.Mesh(bossEyeGeometry, bossEyeMaterial);
+  leftEye.position.set(-10, 50, 25);
+  bossGroup.add(leftEye);
+  const rightEye = new THREE.Mesh(bossEyeGeometry, bossEyeMaterial);
+  rightEye.position.set(10, 50, 25);
+  bossGroup.add(rightEye);
+
+  // Hörner
+  const hornGeometry = new THREE.ConeGeometry(8, 30, 8);
+  const hornMaterial = new THREE.MeshStandardMaterial({
+    color: 0x440000,
+    emissive: 0x220000,
+    emissiveIntensity: 0.5,
+    roughness: 0.6,
+    metalness: 0.7
+  });
+  const leftHorn = new THREE.Mesh(hornGeometry, hornMaterial);
+  leftHorn.position.set(-15, 70, 0);
+  leftHorn.rotation.z = -Math.PI / 6;
+  bossGroup.add(leftHorn);
+  const rightHorn = new THREE.Mesh(hornGeometry, hornMaterial);
+  rightHorn.position.set(15, 70, 0);
+  rightHorn.rotation.z = Math.PI / 6;
+  bossGroup.add(rightHorn);
+
+  // Massive Glüh-Aura
+  const bossAuraGeometry = new THREE.SphereGeometry(55, 32, 32);
+  const bossAuraMaterial = new THREE.MeshBasicMaterial({
+    color: 0xff0000,
+    transparent: true,
+    opacity: 0.25,
+    side: THREE.BackSide
+  });
+  const bossAura = new THREE.Mesh(bossAuraGeometry, bossAuraMaterial);
+  bossGroup.add(bossAura);
+
+  // Boss seitlich drehen
+  bossGroup.rotation.y = Math.PI / 2;
+
+  scene.add(bossGroup);
+  bossMesh = bossGroup;
+
+  // Lebens-Anzeige (5 rote Punkte über dem Boss)
+  for (let i = 0; i < 5; i++) {
+    const healthGeometry = new THREE.SphereGeometry(5, 16, 16);
+    const healthMaterial = new THREE.MeshStandardMaterial({
+      color: 0xff0000,
+      emissive: 0xff0000,
+      emissiveIntensity: 2.0
+    });
+    const healthIndicator = new THREE.Mesh(healthGeometry, healthMaterial);
+    scene.add(healthIndicator);
+    bossHealthIndicators.push(healthIndicator);
+  }
+}
+
+// Boss-Mesh erstellen
+createBossMesh();
+bossMesh.visible = false; // Versteckt bis Boss aktiv
+
+// === Boss-Laser-Meshes ===
+const bossLaserMeshes = new Map();
+
+// === Projektil-Meshes (werden dynamisch erstellt) ===
+const projectileMeshes = new Map(); // Map: projectile -> mesh
+
+// === Feind-Laser-Meshes (werden dynamisch erstellt) ===
+const enemyLaserMeshes = new Map(); // Map: laser -> mesh
+
+// === Staubwolken-Meshes (werden dynamisch erstellt) ===
+const dustMeshes = new Map(); // Map: dust -> mesh
+
+// === Dash-Trail-Meshes (werden dynamisch erstellt) ===
+const dashTrailMeshes = new Map(); // Map: trail -> mesh
+
+// === Grappling-Linie ===
+let grapplingLine = null;
+
+// === Perlen-Meshes - AAA-Qualität mit Glühen ===
+const grapplingMeshes = [];
+const pearlZPosition = 50; // VOR der Figur (positives z)
+
+grapplingPoints.forEach(point => {
+  // Perle (stark leuchtende Kugel)
+  const pearlGeometry = new THREE.SphereGeometry(point.radius, 32, 32);
+  const pearlMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: 0x00ffff, // Cyan-Glühen
+    emissiveIntensity: 2.0,
+    roughness: 0.1,
+    metalness: 0.9
+  });
+  const pearlMesh = new THREE.Mesh(pearlGeometry, pearlMaterial);
+  pearlMesh.position.set(point.x, toThreeY(point.y), pearlZPosition);
+  scene.add(pearlMesh);
+  grapplingMeshes.push({ mesh: pearlMesh, point: point });
+
+  // Äußerer Glüh-Ring (größer, transparenter)
+  const glowGeometry = new THREE.SphereGeometry(point.radius + 5, 32, 32);
+  const glowMaterial = new THREE.MeshBasicMaterial({
+    color: 0x00ffff,
+    transparent: true,
+    opacity: 0.3,
+    side: THREE.BackSide
+  });
+  const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+  glowMesh.position.set(point.x, toThreeY(point.y), pearlZPosition);
+  scene.add(glowMesh);
+  grapplingMeshes.push({ mesh: glowMesh, point: point, isGlow: true });
+
+  // Rotierender Ring
+  const ringGeometry = new THREE.TorusGeometry(point.radius + 3, 1.5, 16, 32);
+  const ringMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffff00,
+    transparent: true,
+    opacity: 0.7
+  });
+  const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
+  ringMesh.position.set(point.x, toThreeY(point.y), pearlZPosition);
+  scene.add(ringMesh);
+  grapplingMeshes.push({ mesh: ringMesh, point: point, isRing: true });
+
+  // Partikel-Wolke um Perle
+  const particleCount = 30;
+  const particleGeometry = new THREE.BufferGeometry();
+  const positions = new Float32Array(particleCount * 3);
+  for (let i = 0; i < particleCount; i++) {
+    positions[i * 3] = (Math.random() - 0.5) * 30;
+    positions[i * 3 + 1] = (Math.random() - 0.5) * 30;
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 30;
+  }
+  particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const particleMaterial = new THREE.PointsMaterial({
+    color: 0x00ffff,
+    size: 2,
+    transparent: true,
+    opacity: 0.6,
+    blending: THREE.AdditiveBlending
+  });
+  const particles = new THREE.Points(particleGeometry, particleMaterial);
+  particles.position.set(point.x, toThreeY(point.y), pearlZPosition);
+  scene.add(particles);
+  grapplingMeshes.push({ mesh: particles, point: point, isParticles: true });
+});
+
+// === Zielpunkt-Mesh (leuchtende Säule am Ende des Levels) ===
+const goalMeshGroup = new THREE.Group();
+
+// Basis-Säule
+const goalGeometry = new THREE.CylinderGeometry(40, 40, 100, 32);
+const goalMaterial = new THREE.MeshStandardMaterial({
+  color: 0x00ff00,
+  emissive: 0x00ff00,
+  emissiveIntensity: 1.5,
+  transparent: true,
+  opacity: 0.8,
+  roughness: 0.2,
+  metalness: 0.8
+});
+const goalMesh = new THREE.Mesh(goalGeometry, goalMaterial);
+goalMesh.position.set(goalPoint.x + goalPoint.width/2, toThreeY(goalPoint.y + goalPoint.height/2), 0);
+goalMeshGroup.add(goalMesh);
+
+// Äußeres Glühen
+const goalGlowGeometry = new THREE.CylinderGeometry(50, 50, 110, 32);
+const goalGlowMaterial = new THREE.MeshBasicMaterial({
+  color: 0x00ff00,
+  transparent: true,
+  opacity: 0.3,
+  side: THREE.BackSide
+});
+const goalGlowMesh = new THREE.Mesh(goalGlowGeometry, goalGlowMaterial);
+goalGlowMesh.position.set(goalPoint.x + goalPoint.width/2, toThreeY(goalPoint.y + goalPoint.height/2), 0);
+goalMeshGroup.add(goalGlowMesh);
+
+// Rotierender Ring oben
+const goalRingGeometry = new THREE.TorusGeometry(30, 5, 16, 32);
+const goalRingMaterial = new THREE.MeshStandardMaterial({
+  color: 0xffff00,
+  emissive: 0xffff00,
+  emissiveIntensity: 2.0
+});
+const goalRingMesh = new THREE.Mesh(goalRingGeometry, goalRingMaterial);
+goalRingMesh.position.set(goalPoint.x + goalPoint.width/2, toThreeY(goalPoint.y), 0);
+goalRingMesh.rotation.x = Math.PI / 2;
+goalMeshGroup.add(goalRingMesh);
+
+scene.add(goalMeshGroup);
+
+// === Atmosphärische Partikel (wie in Ori) ===
+const atmosphereParticles = new THREE.Group();
+const particleCount = 500; // Mehr Partikel für größeres Level
+const particleGeometry = new THREE.BufferGeometry();
+const positions = new Float32Array(particleCount * 3);
+const colors = new Float32Array(particleCount * 3);
+
+for (let i = 0; i < particleCount; i++) {
+  // Über das gesamte Level verteilen: von -1000 bis 7000
+  positions[i * 3] = Math.random() * 8000 - 1000; // X: -1000 bis 7000
+  positions[i * 3 + 1] = Math.random() * 800 - 400; // Y: -400 bis 400
+  positions[i * 3 + 2] = (Math.random() - 0.5) * 200; // Z: -100 bis 100
+
+  // Verschiedene Farben (cyan, lila, gelb)
+  const colorChoice = Math.random();
+  if (colorChoice < 0.33) {
+    colors[i * 3] = 0; colors[i * 3 + 1] = 1; colors[i * 3 + 2] = 1; // Cyan
+  } else if (colorChoice < 0.66) {
+    colors[i * 3] = 1; colors[i * 3 + 1] = 0; colors[i * 3 + 2] = 1; // Magenta
+  } else {
+    colors[i * 3] = 1; colors[i * 3 + 1] = 1; colors[i * 3 + 2] = 0; // Gelb
+  }
+}
+
+particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+particleGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+const atmosphereMaterial = new THREE.PointsMaterial({
+  size: 3,
+  transparent: true,
+  opacity: 0.7,
+  vertexColors: true,
+  blending: THREE.AdditiveBlending,
+  sizeAttenuation: true
+});
+
+const atmospherePoints = new THREE.Points(particleGeometry, atmosphereMaterial);
+scene.add(atmospherePoints);
+
+  // Update- und Render-Loop
+  let walkTime = 0;
+  const bossAnnouncementElement = document.getElementById('bossAnnouncement');
+
+  function loop(currentTime = 0) {
+    // Delta Time berechnen (in Sekunden)
+    if (lastTime === 0) lastTime = currentTime;
+    deltaTime = Math.min((currentTime - lastTime) / 1000, maxDeltaTime);
+    lastTime = currentTime;
+
+    // Delta Time mit 60 FPS als Basis normalisieren und globale Variable aktualisieren
+    dt = deltaTime * targetFPS;
+
+    update(dt);
+
+    // Boss-Ankündigung anzeigen
+    if (bossAnnouncementActive) {
+      bossAnnouncementElement.style.display = 'block';
+    } else {
+      bossAnnouncementElement.style.display = 'none';
+    }
+
+    // Spielerfigur Position updaten (Y invertieren)
+    // Offset anpassen, damit die Füße genau auf der Plattform stehen
+    playerGroup.position.set(player.x + player.width/2, toThreeY(player.y + player.height/2) + 18, 0);
+
+    // === Spieler-Partikel Animation (Ori-Style Energie) ===
+    let animTime = Date.now() * 0.001;
+    const playerParticlePositions = playerParticles.geometry.attributes.position.array;
+    for (let i = 0; i < playerParticleCount; i++) {
+      // Rotation um die Figur
+      const angle = (animTime * 2 + i * 0.2) % (Math.PI * 2);
+      const radius = 25 + Math.sin(animTime * 3 + i) * 5;
+      playerParticlePositions[i * 3] = Math.cos(angle) * radius;
+      playerParticlePositions[i * 3 + 1] = Math.sin(animTime * 4 + i * 0.5) * 30;
+      playerParticlePositions[i * 3 + 2] = Math.sin(angle) * radius;
+    }
+    playerParticles.geometry.attributes.position.needsUpdate = true;
+
+    // Dash-Farbe und Intensität
+    if (player.isDashing) {
+      bodyMesh.material.color.setHex(0xff8833);
+      bodyMesh.material.emissiveIntensity = 1.2;
+      auraMesh.material.opacity = 0.4;
+      playerParticleMaterial.opacity = 1.0;
+    } else {
+      bodyMesh.material.color.setHex(0x88bbff);
+      bodyMesh.material.emissiveIntensity = 0.8;
+      auraMesh.material.opacity = 0.2;
+      playerParticleMaterial.opacity = 0.8;
+    }
+
+    // Figur in Bewegungsrichtung drehen
+    if (player.dashDirection === 1) {
+      // Nach rechts schauen
+      playerGroup.rotation.y = Math.PI / 2;
+    } else if (player.dashDirection === -1) {
+      // Nach links schauen (180 Grad gedreht)
+      playerGroup.rotation.y = -Math.PI / 2;
+    }
+
+    // Visuelles Feedback für Dash
+    if (player.isDashing) {
+      bodyMesh.material.color.setHex(0xff6600); // Orange während Dash
+      bodyMesh.material.emissive.setHex(0xff3300);
+    } else {
+      bodyMesh.material.color.setHex(0x448aff); // Normal blau
+      bodyMesh.material.emissive.setHex(0x000000);
+    }
+
+    // === Rutsch-Animation ===
+    if (player.isSliding) {
+      // Figur legt sich flach - Rotation hängt von Bewegungsrichtung ab
+      playerGroup.rotation.y = player.dashDirection === 1 ? 0 : Math.PI; // In Bewegungsrichtung zeigen
+      playerGroup.rotation.x = player.dashDirection === 1 ? Math.PI / 2 : -Math.PI / 2; // Rechts: +90°, Links: -90°
+      playerGroup.rotation.z = -Math.PI / 2; // -90° für beide - Kopf vorne
+
+      // Arme seitlich/nach vorne
+      leftArmGroup.rotation.x = -0.5;
+      rightArmGroup.rotation.x = -0.5;
+      leftArmGroup.rotation.z = 0;
+      rightArmGroup.rotation.z = 0;
+
+      // Beine gestreckt
+      leftLegGroup.rotation.x = 0.2;
+      rightLegGroup.rotation.x = 0.2;
+    } else {
+      // Normale aufrechte Position
+      playerGroup.rotation.y = player.dashDirection === 1 ? Math.PI / 2 : -Math.PI / 2;
+      playerGroup.rotation.x = 0;
+      playerGroup.rotation.z = 0;
+
+      // Arme zurücksetzen
+      leftArmGroup.rotation.z = 0;
+      rightArmGroup.rotation.z = 0;
+    }
+
+    // Walking-Animation (nur wenn Bewegung und nicht Dash und nicht Rutsch)
+    if (player.vx !== 0 && player.onGround && !player.isDashing && !player.isSliding) {
+      walkTime += 0.07 * Math.abs(player.vx / dt); // Geschwindigkeit normalisiert durch dt
+      // Beine vor und zurück bewegen (Rotation an der Hüfte) - X-Achse wegen 90° Drehung
+      const legSwing = Math.sin(walkTime) * 0.3; // Kleinerer Winkel: von 0.5 auf 0.3
+      leftLegGroup.rotation.x = legSwing;
+      rightLegGroup.rotation.x = -legSwing;
+
+      // Arme entgegengesetzt zu den Beinen bewegen (natürlicher Gang) - X-Achse
+      const armSwing = Math.sin(walkTime) * 0.5; // Größerer Winkel: von 0.25 auf 0.5 erhöht
+      leftArmGroup.rotation.x = -armSwing; // entgegengesetzt zum linken Bein
+      rightArmGroup.rotation.x = armSwing; // entgegengesetzt zum rechten Bein
+    } else if (!player.onGround) {
+      // Sprunganimation - Arme nach oben, ein Bein nach vorne, ein Bein nach hinten
+      leftArmGroup.rotation.x = -1.0; // Arme nach oben
+      rightArmGroup.rotation.x = -1.0;
+      leftLegGroup.rotation.x = 0.6; // Linkes Bein nach vorne
+      rightLegGroup.rotation.x = -0.6; // Rechtes Bein nach hinten
+    } else {
+      // Beine und Arme in Standposition
+      leftLegGroup.rotation.x = 0;
+      rightLegGroup.rotation.x = 0;
+      leftArmGroup.rotation.x = 0;
+      rightArmGroup.rotation.x = 0;
+      walkTime = 0;
+    }
+
+    // === Feinde Rendering ===
+    enemies.forEach((enemy, index) => {
+      const enemyMesh = enemyMeshes[index];
+
+      if (!enemy.alive) {
+        enemyMesh.visible = false;
+        return;
+      }
+
+      enemyMesh.visible = true;
+      enemyMesh.position.set(enemy.x + enemy.width/2, toThreeY(enemy.y + enemy.height/2) + 10, 0);
+
+      // Feind in Bewegungsrichtung drehen
+      if (enemy.dying) {
+        // Umfall-Animation: Feind fällt zur Seite
+        const fallProgress = enemy.dyingTimer / 30; // 0 bis 1
+        enemyMesh.rotation.z = fallProgress * Math.PI / 2; // 90 Grad kippen
+        enemyMesh.position.y -= fallProgress * 20; // Nach unten sinken
+      } else {
+        enemyMesh.rotation.z = 0;
+        if (enemy.vx > 0) {
+          enemyMesh.rotation.y = Math.PI / 2; // Nach rechts
+        } else {
+          enemyMesh.rotation.y = -Math.PI / 2; // Nach links
+        }
+      }
+    });
+
+    // === BOSS Rendering ===
+    if (boss.active) {
+      bossMesh.visible = true;
+      bossMesh.position.set(boss.x + boss.width/2, toThreeY(boss.y + boss.height/2) + 20, 0);
+
+      // Boss-Animation beim Sterben
+      if (boss.dying) {
+        const fallProgress = boss.dyingTimer / 120; // 0 bis 1
+        bossMesh.rotation.z = fallProgress * Math.PI / 2; // Umfallen
+        bossMesh.position.y -= fallProgress * 50;
+        bossMesh.scale.set(1 - fallProgress * 0.3, 1 - fallProgress * 0.3, 1 - fallProgress * 0.3);
+      } else {
+        bossMesh.rotation.z = 0;
+        bossMesh.scale.set(1, 1, 1);
+
+        // Boss schaut in Richtung Spieler
+        if (player.x < boss.x) {
+          bossMesh.rotation.y = -Math.PI / 2; // Nach links
+        } else {
+          bossMesh.rotation.y = Math.PI / 2; // Nach rechts
+        }
+      }
+
+      // Lebens-Anzeige über Boss
+      for (let i = 0; i < 5; i++) {
+        const healthIndicator = bossHealthIndicators[i];
+        if (i < boss.health) {
+          healthIndicator.visible = true;
+          healthIndicator.position.set(
+            boss.x + boss.width/2 - 30 + i * 15,
+            toThreeY(boss.y - 30),
+            0
+          );
+        } else {
+          healthIndicator.visible = false;
+        }
+      }
+    } else {
+      bossMesh.visible = false;
+      bossHealthIndicators.forEach(indicator => indicator.visible = false);
+    }
+
+    // === Boss-Laser Rendering ===
+    bossLasers.forEach(laser => {
+      if (!bossLaserMeshes.has(laser)) {
+        const laserGeometry = new THREE.SphereGeometry(6, 16, 16);
+        const laserMaterial = new THREE.MeshStandardMaterial({
+          color: 0xff0000,
+          emissive: 0xff0000,
+          emissiveIntensity: 4.0,
+          roughness: 0.1,
+          metalness: 0.9
+        });
+        const laserMesh = new THREE.Mesh(laserGeometry, laserMaterial);
+
+        // Starkes rotes Glühen
+        const glowGeometry = new THREE.SphereGeometry(10, 16, 16);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+          color: 0xff0000,
+          transparent: true,
+          opacity: 0.7,
+          side: THREE.BackSide
+        });
+        const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+        laserMesh.add(glowMesh);
+
+        scene.add(laserMesh);
+        bossLaserMeshes.set(laser, laserMesh);
+      }
+    });
+
+    // Boss-Laser-Positionen updaten
+    bossLasers.forEach(laser => {
+      const laserMesh = bossLaserMeshes.get(laser);
+      if (laserMesh) {
+        laserMesh.position.set(laser.x, toThreeY(laser.y), 0);
+      }
+    });
+
+    // Inaktive Boss-Laser-Meshes entfernen
+    bossLaserMeshes.forEach((mesh, laser) => {
+      if (!bossLasers.includes(laser)) {
+        scene.remove(mesh);
+        bossLaserMeshes.delete(laser);
+      }
+    });
+
+    // === Projektile Rendering - AAA-Qualität ===
+    // Neue Projektile erstellen
+    projectiles.forEach(proj => {
+      if (!projectileMeshes.has(proj)) {
+        const projGeometry = new THREE.SphereGeometry(5, 16, 16);
+        const projMaterial = new THREE.MeshStandardMaterial({
+          color: 0xffff00,
+          emissive: 0xffaa00,
+          emissiveIntensity: 2.0,
+          roughness: 0.2,
+          metalness: 0.8
+        });
+        const projMesh = new THREE.Mesh(projGeometry, projMaterial);
+
+        // Glüh-Hülle
+        const glowGeometry = new THREE.SphereGeometry(8, 16, 16);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+          color: 0xffff00,
+          transparent: true,
+          opacity: 0.4,
+          side: THREE.BackSide
+        });
+        const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+        projMesh.add(glowMesh);
+
+        scene.add(projMesh);
+        projectileMeshes.set(proj, projMesh);
+      }
+    });
+
+    // Projektil-Positionen updaten
+    projectiles.forEach(proj => {
+      const projMesh = projectileMeshes.get(proj);
+      if (projMesh) {
+        projMesh.position.set(proj.x, toThreeY(proj.y), 0);
+      }
+    });
+
+    // Inaktive Projektil-Meshes entfernen
+    projectileMeshes.forEach((mesh, proj) => {
+      if (!projectiles.includes(proj)) {
+        scene.remove(mesh);
+        projectileMeshes.delete(proj);
+      }
+    });
+
+    // === Feind-Laser Rendering - ROTE LASER ===
+    // Neue Laser erstellen
+    enemyLasers.forEach(laser => {
+      if (!enemyLaserMeshes.has(laser)) {
+        const laserGeometry = new THREE.SphereGeometry(4, 16, 16);
+        const laserMaterial = new THREE.MeshStandardMaterial({
+          color: 0xff0000, // ROT
+          emissive: 0xff0000,
+          emissiveIntensity: 3.0, // Sehr stark leuchtend
+          roughness: 0.1,
+          metalness: 0.9
+        });
+        const laserMesh = new THREE.Mesh(laserGeometry, laserMaterial);
+
+        // Starkes rotes Glühen um den Laser
+        const glowGeometry = new THREE.SphereGeometry(7, 16, 16);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+          color: 0xff0000,
+          transparent: true,
+          opacity: 0.6,
+          side: THREE.BackSide
+        });
+        const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+        laserMesh.add(glowMesh);
+
+        // Laser-Trail (Schweif)
+        const trailGeometry = new THREE.ConeGeometry(3, 12, 8);
+        const trailMaterial = new THREE.MeshBasicMaterial({
+          color: 0xff4444,
+          transparent: true,
+          opacity: 0.5
+        });
+        const trailMesh = new THREE.Mesh(trailGeometry, trailMaterial);
+        trailMesh.rotation.x = Math.PI / 2; // Zeigt nach hinten
+        trailMesh.position.z = -8; // Hinter dem Laser
+        laserMesh.add(trailMesh);
+
+        scene.add(laserMesh);
+        enemyLaserMeshes.set(laser, laserMesh);
+      }
+    });
+
+    // Laser-Positionen und Rotation updaten
+    enemyLasers.forEach(laser => {
+      const laserMesh = enemyLaserMeshes.get(laser);
+      if (laserMesh) {
+        laserMesh.position.set(laser.x, toThreeY(laser.y), 0);
+
+        // Rotiere Laser in Bewegungsrichtung
+        const angle = Math.atan2(laser.vy, laser.vx);
+        laserMesh.rotation.y = Math.PI / 2 - angle; // Ausrichtung korrigieren
+      }
+    });
+
+    // Inaktive Laser-Meshes entfernen
+    enemyLaserMeshes.forEach((mesh, laser) => {
+      if (!enemyLasers.includes(laser)) {
+        scene.remove(mesh);
+        enemyLaserMeshes.delete(laser);
+      }
+    });
+
+    // === Staubwolken Rendering - AAA-Qualität ===
+    // Neue Staubwolken erstellen
+    dustClouds.forEach(dust => {
+      if (!dustMeshes.has(dust)) {
+        const dustGeometry = new THREE.SphereGeometry(dust.size, 12, 12);
+        const dustMaterial = new THREE.MeshBasicMaterial({
+          color: 0xe8d4a8, // Heller, warmer Farbton
+          transparent: true,
+          opacity: 0.8,
+          blending: THREE.AdditiveBlending // Additive Blending für Glühen
+        });
+        const dustMesh = new THREE.Mesh(dustGeometry, dustMaterial);
+        scene.add(dustMesh);
+        dustMeshes.set(dust, dustMesh);
+      }
+    });
+
+    // Staubwolken-Positionen und Opacity updaten
+    dustClouds.forEach(dust => {
+      const dustMesh = dustMeshes.get(dust);
+      if (dustMesh) {
+        dustMesh.position.set(dust.x, toThreeY(dust.y), 5); // Z=5 um vor Plattformen zu sein
+        // Fade-out-Effekt
+        dustMesh.material.opacity = (dust.life / dust.maxLife) * 0.9;
+        // Größer werden beim Verblassen
+        const scale = 1 + (1 - dust.life / dust.maxLife) * 0.8;
+        dustMesh.scale.set(scale, scale, scale);
+      }
+    });
+
+    // Tote Staubwolken-Meshes entfernen
+    dustMeshes.forEach((mesh, dust) => {
+      if (!dustClouds.includes(dust)) {
+        scene.remove(mesh);
+        dustMeshes.delete(dust);
+      }
+    });
+
+    // === Dash-Trails Rendering ===
+    // Neue Dash-Trails erstellen
+    dashTrails.forEach(trail => {
+      if (!dashTrailMeshes.has(trail)) {
+        // Erstelle eine halbtransparente Kopie der Spielfigur
+        const trailGroup = new THREE.Group();
+
+        // Körper
+        const bodyGeometry = new THREE.BoxGeometry(trail.width * 0.6, trail.height * 0.9, 16);
+        const bodyMaterial = new THREE.MeshBasicMaterial({
+          color: 0xff6600, // Orange wie beim Dash
+          transparent: true,
+          opacity: 0.7,
+          blending: THREE.AdditiveBlending
+        });
+        const bodyMesh = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        trailGroup.add(bodyMesh);
+
+        // Rotation wie Spielfigur
+        trailGroup.rotation.y = trail.direction === 1 ? Math.PI / 2 : -Math.PI / 2;
+
+        scene.add(trailGroup);
+        dashTrailMeshes.set(trail, trailGroup);
+      }
+    });
+
+    // Dash-Trail-Positionen und Opacity updaten
+    dashTrails.forEach(trail => {
+      const trailMesh = dashTrailMeshes.get(trail);
+      if (trailMesh) {
+        trailMesh.position.set(trail.x, toThreeY(trail.y), 0);
+
+        // Fade-out-Effekt
+        const opacity = (trail.life / trail.maxLife) * 0.7;
+        trailMesh.children.forEach(child => {
+          if (child.material) {
+            child.material.opacity = opacity;
+          }
+        });
+
+        // Leicht schrumpfen beim Verblassen
+        const scale = 0.7 + (trail.life / trail.maxLife) * 0.3;
+        trailMesh.scale.set(scale, scale, scale);
+      }
+    });
+
+    // Tote Dash-Trail-Meshes entfernen
+    dashTrailMeshes.forEach((mesh, trail) => {
+      if (!dashTrails.includes(trail)) {
+        scene.remove(mesh);
+        dashTrailMeshes.delete(trail);
+      }
+    });
+
+    // === Perlen Animation - AAA-Qualität ===
+    let time = Date.now() * 0.001;
+    grapplingMeshes.forEach(item => {
+      if (item.isRing) {
+        // Ring rotiert
+        item.mesh.rotation.x = time * 1.5;
+        item.mesh.rotation.y = time * 0.8;
+      } else if (item.isGlow) {
+        // Glühen pulsiert
+        const pulse = 1 + Math.sin(time * 2) * 0.3;
+        item.mesh.scale.set(pulse, pulse, pulse);
+        item.mesh.material.opacity = 0.2 + Math.sin(time * 2) * 0.1;
+      } else if (item.isParticles) {
+        // Partikel rotieren
+        item.mesh.rotation.y = time * 0.5;
+        item.mesh.rotation.x = time * 0.3;
+      } else {
+        // Perle pulsiert
+        const pulse = 1 + Math.sin(time * 4) * 0.15;
+        item.mesh.scale.set(pulse, pulse, pulse);
+        item.mesh.material.emissiveIntensity = 1.5 + Math.sin(time * 4) * 0.5;
+      }
+    });
+
+    // === Zielpunkt Animation ===
+    if (!goalPoint.reached) {
+      // Rotiere den Ring
+      goalMeshGroup.children[2].rotation.z = time * 2;
+
+      // Pulsiere das Glühen
+      const glowPulse = 1 + Math.sin(time * 3) * 0.2;
+      goalMeshGroup.children[1].scale.set(glowPulse, glowPulse, glowPulse);
+
+      // Pulsiere die Hauptsäule
+      const mainPulse = 1 + Math.sin(time * 2) * 0.1;
+      goalMeshGroup.children[0].scale.set(mainPulse, mainPulse, mainPulse);
+      goalMeshGroup.children[0].material.emissiveIntensity = 1.3 + Math.sin(time * 2) * 0.3;
+    } else {
+      // Wenn erreicht, ausblenden
+      goalMeshGroup.visible = false;
+    }
+
+    // Grappling-Linie zeichnen (wenn aktiv)
+    if (isGrappling && grapplingTarget) {
+      if (!grapplingLine) {
+        const lineGeometry = new THREE.BufferGeometry();
+        const lineMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 3, transparent: true, opacity: 0.8 });
+        grapplingLine = new THREE.Line(lineGeometry, lineMaterial);
+        scene.add(grapplingLine);
+      }
+
+      // Update Linie Position - von Figur (z=0) zur Perle (z=50)
+      const positions = new Float32Array([
+        player.x + player.width / 2, toThreeY(player.y + player.height / 2), 0,
+        grapplingTarget.x, toThreeY(grapplingTarget.y), pearlZPosition
+      ]);
+      grapplingLine.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      grapplingLine.visible = true;
+    } else if (grapplingLine) {
+      grapplingLine.visible = false;
+    }
+
+    // === Atmosphärische Partikel Animation ===
+    const positions = atmospherePoints.geometry.attributes.position.array;
+    for (let i = 0; i < particleCount; i++) {
+      // Sanftes Schweben auf und ab
+      positions[i * 3 + 1] += Math.sin(time + i) * 0.1;
+      // Seitliches Driften
+      positions[i * 3] += Math.sin(time * 0.5 + i * 0.1) * 0.05;
+
+      // Zurücksetzen wenn zu weit oben oder unten
+      if (positions[i * 3 + 1] > 400) positions[i * 3 + 1] = -400;
+      if (positions[i * 3 + 1] < -400) positions[i * 3 + 1] = 400;
+
+      // Zurücksetzen wenn zu weit links oder rechts
+      if (positions[i * 3] < -1000) positions[i * 3] = 7000;
+      if (positions[i * 3] > 7000) positions[i * 3] = -1000;
+    }
+    atmospherePoints.geometry.attributes.position.needsUpdate = true;
+    atmospherePoints.rotation.y = time * 0.05; // Langsame Rotation
+
+    // === Wolken Animation ===
+    cloudGroup.children.forEach((cloud, index) => {
+      // Sanftes Schweben auf und ab (unterschiedliche Geschwindigkeit pro Wolke)
+      const floatSpeed = 0.3 + (index % 3) * 0.1;
+      const floatAmount = 5 + (index % 5) * 2;
+      cloud.position.y = cloud.userData.originalY + Math.sin(time * floatSpeed + index) * floatAmount;
+
+
+      // Leichtes Pulsieren der Wolken (Opazität)
+      cloud.children.forEach(puff => {
+        if (puff.material) {
+          const opacityBase = 0.85;
+          puff.material.opacity = opacityBase + Math.sin(time * 0.5 + index * 0.3) * 0.1;
+        }
+      });
+
+      // Sehr langsame horizontale Drift (simuliert Wind)
+      const driftSpeed = 0.02 + (index % 4) * 0.005;
+      cloud.position.x += driftSpeed;
+
+      // Wenn Wolke zu weit nach rechts gedriftet ist, setze sie zurück
+      const originalX = cloud.userData.originalX;
+      if (cloud.position.x > originalX + 100) {
+        cloud.position.x = originalX - 100;
+      }
+    });
+
+    updateCamera();
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  }
+  loop();
+
+  // === TUTORIAL-OVERLAY STEUERUNG ===
+  const tutorialOverlay = document.getElementById('tutorialOverlay');
+  const startButton = document.getElementById('startButton');
+
+  // Button Hover-Effekt
+  startButton.addEventListener('mouseover', function() {
+    this.style.transform = 'scale(1.1)';
+    this.style.boxShadow = '0 0 30px rgba(0, 255, 255, 1)';
+  });
+
+  startButton.addEventListener('mouseout', function() {
+    this.style.transform = 'scale(1)';
+    this.style.boxShadow = '0 0 20px rgba(0, 255, 255, 0.8)';
+  });
+
+  // Spiel starten
+  startButton.addEventListener('click', function() {
+    tutorialOverlay.style.opacity = '1';
+    tutorialOverlay.style.transition = 'opacity 0.5s';
+    tutorialOverlay.style.opacity = '0';
+
+    setTimeout(() => {
+      tutorialOverlay.style.display = 'none';
+    }, 500);
+  });
+
+  // Optional: Auch mit Enter oder Space starten
+  document.addEventListener('keydown', function(e) {
+    if ((e.key === 'Enter' || e.key === ' ') && tutorialOverlay.style.display !== 'none') {
+      e.preventDefault();
+      startButton.click();
+    }
+  });
+</script>
+</body>
+</html>

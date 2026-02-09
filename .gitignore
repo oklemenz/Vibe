@@ -1,0 +1,18 @@
+# IDEs
+.idea/
+.vscode/
+.DS_Store
+*.iml
+**/.project
+**/.settings
+*.code-workspace
+
+# package managers
+bower_components/
+node_modules/
+
+# env
+.env
+
+# coverage
+coverage/

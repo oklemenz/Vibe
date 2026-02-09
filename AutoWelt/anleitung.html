@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoWelt - Spielanleitung</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px;
+            color: white;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        h1 { text-align: center; font-size: 48px; margin-bottom: 20px; }
+        h2 { color: #FFD700; margin-top: 30px; }
+        .button {
+            display: block;
+            width: 100%;
+            padding: 20px;
+            font-size: 24px;
+            background: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            margin: 20px 0;
+            text-decoration: none;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        .button:hover { background: #229954; transform: scale(1.05); }
+        .info {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        ul { line-height: 1.8; }
+        .highlight { color: #FFD700; font-weight: bold; }
+        .energy-bar-demo {
+            background: rgba(255,255,255,0.2);
+            height: 30px;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .energy-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #2ecc71, #27ae60);
+            animation: demo-drain 5s infinite;
+        }
+        @keyframes demo-drain {
+            0% { width: 100%; background: linear-gradient(90deg, #2ecc71, #27ae60); }
+            50% { width: 30%; background: linear-gradient(90deg, #f39c12, #e67e22); }
+            100% { width: 100%; background: linear-gradient(90deg, #2ecc71, #27ae60); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚡ AutoWelt - Fahrschule ⚡</h1>
+        <h2>NEU: Energie-Management System!</h2>
+
+        <a href="index.html" class="button">🎮 JETZT SPIELEN</a>
+
+        <div class="info">
+            <h2>⚡ Energie-System</h2>
+            <p>Dein Auto hat <span class="highlight">100% Energie</span> beim Start.</p>
+
+            <h3>Energie-Verbrauch:</h3>
+            <ul>
+                <li>🔼 Vorwärts fahren: <span class="highlight">1.5% pro Sekunde</span></li>
+                <li>🔽 Rückwärts fahren: <span class="highlight">0.75% pro Sekunde</span></li>
+            </ul>
+
+            <h3>Energie-Anzeige:</h3>
+            <div class="energy-bar-demo">
+                <div class="energy-bar-fill"></div>
+            </div>
+            <ul>
+                <li>🟢 <strong>Grün (100%-40%):</strong> Alles OK</li>
+                <li>🟠 <strong>Orange (40%-20%):</strong> Bald laden!</li>
+                <li>🔴 <strong>Rot blinkend (<20%):</strong> KRITISCH!</li>
+            </ul>
+        </div>
+
+        <div class="info">
+            <h2>🔌 Ladestationen</h2>
+            <p><span class="highlight">16 Ladestationen</span> sind über die Stadt verteilt!</p>
+
+            <h3>So findest du sie:</h3>
+            <ul>
+                <li>🟢 Grüne leuchtende Säulen</li>
+                <li>💡 Heller Lichtschein</li>
+                <li>🔵 Blaue Basis-Plattform</li>
+                <li>⚡ Gelbes Blitz-Symbol</li>
+            </ul>
+
+            <h3>Laden:</h3>
+            <ul>
+                <li>Fahre <span class="highlight">nahe zur Ladestation</span> (5 Meter)</li>
+                <li>🔌 <span class="highlight">"Lädt..."</span> erscheint automatisch</li>
+                <li>⚡ <span class="highlight">15% pro Sekunde</span> Ladegeschwindigkeit</li>
+                <li>Du kannst jederzeit weiterfahren</li>
+            </ul>
+        </div>
+
+        <div class="info">
+            <h2>❌ Game Over Bedingungen</h2>
+            <ul>
+                <li>⚡ <strong>Energie auf 0%:</strong> Auto stoppt, 5 Sekunden später Game Over</li>
+                <li>📊 <strong>Punkte auf 0:</strong> Zu viele Unfälle!</li>
+            </ul>
+            <p>Nach Game Over startest du am Startpunkt mit voller Energie neu.</p>
+        </div>
+
+        <div class="info">
+            <h2>🌍 Die Welt</h2>
+            <ul>
+                <li>🗺️ <strong>Größe:</strong> 500x500 Meter - RIESIG!</li>
+                <li>🛣️ <strong>Straßen:</strong> 100+ Kreuzungen</li>
+                <li>🏢 <strong>Gebäude:</strong> Hunderte von Hochhäusern</li>
+                <li>⚡ <strong>Ladestationen:</strong> 16 Stück an Hauptkreuzungen</li>
+                <li>🎯 <strong>Ziel:</strong> Goldener leuchtender Marker (bewegt sich)</li>
+            </ul>
+        </div>
+
+        <div class="info">
+            <h2>🎮 Steuerung</h2>
+            <ul>
+                <li><strong>↑</strong> - Vorwärts fahren</li>
+                <li><strong>↓</strong> - Rückwärts fahren</li>
+                <li><strong>← →</strong> - Lenken (sehr agil!)</li>
+                <li><strong>LEERTASTE</strong> - Bremsen</li>
+            </ul>
+        </div>
+
+        <div class="info">
+            <h2>💡 Strategie-Tipps</h2>
+            <ol>
+                <li>🗺️ <strong>Merke dir Ladestation-Positionen</strong> - Sie sind an Hauptkreuzungen</li>
+                <li>⚡ <strong>Lade bei ~30%</strong> - Nicht warten bis 0%!</li>
+                <li>🎯 <strong>Plane deine Route</strong> - Ziel + Ladestation einplanen</li>
+                <li>🏎️ <strong>Bessere Autos</strong> - Schneller = weniger Zeit = weniger Energie</li>
+                <li>🛑 <strong>Vermeide Kollisionen</strong> - Kosten Punkte UND Zeit!</li>
+                <li>💰 <strong>Sammle Münzen</strong> - Ziele erreichen = Münzen = bessere Autos</li>
+            </ol>
+        </div>
+
+        <div class="info">
+            <h2>🚗 Die 10 Autos</h2>
+            <ul>
+                <li>🚗 <strong>Starter Auto</strong> - Gratis (langsam aber zuverlässig)</li>
+                <li>🚙 <strong>Kompaktwagen</strong> - 100 Münzen</li>
+                <li>🚕 <strong>Limousine</strong> - 250 Münzen</li>
+                <li>🚗 <strong>Sportwagen</strong> - 500 Münzen</li>
+                <li>🏎️ <strong>Rennwagen</strong> - 800 Münzen</li>
+                <li>🚙 <strong>SUV Premium</strong> - 1200 Münzen</li>
+                <li>🏎️ <strong>Super Sport</strong> - 1800 Münzen</li>
+                <li>🚗 <strong>Luxus GT</strong> - 2500 Münzen</li>
+                <li>🏎️ <strong>Hyper Car</strong> - 3500 Münzen</li>
+                <li>🏎️ <strong>Formula Racer</strong> - 5000 Münzen (SCHNELLSTER!)</li>
+            </ul>
+        </div>
+
+        <div class="info">
+            <h2>📊 Punktesystem</h2>
+            <ul>
+                <li>✅ <strong>Ziel erreichen:</strong> +20 Punkte + Münzen</li>
+                <li>❌ <strong>Gebäude-Kollision:</strong> -15 Punkte</li>
+                <li>❌ <strong>Straße verlassen:</strong> -10 Punkte</li>
+                <li>⚠️ <strong>Bei 0 Punkten:</strong> Game Over</li>
+            </ul>
+        </div>
+
+        <a href="index.html" class="button">🚀 LOS GEHT'S!</a>
+
+        <div style="text-align: center; margin-top: 30px; opacity: 0.7;">
+            <p>Viel Erfolg in der AutoWelt! 🏁</p>
+            <p style="font-size: 12px;">Tipp: Nutze die Werkstatt um bessere Autos zu kaufen!</p>
+        </div>
+    </div>
+</body>
+</html>
+
