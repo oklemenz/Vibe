@@ -39,15 +39,15 @@
             .game,
             .game_container,
             #game-container {
-                width: 100vw;
+                width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
                 height: calc(100vh - env(safe-area-inset-bottom, 0px));
+                margin-left: env(safe-area-inset-left, 0px);
             }
         }
         canvas {
             width: 100% !important;
             height: 100% !important;
             object-fit: contain;
-            image-rendering: pixelated;
         }
         * {
             box-sizing: border-box;
@@ -61,6 +61,8 @@
             position: absolute;
             top: 20px;
             left: 20px;
+            padding-top: env(safe-area-inset-top, 0px);
+            padding-left: env(safe-area-inset-left, 0px);
             color: white;
             z-index: 100;
         }
@@ -261,6 +263,7 @@
             font-size: 12px;
             color: #aaa;
             margin-top: 5px;
+            font-weight: bold;
         }
         #drag-preview {
             position: fixed;
@@ -310,7 +313,7 @@
             align-items: flex-start;
             gap: 10px;
         }
-        #game-info-btn, #controls-btn, #ai-btn {
+        #game-info-btn, #controls-btn, #ai-btn, #train-btn, #restart-game-btn {
             background: rgba(0, 0, 0, 0.7);
             color: white;
             border: none;
@@ -319,10 +322,10 @@
             cursor: pointer;
             font-size: 16px;
             transition: background 0.3s;
-            width: 120px;
+            width: 140px;
             text-align: left;
         }
-        #game-info-btn:hover, #controls-btn:hover, #ai-btn:hover {
+        #game-info-btn:hover, #controls-btn:hover, #ai-btn:hover, #train-btn:hover, #restart-game-btn:hover {
             background: rgba(0, 0, 0, 0.9);
         }
         #game-info-btn.active, #controls-btn.active {
@@ -336,6 +339,12 @@
         }
         #ai-btn.active:hover {
             background: #219a52;
+        }
+        #train-btn.active {
+            background: #f39c12;
+        }
+        #train-btn.active:hover {
+            background: #d68910;
         }
         .button-wrapper {
             position: relative;
@@ -367,11 +376,12 @@
         /* Sliding Fence Panel */
         #fence-panel {
             position: absolute;
-            right: 0;
+            right: env(safe-area-inset-right, 0px);
             top: 50%;
             transform: translateY(-50%) translateX(100%);
             background: rgba(0, 0, 0, 0.8);
             padding: 20px;
+            padding-right: calc(20px + env(safe-area-inset-right, 0px));
             border-radius: 15px 0 0 15px;
             z-index: 100;
             color: white;
@@ -407,6 +417,75 @@
         #fence-panel.open #fence-panel-toggle::after {
             content: '▶';
         }
+
+        /* Confirm Restart Modal */
+        #confirm-restart-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 250;
+            justify-content: center;
+            align-items: center;
+        }
+        #confirm-restart-modal.visible {
+            display: flex;
+        }
+        #confirm-restart-content {
+            background: linear-gradient(135deg, #2d3436 0%, #1a1a2e 100%);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            color: white;
+            border: 2px solid #6c5ce7;
+        }
+        #confirm-restart-content h2 {
+            font-size: 28px;
+            margin-bottom: 15px;
+        }
+        #confirm-restart-content p {
+            font-size: 16px;
+            margin-bottom: 25px;
+            color: #aaa;
+        }
+        .confirm-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+        #confirm-restart-yes {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background 0.3s, transform 0.2s;
+        }
+        #confirm-restart-yes:hover {
+            background: #c0392b;
+            transform: scale(1.05);
+        }
+        #confirm-restart-no {
+            background: #636e72;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background 0.3s, transform 0.2s;
+        }
+        #confirm-restart-no:hover {
+            background: #4a5568;
+            transform: scale(1.05);
+        }
     </style>
 </head>
 <body>
@@ -418,8 +497,8 @@
                 <div id="game-info-popup">
                     <div id="current-player" class="player1-turn">Player 1's Turn</div>
                     <div id="fences-info">
-                        <span id="player1-fences">Player 1 Fences: 10</span>
-                        <span id="player2-fences">Player 2 Fences: 10</span>
+                        <span id="player1-fences">🔴 Player 1 (Fences: 10)</span>
+                        <span id="player2-fences">🟢 Player 2 (Fences: 10)</span>
                     </div>
                 </div>
             </div>
@@ -435,6 +514,8 @@
                 </div>
             </div>
             <button id="ai-btn">🤖 AI</button>
+            <button id="train-btn">🎓 Train</button>
+            <button id="restart-game-btn">🔄 Restart</button>
         </div>
     </div>
 
@@ -472,8 +553,20 @@
 
     <div id="winner-modal">
         <div id="winner-content">
-            <h1 id="winner-text">Player 1 Wins!</h1>
+            <h1 id="winner-text">🔴Player 1 Wins!</h1>
             <button id="restart-btn">Play Again</button>
+        </div>
+    </div>
+
+    <!-- Confirm Restart Dialog -->
+    <div id="confirm-restart-modal">
+        <div id="confirm-restart-content">
+            <h2>🔄 Restart Game?</h2>
+            <p>Are you sure you want to resign and restart the game?</p>
+            <div class="confirm-buttons">
+                <button id="confirm-restart-yes">Yes, Restart</button>
+                <button id="confirm-restart-no">Cancel</button>
+            </div>
         </div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -532,6 +625,34 @@
     });
     // Standard: Fence Panel offen
     fencePanel.classList.add('open');
+
+    // Restart Game Button with Confirmation Dialog
+    const restartGameBtn = document.getElementById('restart-game-btn');
+    const confirmRestartModal = document.getElementById('confirm-restart-modal');
+    const confirmRestartYes = document.getElementById('confirm-restart-yes');
+    const confirmRestartNo = document.getElementById('confirm-restart-no');
+
+    restartGameBtn.addEventListener('click', function() {
+        confirmRestartModal.classList.add('visible');
+    });
+
+    confirmRestartYes.addEventListener('click', function() {
+        confirmRestartModal.classList.remove('visible');
+        if (typeof restartGame === 'function') {
+            restartGame();
+        }
+    });
+
+    confirmRestartNo.addEventListener('click', function() {
+        confirmRestartModal.classList.remove('visible');
+    });
+
+    // Close modal when clicking outside
+    confirmRestartModal.addEventListener('click', function(e) {
+        if (e.target === confirmRestartModal) {
+            confirmRestartModal.classList.remove('visible');
+        }
+    });
     </script>
 </body>
 </html>
