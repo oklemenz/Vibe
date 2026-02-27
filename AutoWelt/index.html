@@ -3,75 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AutoWelt - Fahrschule</title>
-    <link rel="stylesheet" href="style.css">
+    <title>AutoWelt - Start</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px;
+            color: white;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            text-align: center;
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        .button {
+            display: block;
+            width: 100%;
+            padding: 20px;
+            font-size: 24px;
+            background: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            margin: 20px 0;
+            text-decoration: none;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        .button:hover {
+            background: #229954;
+            transform: scale(1.05);
+        }
+        .info {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .info h3 {
+            margin-top: 0;
+        }
+        ul {
+            line-height: 1.8;
+        }
+    </style>
 </head>
 <body>
-    <div id="ui-overlay">
-        <div id="top-bar">
-            <div class="ui-element">
-                <span class="label">Münzen:</span>
-                <span id="coins">0</span>
-            </div>
-            <div class="ui-element">
-                <span class="label">Punkte:</span>
-                <span id="score">100</span>
-            </div>
-            <div class="ui-element">
-                <span class="label">Level:</span>
-                <span id="level">1</span>
-            </div>
-            <button id="mute-btn" class="mute-btn" title="Sound an/aus">
-                🔊
-            </button>
-            <button id="shop-btn" class="shop-btn" title="Werkstatt öffnen">
-                🔧
-            </button>
+    <div class="container">
+        <h1>🚗 AutoWelt - Fahrschule 🚗</h1>
+
+        <a href="./main.html" class="button">🎮 SPIEL STARTEN</a>
+
+        <div class="info">
+            <h3>📖 Spielanleitung</h3>
+            <ul>
+                <li><strong>Steuerung:</strong> Pfeiltasten zum Fahren, Leertaste zum Bremsen</li>
+                <li><strong>Ziel:</strong> Finde das goldene, leuchtende Ziel in der Stadt</li>
+                <li><strong>Münzen:</strong> Sammle Münzen durch Erreichen des Ziels</li>
+                <li><strong>Autos:</strong> Kaufe 10 verschiedene Autos in der Werkstatt</li>
+                <li><strong>Punkte:</strong> Vermeide Kollisionen und Regelverstöße!</li>
+            </ul>
         </div>
 
-        <!-- Energie-Anzeige -->
-        <div id="energy-bar-container">
-            <div class="energy-label">
-                <span>⚡ Energie</span>
-                <span id="energy-percentage">100%</span>
-            </div>
-            <div id="energy-bar-outer">
-                <div id="energy-bar-inner"></div>
-            </div>
-            <div id="charging-status" class="hidden">🔌 Lädt...</div>
+        <div class="info">
+            <h3>⚠️ Wichtige Hinweise</h3>
+            <ul>
+                <li>Start-Punkte: <strong>100</strong></li>
+                <li>Kollision mit Gebäude: <strong>-15 Punkte</strong></li>
+                <li>Fahrzeug verlässt Straße: <strong>-10 Punkte</strong></li>
+                <li>Ziel erreichen: <strong>+20 Punkte + Münzen</strong></li>
+                <li>Bei 0 Punkten erfolgt ein Neustart</li>
+            </ul>
         </div>
 
-        <div id="info-panel">
-            <h3>Steuerung:</h3>
-            <p>↑ - Vorwärts</p>
-            <p>↓ - Rückwärts</p>
-            <p>← → - Lenken</p>
-            <p>LEERTASTE - Bremse</p>
-            <p style="color: #f1c40f;">⚡ Tankstellen laden auf!</p>
+        <div class="info">
+            <h3>🏎️ Die 10 Autos</h3>
+            <ul>
+                <li>🚗 Starter Auto - <em>Gratis</em></li>
+                <li>🚙 Kompaktwagen - <em>100 Münzen</em></li>
+                <li>🚕 Limousine - <em>250 Münzen</em></li>
+                <li>🚗 Sportwagen - <em>500 Münzen</em></li>
+                <li>🏎️ Rennwagen - <em>800 Münzen</em></li>
+                <li>🚙 SUV Premium - <em>1200 Münzen</em></li>
+                <li>🏎️ Super Sport - <em>1800 Münzen</em></li>
+                <li>🚗 Luxus GT - <em>2500 Münzen</em></li>
+                <li>🏎️ Hyper Car - <em>3500 Münzen</em></li>
+                <li>🏎️ Formula Racer - <em>5000 Münzen</em></li>
+            </ul>
         </div>
 
-        <div id="warning" class="hidden"></div>
+        <a href="main.html" class="button">🚀 JETZT SPIELEN</a>
     </div>
-
-    <div id="shop-overlay" class="hidden">
-        <div id="shop-panel">
-            <h2>Auto-Werkstatt</h2>
-            <button id="close-shop" class="close-btn">✕</button>
-            <div id="car-grid"></div>
-        </div>
-    </div>
-
-    <div id="start-screen">
-        <div class="start-panel">
-            <h1>🚗 AutoWelt Fahrschule 🚗</h1>
-            <p>Sammle Münzen, kaufe bessere Autos und werde zum perfekten Fahrer!</p>
-            <p class="warning-text">Achtung: Unfälle und Regelverstöße kosten Punkte!</p>
-            <button id="start-btn">Fahrt beginnen</button>
-            <button id="open-shop-btn">Zur Werkstatt</button>
-        </div>
-    </div>
-
-    <script type="module" src="main.js"></script>
 </body>
 </html>
 

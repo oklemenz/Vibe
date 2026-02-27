@@ -1,6 +1,7 @@
-import * as THREE from 'three';
+// CarModels - ohne ES6 Module für file:// Kompatibilität
+// THREE wird global vom CDN geladen
 
-export class CarModels {
+class CarModels {
     constructor() {
         this.carData = [
             {

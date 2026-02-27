@@ -1,7 +1,8 @@
 // Sound Manager für das Spiel
 // Alle Sounds werden prozedural mit der Web Audio API generiert
+// Ohne ES6 Module für file:// Kompatibilität
 
-export class SoundManager {
+class SoundManager {
     constructor() {
         this.audioContext = null;
         this.sounds = {};

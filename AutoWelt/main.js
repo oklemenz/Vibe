@@ -1,8 +1,6 @@
-import * as THREE from 'three';
-import { CarModels } from './carModels.js';
-import { World } from './world.js';
-import { GameState } from './gameState.js';
-import { SoundManager } from './soundManager.js';
+// Main Game - ohne ES6 Module für file:// Kompatibilität
+// THREE wird global vom CDN geladen
+// Alle anderen Klassen (GameState, SoundManager, CarModels, World) werden vorher geladen
 
 class Game {
     constructor() {

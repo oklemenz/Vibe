@@ -1,4 +1,5 @@
-export class GameState {
+// GameState - ohne ES6 Module für file:// Kompatibilität
+class GameState {
     constructor() {
         this.coins = 0;
         this.score = 100;

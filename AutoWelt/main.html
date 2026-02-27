@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoWelt - Fahrschule</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="ui-overlay">
+        <div id="top-bar">
+            <div class="ui-element">
+                <span class="label">Münzen:</span>
+                <span id="coins">0</span>
+            </div>
+            <div class="ui-element">
+                <span class="label">Punkte:</span>
+                <span id="score">100</span>
+            </div>
+            <div class="ui-element">
+                <span class="label">Level:</span>
+                <span id="level">1</span>
+            </div>
+            <button id="mute-btn" class="mute-btn" title="Sound an/aus">
+                🔊
+            </button>
+            <button id="shop-btn" class="shop-btn" title="Werkstatt öffnen">
+                🔧
+            </button>
+        </div>
+
+        <!-- Energie-Anzeige -->
+        <div id="energy-bar-container">
+            <div class="energy-label">
+                <span>⚡ Energie</span>
+                <span id="energy-percentage">100%</span>
+            </div>
+            <div id="energy-bar-outer">
+                <div id="energy-bar-inner"></div>
+            </div>
+            <div id="charging-status" class="hidden">🔌 Lädt...</div>
+        </div>
+
+        <div id="info-panel">
+            <h3>Steuerung:</h3>
+            <p>↑ - Vorwärts</p>
+            <p>↓ - Rückwärts</p>
+            <p>← → - Lenken</p>
+            <p>LEERTASTE - Bremse</p>
+            <p style="color: #f1c40f;">⚡ Tankstellen laden auf!</p>
+        </div>
+
+        <div id="warning" class="hidden"></div>
+    </div>
+
+    <div id="shop-overlay" class="hidden">
+        <div id="shop-panel">
+            <h2>Auto-Werkstatt</h2>
+            <button id="close-shop" class="close-btn">✕</button>
+            <div id="car-grid"></div>
+        </div>
+    </div>
+
+    <div id="start-screen">
+        <div class="start-panel">
+            <h1>🚗 AutoWelt Fahrschule 🚗</h1>
+            <p>Sammle Münzen, kaufe bessere Autos und werde zum perfekten Fahrer!</p>
+            <p class="warning-text">Achtung: Unfälle und Regelverstöße kosten Punkte!</p>
+            <button id="start-btn">Fahrt beginnen</button>
+            <button id="open-shop-btn">Zur Werkstatt</button>
+        </div>
+    </div>
+
+    <!-- THREE.js von CDN laden -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Alle Spielmodule inline (ohne ES6 Module für file:// Kompatibilität) -->
+    <script src="./gameState.js"></script>
+    <script src="./soundManager.js"></script>
+    <script src="./carModels.js"></script>
+    <script src="./world.js"></script>
+    <script src="./main.js"></script>
+</body>
+</html>
+
