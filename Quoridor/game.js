@@ -25,6 +25,7 @@ let aiEnabled = false;
 let aiPlayer = 2; // AI plays as Player 2
 let aiThinking = false;
 
+
 // Training mode state
 let trainEnabled = false;
 let trainProposalGroup = null;
@@ -122,6 +123,9 @@ function init() {
 
     // AI toggle button
     document.getElementById('ai-btn').addEventListener('click', toggleAI);
+
+    // Switch button - switches starting player
+    document.getElementById('switch-btn').addEventListener('click', toggleP2First);
 
     // Train toggle button
     document.getElementById('train-btn').addEventListener('click', toggleTrain);
@@ -574,6 +578,22 @@ function updateUI() {
 
     // Enable/disable fence elements based on current player and fence count
     updateFencePanelState();
+
+    // Update Switch button state (only enabled at game start)
+    updateSwitchButtonState();
+}
+
+function updateSwitchButtonState() {
+    const switchBtn = document.getElementById('switch-btn');
+    const isGameStart = pawns[1].x === 4 && pawns[1].y === 0 &&
+                        pawns[2].x === 4 && pawns[2].y === 8 &&
+                        placedFences.length === 0;
+
+    if (isGameStart && !gameOver) {
+        switchBtn.classList.remove('hidden');
+    } else {
+        switchBtn.classList.add('hidden');
+    }
 }
 
 function updateFencePanelState() {
@@ -823,6 +843,10 @@ function onWindowResize() {
 function onClick(event) {
     if (gameOver || isDragging) return;
 
+    // Don't process clicks if intro modal is visible
+    const introModal = document.getElementById('intro-modal');
+    if (introModal && !introModal.classList.contains('hidden')) return;
+
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
@@ -860,6 +884,10 @@ function onTouchMove(event) {
 
 function onTouchEnd(event) {
     if (gameOver || isDragging) return;
+
+    // Don't process touches if intro modal is visible
+    const introModal = document.getElementById('intro-modal');
+    if (introModal && !introModal.classList.contains('hidden')) return;
 
     // Only treat as tap if touch was short and didn't move much
     const touchDuration = Date.now() - touchStartTime;
@@ -912,7 +940,7 @@ function rotateCurrentFence() {
 
 function restartGame() {
     // Reset game state
-    currentPlayer = 1;
+    currentPlayer = 1;  // Always start with Player 1
     fences = { 1: 10, 2: 10 };
     pawns = {
         1: { x: 4, y: 0 },
@@ -922,6 +950,7 @@ function restartGame() {
     isDragging = false;
     gameOver = false;
     aiThinking = false;
+
 
     // Clear fences
     while (fencesGroup.children.length > 0) {
@@ -976,6 +1005,44 @@ function toggleAI() {
     } else {
         btn.textContent = '🤖 AI';
         btn.classList.remove('active');
+    }
+}
+
+// Switch starting player - switches between Player 1 and Player 2 at game start
+function toggleP2First() {
+    // Check if game just started
+    const isGameStart = pawns[1].x === 4 && pawns[1].y === 0 &&
+                        pawns[2].x === 4 && pawns[2].y === 8 &&
+                        placedFences.length === 0;
+
+    // Only allow switch at game start
+    if (!isGameStart || gameOver) {
+        return;
+    }
+
+    // Simply switch the current player
+    if (currentPlayer === 1) {
+        currentPlayer = 2;
+        clearTrainProposal();
+    } else {
+        currentPlayer = 1;
+    }
+
+    updateUI();
+    updateValidMoves();
+
+    // If AI is enabled and it's now AI's turn
+    if (aiEnabled && currentPlayer === aiPlayer && !aiThinking) {
+        aiThinking = true;
+        setTimeout(() => {
+            makeAIMove();
+            aiThinking = false;
+        }, 500);
+    } else if (trainEnabled && currentPlayer === 1) {
+        // Show training proposal if enabled and it's Player 1's turn
+        setTimeout(() => {
+            showTrainProposal();
+        }, 100);
     }
 }
 

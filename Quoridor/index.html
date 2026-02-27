@@ -239,7 +239,7 @@
             cursor: grabbing;
         }
         .draggable-fence.disabled {
-            opacity: 0.3;
+            opacity: 0.5;
             cursor: not-allowed;
             pointer-events: none;
         }
@@ -313,7 +313,7 @@
             align-items: flex-start;
             gap: 10px;
         }
-        #game-info-btn, #controls-btn, #ai-btn, #train-btn, #restart-game-btn {
+        #game-info-btn, #controls-btn, #ai-btn, #rules-btn, #switch-btn, #train-btn, #restart-game-btn {
             background: rgba(0, 0, 0, 0.7);
             color: white;
             border: none;
@@ -325,7 +325,7 @@
             width: 140px;
             text-align: left;
         }
-        #game-info-btn:hover, #controls-btn:hover, #ai-btn:hover, #train-btn:hover, #restart-game-btn:hover {
+        #game-info-btn:hover, #controls-btn:hover, #ai-btn:hover, #rules-btn:hover, #switch-btn:hover, #train-btn:hover, #restart-game-btn:hover {
             background: rgba(0, 0, 0, 0.9);
         }
         #game-info-btn.active, #controls-btn.active {
@@ -339,6 +339,9 @@
         }
         #ai-btn.active:hover {
             background: #219a52;
+        }
+        #switch-btn.hidden {
+            display: none;
         }
         #train-btn.active {
             background: #f39c12;
@@ -486,6 +489,67 @@
             background: #4a5568;
             transform: scale(1.05);
         }
+
+        /* Introduction Modal */
+        #intro-modal {
+            display: flex;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 300;
+            justify-content: center;
+            align-items: center;
+        }
+        #intro-modal.hidden {
+            display: none;
+        }
+        #intro-content {
+            background: linear-gradient(135deg, #1a1a2e 0%, #2d3436 100%);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            color: white;
+            border: 2px solid #6c5ce7;
+            max-width: 400px;
+            margin: 20px;
+        }
+        #intro-content h1 {
+            font-size: 36px;
+            margin-bottom: 20px;
+            color: #6c5ce7;
+        }
+        .intro-rules {
+            text-align: left;
+            margin-bottom: 25px;
+        }
+        .intro-rules p {
+            font-size: 14px;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+        .intro-rules hr {
+            border: none;
+            border-top: 1px solid #444;
+            margin: 15px 0;
+        }
+        #intro-start-btn {
+            background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        #intro-start-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(108, 92, 231, 0.4);
+        }
     </style>
 </head>
 <body>
@@ -502,6 +566,7 @@
                     </div>
                 </div>
             </div>
+            <button id="rules-btn">📖 Rules</button>
             <div class="button-wrapper">
                 <button id="controls-btn">❓ Help</button>
                 <div id="controls-popup">
@@ -516,6 +581,7 @@
             <button id="ai-btn">🤖 AI</button>
             <button id="train-btn">🎓 Train</button>
             <button id="restart-game-btn">🔄 Restart</button>
+            <button id="switch-btn">🔀 Switch</button>
         </div>
     </div>
 
@@ -567,6 +633,23 @@
                 <button id="confirm-restart-yes">Yes, Restart</button>
                 <button id="confirm-restart-no">Cancel</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Introduction Dialog -->
+    <div id="intro-modal">
+        <div id="intro-content">
+            <h1>🎮 Quoridor</h1>
+            <div class="intro-rules">
+                <p><strong>🎯 Goal:</strong> Reach the opposite side of the board first!</p>
+                <p><strong>🔴 Player 1:</strong> Move from bottom to top</p>
+                <p><strong>🟢 Player 2:</strong> Move from top to bottom</p>
+                <hr>
+                <p><strong>📍 Move:</strong> Tap a highlighted square to move your pawn</p>
+                <p><strong>🧱 Fence:</strong> Drag a fence from the right panel onto the board to block your opponent</p>
+                <p><strong>⚠️ Rule:</strong> You cannot completely block a player's path to the goal</p>
+            </div>
+            <button id="intro-start-btn">▶️ Play</button>
         </div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -652,6 +735,28 @@
         if (e.target === confirmRestartModal) {
             confirmRestartModal.classList.remove('visible');
         }
+    });
+
+    // Introduction Modal - Play Button
+    const introModal = document.getElementById('intro-modal');
+    const introStartBtn = document.getElementById('intro-start-btn');
+
+    introStartBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        e.preventDefault();
+        introModal.classList.add('hidden');
+    });
+
+    // Prevent clicks on the intro modal from reaching the game
+    introModal.addEventListener('click', function(e) {
+        e.stopPropagation();
+    });
+
+    // Rules Button - Show intro dialog again
+    const rulesBtn = document.getElementById('rules-btn');
+    rulesBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        introModal.classList.remove('hidden');
     });
     </script>
 </body>
