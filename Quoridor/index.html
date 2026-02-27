@@ -259,19 +259,133 @@
         .drop-hint.active {
             display: block;
         }
+        .collapsible-header {
+            cursor: pointer;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            user-select: none;
+        }
+        .collapsible-icon {
+            font-size: 16px;
+            transition: transform 0.2s;
+        }
+        .collapsible-header:hover .collapsible-icon {
+            transform: scale(1.2);
+        }
+
+        /* Top bar with game-info and controls button */
+        .top-bar {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        #controls-btn, #ai-btn {
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: none;
+            padding: 15px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s;
+        }
+        #controls-btn:hover, #ai-btn:hover {
+            background: rgba(0, 0, 0, 0.9);
+        }
+        #ai-btn.active {
+            background: #27ae60;
+        }
+        #ai-btn.active:hover {
+            background: #219a52;
+        }
+        #controls-popup {
+            display: none;
+            position: absolute;
+            top: 70px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px 25px;
+            border-radius: 10px;
+            z-index: 150;
+            color: white;
+        }
+        #controls-popup.visible {
+            display: block;
+        }
+        #controls-popup h3 {
+            margin-bottom: 10px;
+        }
+        #controls-popup p {
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* Sliding Fence Panel */
+        #fence-panel {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%) translateX(100%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 15px 0 0 15px;
+            z-index: 100;
+            color: white;
+            transition: transform 0.3s ease;
+        }
+        #fence-panel.open {
+            transform: translateY(-50%) translateX(0);
+        }
+        #fence-panel-toggle {
+            position: absolute;
+            left: -30px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 30px;
+            height: 80px;
+            background: rgba(0, 0, 0, 0.8);
+            border: none;
+            border-radius: 10px 0 0 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 16px;
+            transition: background 0.3s;
+        }
+        #fence-panel-toggle:hover {
+            background: rgba(0, 0, 0, 1);
+        }
+        #fence-panel-toggle::after {
+            content: '◀';
+        }
+        #fence-panel.open #fence-panel-toggle::after {
+            content: '▶';
+        }
     </style>
 </head>
 <body>
     <div id="game-container"></div>
     <div id="ui-overlay">
-        <div id="game-info">
-            <div id="current-player" class="player1-turn">Player 1's Turn</div>
-            <div id="fences-info">
-                <span id="player1-fences">Player 1 Fences: 10</span>
-                <span id="player2-fences">Player 2 Fences: 10</span>
+        <div class="top-bar">
+            <div id="game-info" class="collapsible-menu">
+                <div class="collapsible-header"><span class="collapsible-icon">▼</span> Spielinfo</div>
+                <div class="collapsible-content">
+                    <div id="current-player" class="player1-turn">Player 1's Turn</div>
+                    <div id="fences-info">
+                        <span id="player1-fences">Player 1 Fences: 10</span>
+                        <span id="player2-fences">Player 2 Fences: 10</span>
+                    </div>
+                </div>
             </div>
+            <button id="controls-btn">❓ Help</button>
+            <button id="ai-btn">🤖 KI</button>
         </div>
-        <div id="controls">
+        <div id="controls-popup">
             <h3>Controls</h3>
             <p>
                 <strong>Move:</strong> Click on highlighted squares<br>
@@ -280,13 +394,11 @@
                 <strong>Mouse:</strong> Rotate camera view
             </p>
         </div>
-        <div id="ai-controls" style="background: rgba(0, 0, 0, 0.7); padding: 15px 25px; border-radius: 10px;">
-            <button id="ai-toggle">🤖 AI: OFF</button>
-        </div>
     </div>
 
     <!-- Fence Panel for Drag & Drop -->
     <div id="fence-panel">
+        <button id="fence-panel-toggle"></button>
         <h3>🧱 Fences</h3>
         <div class="fence-section" id="player1-section">
             <h4 style="color: #ff6b6b;">Player 1</h4>
@@ -322,15 +434,49 @@
             <button id="restart-btn">Play Again</button>
         </div>
     </div>
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="game.js"></script>
+    <script>
+    // Collapsible Menüs (für Spielinfo und KI)
+    document.querySelectorAll('.collapsible-header').forEach(header => {
+        header.addEventListener('click', function() {
+            const menu = header.parentElement;
+            const content = menu.querySelector('.collapsible-content');
+            const icon = header.querySelector('.collapsible-icon');
+            if (content.style.display === 'none') {
+                content.style.display = '';
+                icon.textContent = '▼';
+            } else {
+                content.style.display = 'none';
+                icon.textContent = '►';
+            }
+        });
+    });
+
+    // Controls Button Toggle (Popup)
+    const controlsBtn = document.getElementById('controls-btn');
+    const controlsPopup = document.getElementById('controls-popup');
+    controlsBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        controlsPopup.classList.toggle('visible');
+    });
+    // Schließe Popup wenn außerhalb geklickt
+    document.addEventListener('click', function(e) {
+        if (!controlsPopup.contains(e.target) && e.target !== controlsBtn) {
+            controlsPopup.classList.remove('visible');
         }
-    }
+    });
+
+    // Fence Panel Slide Toggle
+    const fencePanel = document.getElementById('fence-panel');
+    const fencePanelToggle = document.getElementById('fence-panel-toggle');
+    fencePanelToggle.addEventListener('click', function() {
+        fencePanel.classList.toggle('open');
+    });
+    // Standard: Fence Panel offen
+    fencePanel.classList.add('open');
     </script>
-    <script type="module" src="game.js"></script>
 </body>
 </html>
 

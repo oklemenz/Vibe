@@ -1,5 +1,5 @@
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+// Three.js wird global über Script-Tag geladen
+// THREE und THREE.OrbitControls sind global verfügbar
 
 // Game constants
 const BOARD_SIZE = 9;
@@ -61,7 +61,7 @@ function init() {
     document.getElementById('game-container').appendChild(renderer.domElement);
 
     // Controls
-    controls = new OrbitControls(camera, renderer.domElement);
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.minDistance = 10;
@@ -109,7 +109,7 @@ function init() {
     document.getElementById('restart-btn').addEventListener('click', restartGame);
 
     // AI toggle button
-    document.getElementById('ai-toggle').addEventListener('click', toggleAI);
+    document.getElementById('ai-btn').addEventListener('click', toggleAI);
 
     // Initialize UI state (including fence panel transparency)
     updateUI();
@@ -839,10 +839,10 @@ function animate() {
 
 function toggleAI() {
     aiEnabled = !aiEnabled;
-    const btn = document.getElementById('ai-toggle');
+    const btn = document.getElementById('ai-btn');
 
     if (aiEnabled) {
-        btn.textContent = '🤖 AI: ON';
+        btn.textContent = '🤖 KI: AN';
         btn.classList.add('active');
 
         // If it's already AI's turn, start thinking
@@ -854,7 +854,7 @@ function toggleAI() {
             }, 500);
         }
     } else {
-        btn.textContent = '🤖 AI: OFF';
+        btn.textContent = '🤖 KI';
         btn.classList.remove('active');
     }
 }

@@ -2,13 +2,16 @@
 
 ## Quoridor
 
-- Open in Browser: [./Quoridor/index.html](./Quoridor/index.html)
+- Play: [Click to Start](https://oklemenz.github.io/Vibe/Quoridor/index.html)
+- Source: [Directory](./Quoridor)
 
 ## The Red Devil
 
-- Open in Browser: [./RedDevil/index.html](./RedDevil/index.html)
+- Play: [Click to Start](https://oklemenz.github.io/Vibe/RedDevil/index.html)
+- Source: [Directory](./RedDevil)
 
 ## Auto Welt
 
-- `npm start`
-- Open in Browser: [./AutoWelt/index.html](./AutoWelt/start.html)
+- Play: [Click to Start](https://oklemenz.github.io/Vibe/AutoWelt/index.html)
+- Source: [Directory](./AutoWelt)
+

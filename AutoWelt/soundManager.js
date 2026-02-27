@@ -10,6 +10,7 @@ class SoundManager {
         this.engineSound = null;
         this.chargingSound = null;
         this.isMuted = false;
+        this.workshopOscillators = []; // Speichere aktive Workshop-Oszillatoren
 
         // Audio Context initialisieren (muss durch User-Interaktion ausgelöst werden)
         this.initAudioContext();
@@ -437,6 +438,9 @@ class SoundManager {
             const gainNode = this.audioContext.createGain();
             const filter = this.audioContext.createBiquadFilter();
 
+            // Speichere Oszillator und GainNode für späteres Stoppen
+            this.workshopOscillators.push({ oscillator, gainNode });
+
             // Weicherer Sound - Triangle Wave statt Square für melodischeren Klang
             oscillator.type = 'triangle'; // Weicher als square
             oscillator.frequency.setValueAtTime(note.freq, now + note.start);
@@ -463,13 +467,39 @@ class SoundManager {
 
             oscillator.start(now + note.start);
             oscillator.stop(now + note.start + note.duration);
+
+            // Entferne Oszillator aus Array wenn er fertig ist
+            oscillator.onended = () => {
+                const index = this.workshopOscillators.findIndex(o => o.oscillator === oscillator);
+                if (index > -1) {
+                    this.workshopOscillators.splice(index, 1);
+                }
+            };
         });
     }
 
     stopWorkshopMusic() {
+        // Stoppe das Interval
         if (this.workshopMusicInterval) {
             clearInterval(this.workshopMusicInterval);
             this.workshopMusicInterval = null;
+        }
+
+        // Stoppe alle aktiven Oszillatoren sofort
+        if (this.workshopOscillators && this.workshopOscillators.length > 0) {
+            this.workshopOscillators.forEach(({ oscillator, gainNode }) => {
+                try {
+                    // Fade out schnell um Klicken zu vermeiden
+                    const now = this.audioContext.currentTime;
+                    gainNode.gain.cancelScheduledValues(now);
+                    gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+                    gainNode.gain.linearRampToValueAtTime(0, now + 0.05);
+                    oscillator.stop(now + 0.05);
+                } catch (e) {
+                    // Oszillator bereits gestoppt - ignorieren
+                }
+            });
+            this.workshopOscillators = [];
         }
     }
 

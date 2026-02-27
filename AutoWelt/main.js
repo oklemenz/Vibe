@@ -5,8 +5,11 @@
 class Game {
     constructor() {
         this.scene = new THREE.Scene();
-        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500);
+        this.renderer = new THREE.WebGLRenderer({
+            antialias: false, // Deaktiviere Antialiasing für Performance
+            powerPreference: 'high-performance'
+        });
         this.clock = new THREE.Clock();
 
         this.gameState = new GameState();
@@ -34,20 +37,29 @@ class Game {
         // Sound-Tracking
         this.isEngineRunning = false;
         this.lastSquealTime = 0;
+        this.lastDeltaTime = 0.016; // Cache für deltaTime
+
+        // Gecachte Vektoren für Performance
+        this._cameraOffset = new THREE.Vector3();
+        this._targetCameraPos = new THREE.Vector3();
+        this._lookAtTarget = new THREE.Vector3();
+        this._forwardVector = new THREE.Vector3();
 
         this.init();
     }
 
     init() {
-        // Renderer Setup
+        // Renderer Setup - Performance-Optimierungen
         this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limitiere Pixel Ratio
         this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.shadowMap.type = THREE.PCFShadowMap; // Schneller als PCFSoftShadowMap
+        this.renderer.powerPreference = 'high-performance';
         document.body.appendChild(this.renderer.domElement);
 
         // Scene Setup
         this.scene.background = new THREE.Color(0x87CEEB);
-        this.scene.fog = new THREE.Fog(0x87CEEB, 200, 600);
+        this.scene.fog = new THREE.Fog(0x87CEEB, 100, 400);
 
         // Lighting
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -56,12 +68,12 @@ class Game {
         const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
         directionalLight.position.set(50, 50, 50);
         directionalLight.castShadow = true;
-        directionalLight.shadow.camera.left = -200;
-        directionalLight.shadow.camera.right = 200;
-        directionalLight.shadow.camera.top = 200;
-        directionalLight.shadow.camera.bottom = -200;
-        directionalLight.shadow.mapSize.width = 2048;
-        directionalLight.shadow.mapSize.height = 2048;
+        directionalLight.shadow.camera.left = -100;
+        directionalLight.shadow.camera.right = 100;
+        directionalLight.shadow.camera.top = 100;
+        directionalLight.shadow.camera.bottom = -100;
+        directionalLight.shadow.mapSize.width = 1024;
+        directionalLight.shadow.mapSize.height = 1024;
         this.scene.add(directionalLight);
 
         // Camera Position - höher und weiter weg für bessere Sicht
@@ -287,34 +299,33 @@ class Game {
                 car.velocity.multiplyScalar(0.92); // Starkes Abbremsen - Auto kommt schnell zum Stehen
             }
 
-            // REALISTISCHE LENKUNG: Abhängig von Geschwindigkeit
+            // LENKUNG: Reaktionsschneller und direkter
             // Je schneller das Auto, desto stärker die Lenkwirkung
-            // Stehendes Auto lenkt NICHT!
             if (this.keys['ArrowLeft']) {
-                if (currentSpeed > 0.7) { // Erhöht von 0.5 auf 0.7 - Auto muss noch schneller fahren zum Lenken
-                    // Lenkung proportional zur Geschwindigkeit (realistisch!)
-                    const speedFactor = Math.min(currentSpeed / 2.0, 1.5); // Begrenzt auf 1.5x
-                    const steeringForce = carData.handling * deltaTime * 0.1 * speedFactor; // Von 0.15 auf 0.1 reduziert - noch sanfter!
+                if (currentSpeed > 0.3) { // Niedrigere Mindestgeschwindigkeit für schnelleres Ansprechen
+                    // Lenkung proportional zur Geschwindigkeit
+                    const speedFactor = Math.min(currentSpeed / 1.2, 2.0); // Stärkerer Faktor
+                    const steeringForce = carData.handling * deltaTime * 0.25 * speedFactor; // Erhöht von 0.1 auf 0.25
                     car.angularVelocity += steeringForce;
 
                     // Quietsch-Sound bei scharfem Lenken
                     const now = Date.now();
-                    if (currentSpeed > 3.0 && now - this.lastSquealTime > 500) { // Von 2.5 auf 3.0 erhöht
+                    if (currentSpeed > 2.5 && now - this.lastSquealTime > 500) {
                         this.soundManager.playTireSqueal();
                         this.lastSquealTime = now;
                     }
                 }
             }
             if (this.keys['ArrowRight']) {
-                if (currentSpeed > 0.7) { // Erhöht von 0.5 auf 0.7 - Auto muss noch schneller fahren zum Lenken
-                    // Lenkung proportional zur Geschwindigkeit (realistisch!)
-                    const speedFactor = Math.min(currentSpeed / 2.0, 1.5); // Begrenzt auf 1.5x
-                    const steeringForce = carData.handling * deltaTime * 0.1 * speedFactor; // Von 0.15 auf 0.1 reduziert - noch sanfter!
+                if (currentSpeed > 0.3) { // Niedrigere Mindestgeschwindigkeit für schnelleres Ansprechen
+                    // Lenkung proportional zur Geschwindigkeit
+                    const speedFactor = Math.min(currentSpeed / 1.2, 2.0); // Stärkerer Faktor
+                    const steeringForce = carData.handling * deltaTime * 0.25 * speedFactor; // Erhöht von 0.1 auf 0.25
                     car.angularVelocity -= steeringForce;
 
                     // Quietsch-Sound bei scharfem Lenken
                     const now = Date.now();
-                    if (currentSpeed > 3.0 && now - this.lastSquealTime > 500) { // Von 2.5 auf 3.0 erhöht
+                    if (currentSpeed > 2.5 && now - this.lastSquealTime > 500) {
                         this.soundManager.playTireSqueal();
                         this.lastSquealTime = now;
                     }
@@ -359,8 +370,8 @@ class Game {
 
         // Apply drag - stärker für kontrollierte Beschleunigung
         car.velocity.multiplyScalar(0.98); // Von 0.985 auf 0.98 - mehr Widerstand
-        // Sehr starker Drag auf Lenkung für maximale Kontrolle
-        car.angularVelocity *= 0.95; // Von 0.88 auf 0.95 - deutlich mehr Dämpfung!
+        // Weniger Dämpfung auf Lenkung für direkteres Ansprechen
+        car.angularVelocity *= 0.88; // Reduziert von 0.95 auf 0.88 - weniger Dämpfung!
 
         // Limit max speed - reduziert für kontrollierteres Fahren
         const maxSpeed = carData.speed * 2.0; // Von 3.0 auf 2.0 reduziert!
@@ -372,13 +383,13 @@ class Game {
         car.mesh.rotation.y += car.angularVelocity;
 
         // REALISTISCHE BEWEGUNG: Auto bewegt sich in Blickrichtung (kein Rutschen!)
-        // Berechne Bewegungsvektor basierend auf Auto-Rotation
-        const forward = new THREE.Vector3(0, 0, 1); // Forward-Richtung im lokalen Space
-        forward.applyQuaternion(car.mesh.quaternion); // Rotiere in Welt-Richtung
+        // Berechne Bewegungsvektor basierend auf Auto-Rotation - nutze gecachten Vektor
+        this._forwardVector.set(0, 0, 1);
+        this._forwardVector.applyQuaternion(car.mesh.quaternion);
 
         // Bewege Auto in seine Blickrichtung mit aktueller Geschwindigkeit
-        car.mesh.position.x += forward.x * car.velocity.z;
-        car.mesh.position.z += forward.z * car.velocity.z;
+        car.mesh.position.x += this._forwardVector.x * car.velocity.z;
+        car.mesh.position.z += this._forwardVector.z * car.velocity.z;
 
         // Keep car on ground - Räder auf Boden (y=0)
         car.mesh.position.y = 0;
@@ -408,18 +419,19 @@ class Game {
         if (!this.currentCar) return;
 
         const carPos = this.currentCar.mesh.position;
+        const carPosX = carPos.x;
+        const carPosZ = carPos.z;
 
-        // Check building collisions - mit besserer Distanz-Berechnung
-        for (const building of this.world.buildings) {
-            // Berechne Distanz nur auf x/z Ebene (2D), nicht mit y
-            const buildingPos2D = new THREE.Vector2(building.position.x, building.position.z);
-            const carPos2D = new THREE.Vector2(carPos.x, carPos.z);
-            const distance = buildingPos2D.distanceTo(carPos2D);
+        // Check building collisions - optimiert mit quadratischer Distanz
+        const collisionDistanceSq = 64; // 8 * 8
 
-            // Größere Kollisionsdistanz (Gebäude sind 10-14m groß)
-            const collisionDistance = 8;
+        for (let i = 0, len = this.world.buildings.length; i < len; i++) {
+            const building = this.world.buildings[i];
+            const dx = carPosX - building.position.x;
+            const dz = carPosZ - building.position.z;
+            const distanceSq = dx * dx + dz * dz;
 
-            if (distance < collisionDistance) {
+            if (distanceSq < collisionDistanceSq) {
                 this.showWarning('💥 Kollision mit Gebäude! -15 Punkte');
                 this.gameState.score -= 15;
                 this.updateUI();
@@ -428,8 +440,11 @@ class Game {
                 this.soundManager.playCollisionSound();
 
                 // Bounce back - stärker
-                const direction = new THREE.Vector3().subVectors(carPos, building.position).normalize();
-                this.currentCar.mesh.position.add(direction.multiplyScalar(1.5));
+                const distance = Math.sqrt(distanceSq);
+                const nx = dx / distance;
+                const nz = dz / distance;
+                this.currentCar.mesh.position.x += nx * 1.5;
+                this.currentCar.mesh.position.z += nz * 1.5;
                 this.currentCar.velocity.multiplyScalar(-0.3);
 
                 // Motor-Sound stoppen bei Kollision
@@ -442,16 +457,19 @@ class Game {
             }
         }
 
-        // Check charging stations
+        // Check charging stations - optimiert
         let wasCharging = this.isCharging;
         this.isCharging = false;
         this.currentChargingStation = null;
+        const chargingDistanceSq = 25; // 5 * 5
 
-        for (const station of this.world.chargingStations) {
-            const distance = carPos.distanceTo(station.position);
-            const chargingDistance = 5;
+        for (let i = 0, len = this.world.chargingStations.length; i < len; i++) {
+            const station = this.world.chargingStations[i];
+            const dx = carPosX - station.position.x;
+            const dz = carPosZ - station.position.z;
+            const distanceSq = dx * dx + dz * dz;
 
-            if (distance < chargingDistance && this.energy < this.maxEnergy) {
+            if (distanceSq < chargingDistanceSq && this.energy < this.maxEnergy) {
                 // Auto steht an Ladestation
                 this.isCharging = true;
                 this.currentChargingStation = station;
@@ -464,7 +482,7 @@ class Game {
                 // Lade Energie auf - EXTREM SCHNELL! 10x schneller!
                 // NEUES FEATURE: 2x schneller wenn kein Gas gegeben wird!
                 const chargeMultiplier = this.isAccelerating ? 1000 : 2000; // MIT Gas: 1000, OHNE Gas: 2000 (2x schneller!)
-                this.energy += chargeMultiplier * this.clock.getDelta();
+                this.energy += chargeMultiplier * this.lastDeltaTime;
                 if (this.energy > this.maxEnergy) {
                     this.energy = this.maxEnergy;
                 }
@@ -485,9 +503,11 @@ class Game {
             document.getElementById('charging-status').classList.add('hidden');
         }
 
-        // Check goal
-        const goalDistance = carPos.distanceTo(this.world.goalPosition);
-        if (goalDistance < 5) {
+        // Check goal - optimiert mit quadratischer Distanz
+        const goalDx = carPosX - this.world.goalPosition.x;
+        const goalDz = carPosZ - this.world.goalPosition.z;
+        const goalDistanceSq = goalDx * goalDx + goalDz * goalDz;
+        if (goalDistanceSq < 25) { // 5 * 5
             this.reachGoal();
         }
     }
@@ -582,8 +602,8 @@ class Game {
     }
 
     createAICars() {
-        // Erstelle 5-8 AI-Autos auf verschiedenen Straßen
-        const numAICars = 5 + Math.floor(Math.random() * 4); // 5-8 Autos
+        // Erstelle 3-5 AI-Autos auf verschiedenen Straßen - reduziert für Performance
+        const numAICars = 3 + Math.floor(Math.random() * 3); // 3-5 Autos
         const aiCarColors = [0xff6b6b, 0x4ecdc4, 0xffe66d, 0xa8e6cf, 0xff8b94, 0xc7ceea, 0xffd3b6, 0xdcedc1];
 
         // Straßen-Positionen (entlang der Hauptstraßen)
@@ -821,14 +841,21 @@ class Game {
                 }
             }
 
-            // Prüfe Kollision mit Gebäuden
+            // Prüfe Kollision mit Gebäuden - optimiert
             let collidesWithBuilding = false;
-            this.world.buildings.forEach(building => {
-                const distance = aiCar.mesh.position.distanceTo(building.position);
-                if (distance < 8) {
+            const aiPosX = aiCar.mesh.position.x;
+            const aiPosZ = aiCar.mesh.position.z;
+            const buildingCollisionSq = 64; // 8 * 8
+
+            for (let j = 0, bLen = this.world.buildings.length; j < bLen; j++) {
+                const building = this.world.buildings[j];
+                const dx = aiPosX - building.position.x;
+                const dz = aiPosZ - building.position.z;
+                if (dx * dx + dz * dz < buildingCollisionSq) {
                     collidesWithBuilding = true;
+                    break;
                 }
-            });
+            }
 
             // Wenn Kollision mit Gebäude, bewege zurück und drehe um
             if (collidesWithBuilding) {
@@ -914,13 +941,17 @@ class Game {
     checkAICarCollisions() {
         if (!this.currentCar) return;
 
-        const playerPos = this.currentCar.mesh.position;
-        const collisionDistance = 4; // Kollisionsradius
+        const playerX = this.currentCar.mesh.position.x;
+        const playerZ = this.currentCar.mesh.position.z;
+        const collisionDistanceSq = 16; // 4 * 4
 
-        this.aiCars.forEach(aiCar => {
-            const distance = playerPos.distanceTo(aiCar.mesh.position);
+        for (let i = 0, len = this.aiCars.length; i < len; i++) {
+            const aiCar = this.aiCars[i];
+            const dx = playerX - aiCar.mesh.position.x;
+            const dz = playerZ - aiCar.mesh.position.z;
+            const distanceSq = dx * dx + dz * dz;
 
-            if (distance < collisionDistance) {
+            if (distanceSq < collisionDistanceSq) {
                 // Kollision mit AI-Auto!
                 const now = Date.now();
                 // Nur alle 2 Sekunden Strafe geben (verhindert mehrfache Strafen)
@@ -933,8 +964,9 @@ class Game {
                     // Spiele Crash-Sound (nutze Brems-Sound als Platzhalter)
                     this.soundManager.playBrakeSound();
                 }
+                return; // Exit nach erster Kollision
             }
-        });
+        }
     }
 
     toggleMute() {
@@ -956,22 +988,19 @@ class Game {
         const car = this.currentCar.mesh;
 
         // Kamera HINTER dem Auto - feste Position relativ zum Auto
-        const cameraOffset = new THREE.Vector3(0, 12, -18); // Näher und tiefer für bessere Sicht
-        cameraOffset.applyQuaternion(car.quaternion);
+        // Nutze gecachte Vektoren für Performance
+        this._cameraOffset.set(0, 12, -18);
+        this._cameraOffset.applyQuaternion(car.quaternion);
 
-        const targetCameraPosition = new THREE.Vector3().addVectors(car.position, cameraOffset);
+        this._targetCameraPos.copy(car.position).add(this._cameraOffset);
 
         // Sanfte Kamera-Bewegung mit reduziertem lerp für Stabilität
-        this.camera.position.lerp(targetCameraPosition, 0.08);
+        this.camera.position.lerp(this._targetCameraPos, 0.08);
 
         // Schaue direkt auf das Auto (einfach und stabil)
-        const lookAtTarget = new THREE.Vector3(
-            car.position.x,
-            car.position.y + 2,
-            car.position.z
-        );
+        this._lookAtTarget.set(car.position.x, car.position.y + 2, car.position.z);
 
-        this.camera.lookAt(lookAtTarget);
+        this.camera.lookAt(this._lookAtTarget);
     }
 
     animate() {
@@ -981,9 +1010,13 @@ class Game {
 
         const deltaTime = this.clock.getDelta();
 
-        this.updateCarPhysics(deltaTime);
+        // Begrenze deltaTime um Sprünge zu vermeiden
+        const clampedDelta = Math.min(deltaTime, 0.1);
+        this.lastDeltaTime = clampedDelta; // Cache für andere Funktionen
+
+        this.updateCarPhysics(clampedDelta);
         this.checkCollisions();
-        this.updateAICars(deltaTime); // Update AI-Autos
+        this.updateAICars(clampedDelta); // Update AI-Autos
         this.checkAICarCollisions(); // Prüfe Kollisionen mit AI-Autos
         this.updateCamera();
         this.world.animateGoal();

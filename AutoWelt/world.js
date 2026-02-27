@@ -184,7 +184,7 @@ class World {
         buildingMesh.receiveShadow = true;
         building.add(buildingMesh);
 
-        // Blaue Fenster hinzufügen
+        // Blaue Fenster hinzufügen - reduziert für Performance
         const windowMaterial = new THREE.MeshStandardMaterial({
             color: 0x3498db, // Blau
             emissive: 0x2980b9,
@@ -192,13 +192,15 @@ class World {
             metalness: 0.5
         });
 
-        const floors = Math.min(4, Math.floor(height / 4)); // Max 4 Etagen
-        const windowsPerFloor = Math.min(3, Math.floor(width / 4)); // Max 3 Fenster pro Seite
+        const floors = Math.min(2, Math.floor(height / 6)); // Max 2 Etagen
+        const windowsPerFloor = Math.min(2, Math.floor(width / 5)); // Max 2 Fenster pro Seite
+
+        // Gemeinsame Geometrie für alle Fenster
+        const windowGeometry = new THREE.BoxGeometry(1.2, 1.8, 0.1);
 
         for (let floor = 0; floor < floors; floor++) {
             for (let w = 0; w < windowsPerFloor; w++) {
                 // Vorderseite
-                const windowGeometry = new THREE.BoxGeometry(1.2, 1.8, 0.1);
                 const windowFront = new THREE.Mesh(windowGeometry, windowMaterial);
                 windowFront.position.set(
                     -width / 2 + (w + 1) * (width / (windowsPerFloor + 1)),
@@ -266,8 +268,8 @@ class World {
     createChargingStation() {
         const station = new THREE.Group();
 
-        // Basis-Plattform
-        const baseGeometry = new THREE.CylinderGeometry(3, 3, 0.3, 32);
+        // Basis-Plattform - weniger Segmente
+        const baseGeometry = new THREE.CylinderGeometry(3, 3, 0.3, 16);
         const baseMaterial = new THREE.MeshStandardMaterial({
             color: 0x3498db,
             metalness: 0.7,
@@ -278,8 +280,8 @@ class World {
         base.receiveShadow = true;
         station.add(base);
 
-        // Ladesäule
-        const poleGeometry = new THREE.CylinderGeometry(0.3, 0.3, 4, 16);
+        // Ladesäule - weniger Segmente
+        const poleGeometry = new THREE.CylinderGeometry(0.3, 0.3, 4, 8);
         const poleMaterial = new THREE.MeshStandardMaterial({
             color: 0x2c3e50,
             metalness: 0.8,
@@ -287,7 +289,6 @@ class World {
         });
         const pole = new THREE.Mesh(poleGeometry, poleMaterial);
         pole.position.y = 2;
-        pole.castShadow = true;
         station.add(pole);
 
         // Leuchtender Ladekopf
@@ -300,7 +301,6 @@ class World {
         });
         const head = new THREE.Mesh(headGeometry, headMaterial);
         head.position.y = 4.5;
-        head.castShadow = true;
         station.add(head);
 
         // Blitzsymbol auf dem Kopf
@@ -314,8 +314,8 @@ class World {
         bolt.position.set(0, 4.5, 0.35);
         station.add(bolt);
 
-        // Leuchtring um die Basis
-        const ringGeometry = new THREE.TorusGeometry(3.2, 0.1, 16, 32);
+        // Leuchtring um die Basis - weniger Segmente
+        const ringGeometry = new THREE.TorusGeometry(3.2, 0.1, 8, 16);
         const ringMaterial = new THREE.MeshStandardMaterial({
             color: 0x3498db,
             emissive: 0x3498db,
@@ -326,10 +326,7 @@ class World {
         ring.position.y = 0.2;
         station.add(ring);
 
-        // Punktlicht für Beleuchtung
-        const light = new THREE.PointLight(0x2ecc71, 1, 15);
-        light.position.y = 4.5;
-        station.add(light);
+        // Entfernt: Punktlicht für Performance
 
         return station;
     }
@@ -338,8 +335,8 @@ class World {
         // Create a visible goal marker
         const goalGroup = new THREE.Group();
 
-        // Base platform
-        const platformGeometry = new THREE.CylinderGeometry(3, 3, 0.3, 32);
+        // Base platform - weniger Segmente
+        const platformGeometry = new THREE.CylinderGeometry(3, 3, 0.3, 16);
         const platformMaterial = new THREE.MeshStandardMaterial({
             color: 0xf1c40f,
             metalness: 0.5
@@ -348,8 +345,8 @@ class World {
         platform.receiveShadow = true;
         goalGroup.add(platform);
 
-        // Glowing pillar
-        const pillarGeometry = new THREE.CylinderGeometry(0.5, 0.5, 8, 16);
+        // Glowing pillar - weniger Segmente
+        const pillarGeometry = new THREE.CylinderGeometry(0.5, 0.5, 8, 8);
         const pillarMaterial = new THREE.MeshStandardMaterial({
             color: 0xf39c12,
             emissive: 0xf39c12,
@@ -357,11 +354,10 @@ class World {
         });
         const pillar = new THREE.Mesh(pillarGeometry, pillarMaterial);
         pillar.position.y = 4;
-        pillar.castShadow = true;
         goalGroup.add(pillar);
 
-        // Top sphere
-        const sphereGeometry = new THREE.SphereGeometry(1, 32, 32);
+        // Top sphere - weniger Segmente
+        const sphereGeometry = new THREE.SphereGeometry(1, 16, 16);
         const sphereMaterial = new THREE.MeshStandardMaterial({
             color: 0xf1c40f,
             emissive: 0xf1c40f,
@@ -369,13 +365,9 @@ class World {
         });
         const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
         sphere.position.y = 8.5;
-        sphere.castShadow = true;
         goalGroup.add(sphere);
 
-        // Point light for glow effect
-        const light = new THREE.PointLight(0xf1c40f, 1, 20);
-        light.position.y = 8.5;
-        goalGroup.add(light);
+        // Entfernt: Point light für Performance
 
         this.goalMesh = goalGroup;
         this.moveGoal();
@@ -464,8 +456,8 @@ class World {
             }
         }
 
-        // Bunte Blumen auf den Wiesen
-        for (let i = 0; i < 200; i++) {
+        // Bunte Blumen auf den Wiesen - reduziert für Performance
+        for (let i = 0; i < 50; i++) {
             const x = (Math.random() - 0.5) * 220;
             const z = (Math.random() - 0.5) * 220;
 
@@ -479,17 +471,17 @@ class World {
             }
         }
 
-        // Straßenlaternen an Straßenrändern
-        for (let i = -100; i <= 100; i += 30) {
-            // Entlang horizontaler Straßen
-            for (let roadZ of [-120, -80, -40, 0, 40, 80, 120]) {
+        // Straßenlaternen an Straßenrändern - reduziert für Performance
+        for (let i = -100; i <= 100; i += 60) {
+            // Entlang horizontaler Straßen - nur jede zweite Straße
+            for (let roadZ of [-80, 0, 80]) {
                 const lamp = this.createStreetLamp();
                 lamp.position.set(i, 0, roadZ + 6);
                 this.scene.add(lamp);
             }
 
-            // Entlang vertikaler Straßen
-            for (let roadX of [-120, -80, -40, 0, 40, 80, 120]) {
+            // Entlang vertikaler Straßen - nur jede zweite Straße
+            for (let roadX of [-80, 0, 80]) {
                 const lamp = this.createStreetLamp();
                 lamp.position.set(roadX + 6, 0, i);
                 this.scene.add(lamp);
@@ -519,16 +511,16 @@ class World {
     createTree() {
         const tree = new THREE.Group();
 
-        // Trunk
-        const trunkGeometry = new THREE.CylinderGeometry(0.3, 0.4, 3, 8);
+        // Trunk - weniger Segmente
+        const trunkGeometry = new THREE.CylinderGeometry(0.3, 0.4, 3, 6);
         const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x4a3728 });
         const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
         trunk.position.y = 1.5;
         trunk.castShadow = true;
         tree.add(trunk);
 
-        // Foliage
-        const foliageGeometry = new THREE.SphereGeometry(2, 8, 8);
+        // Foliage - weniger Segmente
+        const foliageGeometry = new THREE.SphereGeometry(2, 6, 6);
         const foliageMaterial = new THREE.MeshStandardMaterial({ color: 0x2d5016 });
         const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
         foliage.position.y = 4;
@@ -541,16 +533,16 @@ class World {
     createStreetLamp() {
         const lamp = new THREE.Group();
 
-        // Pole
-        const poleGeometry = new THREE.CylinderGeometry(0.1, 0.1, 5, 8);
+        // Pole - weniger Segmente
+        const poleGeometry = new THREE.CylinderGeometry(0.1, 0.1, 5, 6);
         const poleMaterial = new THREE.MeshStandardMaterial({ color: 0x555555 });
         const pole = new THREE.Mesh(poleGeometry, poleMaterial);
         pole.position.y = 2.5;
-        pole.castShadow = true;
+        // Keine Schatten für kleine Objekte
         lamp.add(pole);
 
-        // Light
-        const lightGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+        // Light - weniger Segmente
+        const lightGeometry = new THREE.SphereGeometry(0.3, 8, 8);
         const lightMaterial = new THREE.MeshStandardMaterial({
             color: 0xffffff,
             emissive: 0xffffcc,
@@ -560,10 +552,7 @@ class World {
         light.position.y = 5;
         lamp.add(light);
 
-        // Point light
-        const pointLight = new THREE.PointLight(0xffffcc, 0.5, 15);
-        pointLight.position.y = 5;
-        lamp.add(pointLight);
+        // Entfernt: Point light für Performance
 
         return lamp;
     }
@@ -571,22 +560,22 @@ class World {
     createBush() {
         const bush = new THREE.Group();
 
-        // Mehrere kleine Kugeln für buschiges Aussehen
+        // Weniger Kugeln für buschiges Aussehen
         const bushMaterial = new THREE.MeshStandardMaterial({
             color: 0x3a6b1f,
             roughness: 0.9
         });
 
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 2; i++) {
             const size = 0.4 + Math.random() * 0.3;
-            const bushGeometry = new THREE.SphereGeometry(size, 6, 6);
+            const bushGeometry = new THREE.SphereGeometry(size, 4, 4);
             const bushPart = new THREE.Mesh(bushGeometry, bushMaterial);
             bushPart.position.set(
                 (Math.random() - 0.5) * 0.5,
                 size * 0.7,
                 (Math.random() - 0.5) * 0.5
             );
-            bushPart.castShadow = true;
+            // Keine Schatten für kleine Objekte
             bush.add(bushPart);
         }
 
@@ -597,53 +586,29 @@ class World {
         const flower = new THREE.Group();
 
         // Stiel
-        const stemGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.4, 4);
+        const stemGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.4, 3);
         const stemMaterial = new THREE.MeshStandardMaterial({ color: 0x2d5016 });
         const stem = new THREE.Mesh(stemGeometry, stemMaterial);
         stem.position.y = 0.2;
         flower.add(stem);
 
-        // Blüte - bunte Farben
+        // Blüte - bunte Farben - vereinfacht
         const flowerColors = [
-            0xff0000, // Rot
-            0xff69b4, // Pink
-            0xffff00, // Gelb
-            0xff8c00, // Orange
-            0x9370db, // Lila
-            0xffffff, // Weiß
-            0xff1493  // Deep Pink
+            0xff0000, 0xff69b4, 0xffff00, 0xff8c00, 0x9370db, 0xffffff, 0xff1493
         ];
 
         const color = flowerColors[Math.floor(Math.random() * flowerColors.length)];
-        const petalGeometry = new THREE.SphereGeometry(0.08, 6, 6);
-        const petalMaterial = new THREE.MeshStandardMaterial({
+
+        // Einzelne Kugel statt mehrerer Blütenblätter
+        const flowerGeometry = new THREE.SphereGeometry(0.12, 4, 4);
+        const flowerMaterial = new THREE.MeshStandardMaterial({
             color: color,
             emissive: color,
             emissiveIntensity: 0.2
         });
-
-        // 5 Blütenblätter im Kreis
-        for (let i = 0; i < 5; i++) {
-            const petal = new THREE.Mesh(petalGeometry, petalMaterial);
-            const angle = (i / 5) * Math.PI * 2;
-            petal.position.set(
-                Math.cos(angle) * 0.08,
-                0.4,
-                Math.sin(angle) * 0.08
-            );
-            flower.add(petal);
-        }
-
-        // Zentrum der Blüte
-        const centerGeometry = new THREE.SphereGeometry(0.05, 6, 6);
-        const centerMaterial = new THREE.MeshStandardMaterial({
-            color: 0xffff00,
-            emissive: 0xffff00,
-            emissiveIntensity: 0.3
-        });
-        const center = new THREE.Mesh(centerGeometry, centerMaterial);
-        center.position.y = 0.4;
-        flower.add(center);
+        const flowerHead = new THREE.Mesh(flowerGeometry, flowerMaterial);
+        flowerHead.position.y = 0.4;
+        flower.add(flowerHead);
 
         return flower;
     }
@@ -651,8 +616,8 @@ class World {
     createClouds() {
         this.clouds = [];
 
-        // 15-20 Wolken im Himmel
-        const numClouds = 15 + Math.floor(Math.random() * 6);
+        // 8-10 Wolken im Himmel - reduziert für Performance
+        const numClouds = 8 + Math.floor(Math.random() * 3);
 
         for (let i = 0; i < numClouds; i++) {
             const cloud = this.createCloud();
@@ -676,12 +641,12 @@ class World {
             roughness: 1.0
         });
 
-        // Wolke aus mehreren Kugeln
-        const numParts = 4 + Math.floor(Math.random() * 3);
+        // Wolke aus weniger Kugeln mit weniger Segmenten
+        const numParts = 3 + Math.floor(Math.random() * 2);
 
         for (let i = 0; i < numParts; i++) {
             const size = 3 + Math.random() * 4;
-            const partGeometry = new THREE.SphereGeometry(size, 8, 8);
+            const partGeometry = new THREE.SphereGeometry(size, 5, 5);
             const part = new THREE.Mesh(partGeometry, cloudMaterial);
             part.position.set(
                 (Math.random() - 0.5) * 10,
