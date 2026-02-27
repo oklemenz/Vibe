@@ -1,5 +1,4 @@
-// Three.js wird global über Script-Tag geladen
-// THREE und THREE.OrbitControls sind global verfügbar
+"use strict";
 
 // Game constants
 const BOARD_SIZE = 9;
