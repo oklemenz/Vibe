@@ -11,6 +11,7 @@ html, body {
     body {
         width: 100vw;
         height: 100vh;
+        overflow: hidden;
     }
 }
 
@@ -32,16 +33,16 @@ body, body * {
     .game,
     .game_container,
     #game-container {
-        width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
-        height: calc(100vh - env(safe-area-inset-bottom, 0px));
-        margin-left: env(safe-area-inset-left, 0px);
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
     }
 }
 
 canvas {
     width: 100% !important;
     height: 100% !important;
-    object-fit: contain;
+    object-fit: cover;
 }
 
 * {
@@ -50,19 +51,59 @@ canvas {
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    overflow: hidden;
     background: #1a1a2e;
+    margin-top: 0.5px;
 }
 
 /* UI Overlay */
 #ui-overlay {
     position: absolute;
-    top: 20px;
-    left: 20px;
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-left: env(safe-area-inset-left, 0px);
+    top: 0;
+    top: calc(0px + env(safe-area-inset-top, 0px));
+    left: 0;
+    transform: translateX(-100%);
+    padding: 10px;
     color: white;
     z-index: 100;
+    background: rgba(0, 0, 0, 0.8);
+    border-radius: 0 15px 15px 0;
+    transition: transform 0.3s ease;
+    max-height: 400px;
+}
+
+#ui-overlay.open {
+    transform: translateX(0);
+    padding-left: calc(0px + env(safe-area-inset-left, 0px))
+}
+
+#ui-panel-toggle {
+    position: absolute;
+    right: -30px;
+    top: 20px;
+    width: 30px;
+    height: 80px;
+    background: rgba(0, 0, 0, 0.8);
+    border: none;
+    border-radius: 0 10px 10px 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 16px;
+    transition: background 0.3s;
+}
+
+#ui-panel-toggle:hover {
+    background: rgba(0, 0, 0, 1);
+}
+
+#ui-panel-toggle::after {
+    content: '▶';
+}
+
+#ui-overlay.open #ui-panel-toggle::after {
+    content: '◀';
 }
 
 #game-info-popup {
@@ -226,20 +267,22 @@ body {
 /* Fence Panel Styles */
 #fence-panel {
     position: absolute;
-    right: env(safe-area-inset-right, 0px);
-    top: 50%;
-    transform: translateY(-50%) translateX(100%);
+    top: 0px;
+    top: calc(0px + env(safe-area-inset-top, 0px));
+    right: 0;
+    transform: translateX(100%);
     background: rgba(0, 0, 0, 0.8);
-    padding: 20px;
+    padding: 10px;
     padding-right: calc(20px + env(safe-area-inset-right, 0px));
     border-radius: 15px 0 0 15px;
     z-index: 100;
     color: white;
     transition: transform 0.3s ease;
+    max-height: 400px;
 }
 
 #fence-panel.open {
-    transform: translateY(-50%) translateX(0);
+    transform: translateX(0);
 }
 
 #fence-panel h3 {
@@ -326,7 +369,7 @@ body {
 /* Drop Hint */
 .drop-hint {
     position: absolute;
-    bottom: 20px;
+    bottom: 10px;
     left: 50%;
     transform: translateX(-50%);
     background: rgba(0, 0, 0, 0.7);
@@ -336,6 +379,13 @@ body {
     font-size: 14px;
     z-index: 100;
     display: none;
+    min-width: 350px;
+}
+
+@media (orientation: landscape) {
+    .drop-hint {
+        bottom: calc(10px - env(safe-area-inset-left, 0px));
+    }
 }
 
 .drop-hint.active {
@@ -367,7 +417,7 @@ body {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 10px;
+    gap: 5px;
 }
 
 #game-info-btn, #controls-btn, #ai-btn, #rules-btn, #switch-btn, #train-btn, #restart-game-btn {
@@ -430,6 +480,7 @@ body {
     background: rgba(0, 0, 0, 0.9);
     padding: 15px 25px;
     border-radius: 10px;
+    border: 2px solid #6c5ce7;
     z-index: 150;
     color: white;
     white-space: nowrap;
@@ -452,8 +503,7 @@ body {
 #fence-panel-toggle {
     position: absolute;
     left: -30px;
-    top: 50%;
-    transform: translateY(-50%);
+    top: 20px;
     width: 30px;
     height: 80px;
     background: rgba(0, 0, 0, 0.8);
@@ -587,9 +637,17 @@ body {
     margin: 20px;
 }
 
+@media (orientation: landscape) {
+    #intro-content {
+        max-width: 600px;
+        padding: 20px;
+    }
+}
+
 #intro-content h1 {
     font-size: 36px;
     margin-bottom: 20px;
+    margin-top: -10px;
     color: #6c5ce7;
 }
 
@@ -620,6 +678,7 @@ body {
     font-size: 18px;
     font-weight: bold;
     transition: transform 0.2s, box-shadow 0.2s;
+    margin-bottom: -10px;
 }
 
 #intro-start-btn:hover {

@@ -13,6 +13,7 @@
 <body>
     <div id="game-container"></div>
     <div id="ui-overlay">
+        <button id="ui-panel-toggle"></button>
         <div class="top-bar">
             <div class="button-wrapper">
                 <button id="game-info-btn">ℹ️ Info</button>
@@ -24,7 +25,6 @@
                     </div>
                 </div>
             </div>
-            <button id="rules-btn">📖 Rules</button>
             <div class="button-wrapper">
                 <button id="controls-btn">❓ Help</button>
                 <div id="controls-popup">
@@ -36,6 +36,7 @@
                     </p>
                 </div>
             </div>
+            <button id="rules-btn">📖 Rules</button>
             <button id="ai-btn">🤖 AI</button>
             <button id="train-btn">🎓 Train</button>
             <button id="restart-game-btn">🔄 Restart</button>
@@ -46,7 +47,6 @@
     <!-- Fence Panel for Drag & Drop -->
     <div id="fence-panel">
         <button id="fence-panel-toggle"></button>
-        <h3>🧱 Fences</h3>
         <div class="fence-section" id="player1-section">
             <h4 style="color: #ff6b6b;">🔴 Player 1</h4>
             <div class="fence-container">
@@ -167,6 +167,15 @@
     // Standard: Fence Panel offen
     fencePanel.classList.add('open');
 
+    // UI Panel (left side) Slide Toggle
+    const uiOverlay = document.getElementById('ui-overlay');
+    const uiPanelToggle = document.getElementById('ui-panel-toggle');
+    uiPanelToggle.addEventListener('click', function() {
+        uiOverlay.classList.toggle('open');
+    });
+    // Standard: UI Panel geschlossen
+    // uiOverlay.classList.add('open');
+
     // Restart Game Button with Confirmation Dialog
     const restartGameBtn = document.getElementById('restart-game-btn');
     const confirmRestartModal = document.getElementById('confirm-restart-modal');
@@ -214,6 +223,12 @@
     const rulesBtn = document.getElementById('rules-btn');
     rulesBtn.addEventListener('click', function(e) {
         e.stopPropagation();
+        // Schließe alle offenen Popups
+        gameInfoPopup.classList.remove('visible');
+        gameInfoBtn.classList.remove('active');
+        controlsPopup.classList.remove('visible');
+        controlsBtn.classList.remove('active');
+        // Zeige Intro-Modal
         introModal.classList.remove('hidden');
     });
     </script>
