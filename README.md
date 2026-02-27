@@ -1,5 +1,9 @@
 # Vibe
 
+## Quoridor
+
+- Open in Browser: ./Quoridor/index.html
+
 ## The Red Devil
 
 - Open in Browser: ./RedDevil/index.html
@@ -8,4 +12,3 @@
 
 - `npm start`
 - Open in Browser: http://localhost:5173
-
