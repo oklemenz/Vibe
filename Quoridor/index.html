@@ -6,26 +6,56 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Quoridor 3D" />
-    <title>Quoridor 3D</title>
+    <meta name="apple-mobile-web-app-title" content="Quoridor" />
+    <title>Quoridor</title>
     <style>
-        * {
+        html, body {
+            width: 100%;
+            height: 100%;
             margin: 0;
             padding: 0;
+            background-color: black;
+        }
+        @media (orientation: landscape) {
+            html,
+            body {
+                width: 100vw;
+                height: 100vh;
+            }
+        }
+        body, body * {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        .game, .game_container, #game-container {
+            display: block;
+            touch-action: none;
+            margin: auto;
+            width: 100%;
+            height: 100%;
+        }
+        @media (orientation: landscape) {
+            .game,
+            .game_container,
+            #game-container {
+                width: 100vw;
+                height: calc(100vh - env(safe-area-inset-bottom, 0px));
+            }
+        }
+        canvas {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: contain;
+            image-rendering: pixelated;
+        }
+        * {
             box-sizing: border-box;
         }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             overflow: hidden;
             background: #1a1a2e;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
-        }
-        #game-container {
-            width: 100vw;
-            height: 100vh;
         }
         #ui-overlay {
             position: absolute;
@@ -34,14 +64,11 @@
             color: white;
             z-index: 100;
         }
-        #game-info {
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px 25px;
-            border-radius: 10px;
-            margin-bottom: 10px;
+        #game-info-popup {
+            min-width: 200px;
         }
         #current-player {
-            font-size: 24px;
+            font-size: 20px;
             font-weight: bold;
             margin-bottom: 10px;
         }
@@ -279,10 +306,11 @@
         /* Top bar with game-info and controls button */
         .top-bar {
             display: flex;
+            flex-direction: column;
             align-items: flex-start;
             gap: 10px;
         }
-        #controls-btn, #ai-btn {
+        #game-info-btn, #controls-btn, #ai-btn {
             background: rgba(0, 0, 0, 0.7);
             color: white;
             border: none;
@@ -291,9 +319,17 @@
             cursor: pointer;
             font-size: 16px;
             transition: background 0.3s;
+            width: 120px;
+            text-align: left;
         }
-        #controls-btn:hover, #ai-btn:hover {
+        #game-info-btn:hover, #controls-btn:hover, #ai-btn:hover {
             background: rgba(0, 0, 0, 0.9);
+        }
+        #game-info-btn.active, #controls-btn.active {
+            background: #6c5ce7;
+        }
+        #game-info-btn.active:hover, #controls-btn.active:hover {
+            background: #5b4cdb;
         }
         #ai-btn.active {
             background: #27ae60;
@@ -301,18 +337,23 @@
         #ai-btn.active:hover {
             background: #219a52;
         }
-        #controls-popup {
+        .button-wrapper {
+            position: relative;
+        }
+        #game-info-popup, #controls-popup {
             display: none;
             position: absolute;
-            top: 70px;
-            left: 20px;
+            top: 0;
+            left: 100%;
+            margin-left: 10px;
             background: rgba(0, 0, 0, 0.9);
             padding: 15px 25px;
             border-radius: 10px;
             z-index: 150;
             color: white;
+            white-space: nowrap;
         }
-        #controls-popup.visible {
+        #game-info-popup.visible, #controls-popup.visible {
             display: block;
         }
         #controls-popup h3 {
@@ -372,9 +413,9 @@
     <div id="game-container"></div>
     <div id="ui-overlay">
         <div class="top-bar">
-            <div id="game-info" class="collapsible-menu">
-                <div class="collapsible-header"><span class="collapsible-icon">▼</span> Spielinfo</div>
-                <div class="collapsible-content">
+            <div class="button-wrapper">
+                <button id="game-info-btn">ℹ️ Info</button>
+                <div id="game-info-popup">
                     <div id="current-player" class="player1-turn">Player 1's Turn</div>
                     <div id="fences-info">
                         <span id="player1-fences">Player 1 Fences: 10</span>
@@ -382,17 +423,18 @@
                     </div>
                 </div>
             </div>
-            <button id="controls-btn">❓ Help</button>
-            <button id="ai-btn">🤖 KI</button>
-        </div>
-        <div id="controls-popup">
-            <h3>Controls</h3>
-            <p>
-                <strong>Move:</strong> Click on highlighted squares<br>
-                <strong>Place Fence:</strong> Drag fence from right panel<br>
-                <strong>Rotate Fence:</strong> SPACE key while dragging<br>
-                <strong>Mouse:</strong> Rotate camera view
-            </p>
+            <div class="button-wrapper">
+                <button id="controls-btn">❓ Help</button>
+                <div id="controls-popup">
+                    <h3>Controls</h3>
+                    <p>
+                        <strong>Move:</strong> Click on highlighted squares<br>
+                        <strong>Place Fence:</strong> Drag fence from right panel<br>
+                        <strong>Camera:</strong> Drag or scroll mouse to adjust perspective
+                    </p>
+                </div>
+            </div>
+            <button id="ai-btn">🤖 AI</button>
         </div>
     </div>
 
@@ -401,7 +443,7 @@
         <button id="fence-panel-toggle"></button>
         <h3>🧱 Fences</h3>
         <div class="fence-section" id="player1-section">
-            <h4 style="color: #ff6b6b;">Player 1</h4>
+            <h4 style="color: #ff6b6b;">🔴 Player 1</h4>
             <div class="fence-container">
                 <div class="draggable-fence fence-horizontal player1-fence"
                      data-player="1" data-orientation="h"></div>
@@ -411,7 +453,7 @@
             </div>
         </div>
         <div class="fence-section" id="player2-section">
-            <h4 style="color: #4ecdc4;">Player 2</h4>
+            <h4 style="color: #4ecdc4;">🟢 Player 2</h4>
             <div class="fence-container">
                 <div class="draggable-fence fence-horizontal player2-fence"
                      data-player="2" data-orientation="h"></div>
@@ -438,20 +480,17 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="game.js"></script>
     <script>
-    // Collapsible Menüs (für Spielinfo und KI)
-    document.querySelectorAll('.collapsible-header').forEach(header => {
-        header.addEventListener('click', function() {
-            const menu = header.parentElement;
-            const content = menu.querySelector('.collapsible-content');
-            const icon = header.querySelector('.collapsible-icon');
-            if (content.style.display === 'none') {
-                content.style.display = '';
-                icon.textContent = '▼';
-            } else {
-                content.style.display = 'none';
-                icon.textContent = '►';
-            }
-        });
+    // Game Info Button Toggle (Popup)
+    const gameInfoBtn = document.getElementById('game-info-btn');
+    const gameInfoPopup = document.getElementById('game-info-popup');
+    gameInfoBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        // Schließe Help-Popup bevor Info-Popup geöffnet wird
+        controlsPopup.classList.remove('visible');
+        controlsBtn.classList.remove('active');
+
+        gameInfoPopup.classList.toggle('visible');
+        gameInfoBtn.classList.toggle('active', gameInfoPopup.classList.contains('visible'));
     });
 
     // Controls Button Toggle (Popup)
@@ -459,12 +498,29 @@
     const controlsPopup = document.getElementById('controls-popup');
     controlsBtn.addEventListener('click', function(e) {
         e.stopPropagation();
+        // Schließe Info-Popup bevor Help-Popup geöffnet wird
+        gameInfoPopup.classList.remove('visible');
+        gameInfoBtn.classList.remove('active');
+
         controlsPopup.classList.toggle('visible');
+        controlsBtn.classList.toggle('active', controlsPopup.classList.contains('visible'));
     });
-    // Schließe Popup wenn außerhalb geklickt
+
+    // Schließe Popups wenn außerhalb geklickt (aber nicht bei Spielfeld-Interaktion oder Fence-Panel)
+    const gameContainer = document.getElementById('game-container');
+    const fencePanelElement = document.getElementById('fence-panel');
     document.addEventListener('click', function(e) {
+        // Nicht schließen bei Klicks auf das Spielfeld oder Fence-Panel
+        if (gameContainer.contains(e.target) || fencePanelElement.contains(e.target)) {
+            return;
+        }
+        if (!gameInfoPopup.contains(e.target) && e.target !== gameInfoBtn) {
+            gameInfoPopup.classList.remove('visible');
+            gameInfoBtn.classList.remove('active');
+        }
         if (!controlsPopup.contains(e.target) && e.target !== controlsBtn) {
             controlsPopup.classList.remove('visible');
+            controlsBtn.classList.remove('active');
         }
     });
 

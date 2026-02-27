@@ -50,7 +50,7 @@ function init() {
 
     // Camera setup
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 12, -12);
+    camera.position.set(0, 10, -10);
     camera.lookAt(0, 0, 0);
 
     // Renderer setup
@@ -64,7 +64,7 @@ function init() {
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.minDistance = 10;
+    controls.minDistance = 8;
     controls.maxDistance = 30;
     controls.maxPolarAngle = Math.PI / 2.2;
 
@@ -533,11 +533,12 @@ function switchPlayer() {
 
 function updateUI() {
     const playerIndicator = document.getElementById('current-player');
-    playerIndicator.textContent = `Player ${currentPlayer}'s Turn`;
+    const playerEmoji = currentPlayer === 1 ? '🔴' : '🟢';
+    playerIndicator.textContent = `${playerEmoji} Player ${currentPlayer}'s Turn`;
     playerIndicator.className = currentPlayer === 1 ? 'player1-turn' : 'player2-turn';
 
-    document.getElementById('player1-fences').textContent = `Player 1 Fences: ${fences[1]}`;
-    document.getElementById('player2-fences').textContent = `Player 2 Fences: ${fences[2]}`;
+    document.getElementById('player1-fences').textContent = `🔴 Player 1 Fences: ${fences[1]}`;
+    document.getElementById('player2-fences').textContent = `🟢 Player 2 Fences: ${fences[2]}`;
 
     // Update fence panel counts
     document.getElementById('p1-fence-count').textContent = `${fences[1]} remaining`;
@@ -842,7 +843,7 @@ function toggleAI() {
     const btn = document.getElementById('ai-btn');
 
     if (aiEnabled) {
-        btn.textContent = '🤖 KI: AN';
+        btn.textContent = '🤖 AI: On';
         btn.classList.add('active');
 
         // If it's already AI's turn, start thinking
@@ -854,7 +855,7 @@ function toggleAI() {
             }, 500);
         }
     } else {
-        btn.textContent = '🤖 KI';
+        btn.textContent = '🤖 AI';
         btn.classList.remove('active');
     }
 }
