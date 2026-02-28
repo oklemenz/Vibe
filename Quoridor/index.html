@@ -62,6 +62,7 @@
 
     <div id="winner-modal">
         <div id="winner-content">
+            <button id="winner-close-btn" class="modal-close-btn">✕</button>
             <h1 id="winner-text">🔴Player 1 Wins!</h1>
             <button id="restart-btn">Play Again</button>
         </div>
@@ -85,8 +86,8 @@
             <h1>🎮 Quoridor</h1>
             <div class="intro-rules">
                 <p><strong>🎯 Goal:</strong> Reach the opposite side of the board first!</p>
-                <p><strong>🔴 Player 1:</strong> Move from bottom to top</p>
-                <p><strong>🟢 Player 2:</strong> Move from top to bottom</p>
+                <p id="rules-player1"><strong>🔴 Player 1:</strong> Move from bottom to top</p>
+                <p id="rules-player2"><strong>🟢 Player 2:</strong> Move from top to bottom</p>
                 <hr>
                 <p><strong>📍 Move:</strong> Tap a highlighted square to move your pawn</p>
                 <p><strong>🧱 Fence:</strong> Drag a fence from the right panel onto the board to block your opponent</p>
@@ -125,7 +126,15 @@
     const confirmRestartNo = document.getElementById('confirm-restart-no');
 
     restartGameBtn.addEventListener('click', function() {
-        confirmRestartModal.classList.add('visible');
+        // If game is already over, restart directly without confirmation
+        if (typeof gameOver !== 'undefined' && gameOver) {
+            if (typeof restartGame === 'function') {
+                restartGame();
+            }
+        } else {
+            // Show confirmation dialog only if game is still active
+            confirmRestartModal.classList.add('visible');
+        }
     });
 
     confirmRestartYes.addEventListener('click', function() {

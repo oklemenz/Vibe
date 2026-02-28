@@ -80,6 +80,13 @@ function init() {
     controls.enablePan = false;
     controls.target.set(0, 0, 0);
 
+    // Intercept pointer events before OrbitControls can process them
+    // This must be done right after OrbitControls is created
+    const gameContainer = document.getElementById('game-container');
+    gameContainer.addEventListener('pointerdown', onPointerDownForHighlight, true);
+    gameContainer.addEventListener('pointerup', onPointerUpForHighlight, true);
+    gameContainer.addEventListener('pointermove', onPointerMoveForHighlight, true);
+
     // Raycaster for mouse interaction
     raycaster = new THREE.Raycaster();
     mouse = new THREE.Vector2();
@@ -113,10 +120,9 @@ function init() {
     // Event listeners
     window.addEventListener('resize', onWindowResize);
     window.addEventListener('click', onClick);
-    window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('keydown', onKeyDown);
 
-    // Touch event listeners for mobile
+    // Touch event listeners for mobile (for tap detection and move handling)
     renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
     renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
     renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: false });
@@ -126,6 +132,9 @@ function init() {
 
     // UI buttons
     document.getElementById('restart-btn').addEventListener('click', restartGame);
+
+    // Winner modal close button
+    document.getElementById('winner-close-btn').addEventListener('click', closeWinnerModal);
 
     // AI toggle button
     document.getElementById('ai-btn').addEventListener('click', toggleAI);
@@ -542,8 +551,26 @@ function checkWin() {
 
 function endGame(winner) {
     gameOver = true;
-    document.getElementById('winner-text').textContent = `Player ${winner} Wins!`;
+    let winnerName;
+    if (aiEnabled) {
+        winnerName = winner === 1 ? 'Player' : 'AI';
+    } else {
+        winnerName = `Player ${winner}`;
+    }
+    document.getElementById('winner-text').textContent = `${winnerName} Wins!`;
     document.getElementById('winner-modal').style.display = 'flex';
+
+    // Hide all move highlights and disable all fences
+    updateValidMoves();
+    updateFencePanelState();
+}
+
+function closeWinnerModal() {
+    document.getElementById('winner-modal').style.display = 'none';
+    // Game stays in read-only mode (gameOver remains true)
+    // Ensure all fences are disabled and no move highlights shown
+    updateValidMoves();
+    updateFencePanelState();
 }
 
 function switchPlayer() {
@@ -678,6 +705,9 @@ function setupDragAndDrop() {
         lastDragX = clientX;
         lastDragY = clientY;
 
+        // Disable OrbitControls during fence dragging
+        controls.enabled = false;
+
         // Hide the original element during drag
         fence.style.opacity = '0.3';
 
@@ -747,6 +777,11 @@ function setupDragAndDrop() {
         clearPreview();
         updateValidMoves();
 
+        // Re-enable OrbitControls after fence dragging (if not in top view)
+        if (viewMode !== 'top') {
+            controls.enabled = true;
+        }
+
         // Reset fence element opacity
         document.querySelectorAll('.draggable-fence').forEach(f => {
             f.style.opacity = '1';
@@ -785,8 +820,30 @@ function getBoardPositionFromMouse(clientX, clientY) {
         const point = boardIntersects[0].point;
         const boardOffset = -(BOARD_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
 
-        const fx = Math.floor((point.x - boardOffset + CELL_SIZE / 2) / CELL_SIZE);
-        const fy = Math.floor((point.z - boardOffset + CELL_SIZE / 2) / CELL_SIZE);
+        // Calculate cell position (center of cell as reference)
+        const cellX = Math.floor((point.x - boardOffset + CELL_SIZE / 2) / CELL_SIZE);
+        const cellY = Math.floor((point.z - boardOffset + CELL_SIZE / 2) / CELL_SIZE);
+
+        // Calculate position within the cell (0 to 1)
+        const cellCenterX = boardOffset + cellX * CELL_SIZE;
+        const cellCenterY = boardOffset + cellY * CELL_SIZE;
+        const offsetInCellX = point.x - cellCenterX;
+        const offsetInCellY = point.z - cellCenterY;
+
+        // Determine fence position based on which quadrant of the cell the mouse is in
+        // Use the cell's corner closest to the mouse position
+        let fx = cellX;
+        let fy = cellY;
+
+        // If mouse is in left half of cell, use previous fence column
+        if (offsetInCellX < 0) {
+            fx = cellX - 1;
+        }
+
+        // If mouse is in top half of cell (negative Z), use previous fence row
+        if (offsetInCellY < 0) {
+            fy = cellY - 1;
+        }
 
         if (fx >= 0 && fx < BOARD_SIZE - 1 && fy >= 0 && fy < BOARD_SIZE - 1) {
             return { x: fx, y: fy };
@@ -874,21 +931,64 @@ function onClick(event) {
     }
 }
 
-function onMouseMove() {
-    // No preview needed when not dragging - drag events handle that
+// Pointer event handlers to intercept before OrbitControls
+// These use the capture phase to run before OrbitControls handlers
+let pointerOnHighlight = false;
+
+function onPointerDownForHighlight(event) {
+    pointerOnHighlight = false;
+    if (gameOver || isDragging) return;
+    if (viewMode === 'top') return;
+
+    // Check if pointer is on a move highlight
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+    const highlightIntersects = raycaster.intersectObjects(highlightsGroup.children);
+
+    if (highlightIntersects.length > 0) {
+        // Stop event from reaching OrbitControls
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        pointerOnHighlight = true;
+        controls.enabled = false;
+    }
+}
+
+function onPointerMoveForHighlight(event) {
+    if (pointerOnHighlight) {
+        // Stop event from reaching OrbitControls while dragging on highlight
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        controls.enabled = false;
+    }
+}
+
+function onPointerUpForHighlight(event) {
+    if (pointerOnHighlight) {
+        // Stop event from reaching OrbitControls
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+    }
+    // Re-enable controls
+    if (viewMode !== 'top') {
+        controls.enabled = true;
+    }
+    pointerOnHighlight = false;
 }
 
 // Touch event handlers for mobile
 let touchStartTime = 0;
 let touchMoved = false;
 
-function onTouchStart(event) {
+function onTouchStart() {
     if (gameOver) return;
     touchStartTime = Date.now();
     touchMoved = false;
 }
 
-function onTouchMove(event) {
+function onTouchMove() {
     touchMoved = true;
 }
 
@@ -911,13 +1011,49 @@ function onTouchEnd(event) {
 
     raycaster.setFromCamera(mouse, camera);
 
-    // Check for move highlight clicks
+    // First try: Check for direct move highlight intersections
     const highlightIntersects = raycaster.intersectObjects(highlightsGroup.children);
     if (highlightIntersects.length > 0) {
         const target = highlightIntersects[0].object.userData;
         if (movePawn(target.x, target.y)) {
             if (!checkWin()) {
                 switchPlayer();
+            }
+        }
+        return;
+    }
+
+    // Fallback: Find closest valid move based on board position
+    // This helps when touch doesn't directly hit the small highlight mesh
+    const boardIntersects = raycaster.intersectObjects(boardGroup.children);
+    if (boardIntersects.length > 0 && validMoves.length > 0) {
+        const point = boardIntersects[0].point;
+        const boardOffset = -(BOARD_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
+
+        // Calculate touched cell position
+        const touchedX = (point.x - boardOffset + CELL_SIZE / 2) / CELL_SIZE;
+        const touchedY = (point.z - boardOffset + CELL_SIZE / 2) / CELL_SIZE;
+
+        // Find the closest valid move within tolerance
+        let closestMove = null;
+        let closestDistance = 1.5; // Maximum distance in cells to consider (1.5 = adjacent + some tolerance)
+
+        for (const move of validMoves) {
+            const dx = move.x - touchedX;
+            const dy = move.y - touchedY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestMove = move;
+            }
+        }
+
+        if (closestMove) {
+            if (movePawn(closestMove.x, closestMove.y)) {
+                if (!checkWin()) {
+                    switchPlayer();
+                }
             }
         }
     }
@@ -1001,14 +1137,20 @@ function toggleAI() {
     const btn = document.getElementById('ai-btn');
     const player1Name = document.getElementById('player1-name');
     const player2Name = document.getElementById('player2-name');
+    const rulesPlayer1 = document.getElementById('rules-player1');
+    const rulesPlayer2 = document.getElementById('rules-player2');
 
     if (aiEnabled) {
         btn.textContent = '🤖 AI: On';
         btn.classList.add('active');
 
-        // Rename players
+        // Rename players in fence panel
         if (player1Name) player1Name.textContent = '🔴 Player';
         if (player2Name) player2Name.textContent = '🟢 AI';
+
+        // Rename players in rules dialog
+        if (rulesPlayer1) rulesPlayer1.innerHTML = '<strong>🔴 Player:</strong> Move from bottom to top';
+        if (rulesPlayer2) rulesPlayer2.innerHTML = '<strong>🟢 AI:</strong> Move from top to bottom';
 
         // If it's already AI's turn, start thinking
         if (currentPlayer === aiPlayer && !gameOver && !aiThinking) {
@@ -1022,9 +1164,13 @@ function toggleAI() {
         btn.textContent = '🤖 AI';
         btn.classList.remove('active');
 
-        // Reset player names
+        // Reset player names in fence panel
         if (player1Name) player1Name.textContent = '🔴 Player 1';
         if (player2Name) player2Name.textContent = '🟢 Player 2';
+
+        // Reset player names in rules dialog
+        if (rulesPlayer1) rulesPlayer1.innerHTML = '<strong>🔴 Player 1:</strong> Move from bottom to top';
+        if (rulesPlayer2) rulesPlayer2.innerHTML = '<strong>🟢 Player 2:</strong> Move from top to bottom';
     }
 
     // Update UI to reflect changes (fence panel state, valid moves)
@@ -1539,7 +1685,7 @@ function getTopViewCameraDistance() {
     } else {
         cameraDistance = (boardSize / 2) / (Math.tan(fov / 2) * aspect);
     }
-    return cameraDistance * 1.1;
+    return cameraDistance * 0.99;
 }
 
 function animateToTopView() {
