@@ -62,8 +62,26 @@
         </div>
     </div>
 
+    <!-- Top Panel for Player 2 in Portrait Top View -->
+    <div id="top-fence-panel-container">
+        <div id="top-fence-panel">
+            <div class="fence-section" id="top-player2-section">
+                <h4 style="color: #4ecdc4;" id="top-player2-name">🟢 Player 2</h4>
+                <div class="fence-container">
+                    <div class="draggable-fence fence-horizontal player2-fence"
+                         data-player="2" data-orientation="h"></div>
+                    <div class="draggable-fence fence-vertical player2-fence"
+                         data-player="2" data-orientation="v"></div>
+                    <div class="fence-count" id="top-p2-fence-count">10 remaining</div>
+                </div>
+            </div>
+            <button id="top-fence-panel-toggle"></button>
+        </div>
+    </div>
+
     <!-- Drag Preview Element -->
     <div id="drag-preview"></div>
+
 
 
     <div id="winner-modal">
@@ -115,6 +133,15 @@
     });
     // Standard: Fence Panel offen
     fencePanel.classList.add('open');
+
+    // Top Fence Panel Slide Toggle (for Portrait Top View)
+    const topFencePanel = document.getElementById('top-fence-panel');
+    const topFencePanelToggle = document.getElementById('top-fence-panel-toggle');
+    topFencePanelToggle.addEventListener('click', function() {
+        topFencePanel.classList.toggle('open');
+    });
+    // Standard: Top Fence Panel offen
+    topFencePanel.classList.add('open');
 
     // UI Panel (left side) Slide Toggle
     const uiOverlay = document.getElementById('ui-overlay');

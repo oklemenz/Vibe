@@ -150,6 +150,9 @@ function init() {
 
     // Initialize UI state (including fence panel transparency)
     updateUI();
+
+    // Set initial camera position based on screen size
+    set3DView();
 }
 
 function setupLighting() {
@@ -608,6 +611,13 @@ function updateUI() {
     document.getElementById('p1-fence-count').textContent = `${fences[1]} remaining`;
     document.getElementById('p2-fence-count').textContent = `${fences[2]} remaining`;
 
+    // Update top fence panel count (for portrait top view)
+    const topP2FenceCount = document.getElementById('top-p2-fence-count');
+    if (topP2FenceCount) {
+        topP2FenceCount.textContent = `${fences[2]} remaining`;
+    }
+
+
     // Enable/disable fence elements based on current player and fence count
     updateFencePanelState();
 
@@ -901,10 +911,16 @@ function onWindowResize() {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 
-    // Update top view camera position if in top view mode
+    // Update camera position based on view mode
     if (viewMode === 'top') {
         setTopView();
+    } else {
+        // Update 3D view camera position to fit board on screen
+        set3DView();
     }
+
+    // Update layout class for fence panel positioning
+    updateTopViewLayoutClass();
 }
 
 function onClick(event) {
@@ -1137,6 +1153,7 @@ function toggleAI() {
     const btn = document.getElementById('ai-btn');
     const player1Name = document.getElementById('player1-name');
     const player2Name = document.getElementById('player2-name');
+    const topPlayer2Name = document.getElementById('top-player2-name');
     const rulesPlayer1 = document.getElementById('rules-player1');
     const rulesPlayer2 = document.getElementById('rules-player2');
 
@@ -1147,6 +1164,7 @@ function toggleAI() {
         // Rename players in fence panel
         if (player1Name) player1Name.textContent = '🔴 Player';
         if (player2Name) player2Name.textContent = '🟢 AI';
+        if (topPlayer2Name) topPlayer2Name.textContent = '🟢 AI';
 
         // Rename players in rules dialog
         if (rulesPlayer1) rulesPlayer1.innerHTML = '<strong>🔴 Player:</strong> Move from bottom to top';
@@ -1167,6 +1185,7 @@ function toggleAI() {
         // Reset player names in fence panel
         if (player1Name) player1Name.textContent = '🔴 Player 1';
         if (player2Name) player2Name.textContent = '🟢 Player 2';
+        if (topPlayer2Name) topPlayer2Name.textContent = '🟢 Player 2';
 
         // Reset player names in rules dialog
         if (rulesPlayer1) rulesPlayer1.innerHTML = '<strong>🔴 Player 1:</strong> Move from bottom to top';
@@ -1176,6 +1195,9 @@ function toggleAI() {
     // Update UI to reflect changes (fence panel state, valid moves)
     updateFencePanelState();
     updateValidMoves();
+
+    // Update layout class for player 2 rotation
+    updateTopViewLayoutClass();
 }
 
 // Switch starting player - switches between Player 1 and Player 2 at game start
@@ -1656,6 +1678,30 @@ function toggleTrain() {
 
 // ==================== VIEW MODE ====================
 
+function updateTopViewLayoutClass() {
+    const isPortrait = window.innerWidth < window.innerHeight;
+    const isLandscape = window.innerWidth >= window.innerHeight;
+
+    // Remove both classes first
+    document.body.classList.remove('top-view-portrait');
+    document.body.classList.remove('top-view-landscape');
+
+    if (viewMode === 'top') {
+        if (isPortrait) {
+            document.body.classList.add('top-view-portrait');
+        } else if (isLandscape) {
+            document.body.classList.add('top-view-landscape');
+        }
+    }
+
+    // Set two-player-mode class (for upside-down player 2 in landscape top view)
+    if (!aiEnabled) {
+        document.body.classList.add('two-player-mode');
+    } else {
+        document.body.classList.remove('two-player-mode');
+    }
+}
+
 function toggleView() {
     if (isAnimatingView) return; // Don't toggle while animating
 
@@ -1672,6 +1718,8 @@ function toggleView() {
         btn.classList.remove('active');
         animateTo3DView();
     }
+
+    updateTopViewLayoutClass();
 }
 
 function getTopViewCameraDistance() {
@@ -1686,6 +1734,42 @@ function getTopViewCameraDistance() {
         cameraDistance = (boardSize / 2) / (Math.tan(fov / 2) * aspect);
     }
     return cameraDistance * 0.99;
+}
+
+function get3DViewCameraPosition() {
+    // Calculate optimal camera position for 3D view to fit board on screen
+    const boardSize = BOARD_SIZE * CELL_SIZE + 0.5;
+    const aspect = window.innerWidth / window.innerHeight;
+    const fov = camera.fov * (Math.PI / 180);
+
+    // For 3D view, we need to account for the viewing angle
+    const viewAngle = Math.PI / 4; // 45 degrees
+
+    // In 3D perspective view, the board appears foreshortened
+    const effectiveBoardDepth = boardSize * Math.cos(viewAngle);
+    const effectiveBoardWidth = boardSize;
+
+    // Calculate distance needed for both dimensions
+    let distanceForHeight, distanceForWidth;
+
+    // For height: need to see the full foreshortened depth plus some height for perspective
+    const verticalFov = fov;
+    const horizontalFov = 2 * Math.atan(Math.tan(fov / 2) * aspect);
+
+    // Distance needed to fit board width (add padding for landscape)
+    distanceForWidth = (effectiveBoardWidth / 2) / Math.tan(horizontalFov / 2) * 1.15;
+
+    // Distance needed to fit board depth (add padding for portrait)
+    distanceForHeight = (effectiveBoardDepth / 2 + 1.5) / Math.tan(verticalFov / 2) * 1.1;
+
+    // Use the larger distance to ensure board fits completely
+    const distance = Math.max(distanceForWidth, distanceForHeight);
+
+    // Calculate Y and Z positions (45 degree angle)
+    const y = distance * Math.sin(viewAngle);
+    const z = -distance * Math.cos(viewAngle);
+
+    return { x: 0, y: y, z: z };
 }
 
 function animateToTopView() {
@@ -1746,9 +1830,10 @@ function animateTo3DView() {
     const startUp = camera.up.clone();
     const startTarget = controls.target.clone();
 
-    const endPos = new THREE.Vector3(0, 8, -8);
+    const pos = get3DViewCameraPosition();
+    const endPos = new THREE.Vector3(pos.x, pos.y, pos.z);
     const endUp = new THREE.Vector3(0, 1, 0);
-    const endTarget = new THREE.Vector3(0, 0, -0.5);
+    const endTarget = new THREE.Vector3(0, 0, 0);
 
     animationStartTime = Date.now();
 
@@ -1809,13 +1894,14 @@ function setTopView() {
 function set3DView() {
     // Restore default 3D camera position
     // Reset camera up vector to default
+    const pos = get3DViewCameraPosition();
     camera.up.set(0, 1, 0);
-    camera.position.set(0, 8, -8);
-    camera.lookAt(0, 0, 1);
+    camera.position.set(pos.x, pos.y, pos.z);
+    camera.lookAt(0, 0, 0);
 
     // Unlock OrbitControls
     controls.enabled = true;
-    controls.target.set(0, 0, -0.5);
+    controls.target.set(0, 0, 0);
     controls.update();
 }
 

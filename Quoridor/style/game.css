@@ -724,3 +724,167 @@ body {
     box-shadow: 0 5px 20px rgba(108, 92, 231, 0.4);
 }
 
+/* Portrait Top View - Move fence panel to bottom */
+body.top-view-portrait #right-panel-container {
+    top: auto;
+    bottom: 0;
+    right: 50%;
+    transform: translateX(50%);
+    width: auto;
+    height: auto;
+}
+
+body.top-view-portrait #fence-panel {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: 0;
+    transform: translateY(100%);
+    border-radius: 15px 15px 0 0;
+    padding: 10px 20px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    max-height: none;
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+body.top-view-portrait #fence-panel.open {
+    transform: translateY(0);
+}
+
+body.top-view-portrait #fence-panel-toggle {
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    right: auto;
+    width: 80px;
+    height: 30px;
+    border-radius: 10px 10px 0 0;
+}
+
+body.top-view-portrait #fence-panel-toggle::after {
+    content: '▲';
+}
+
+body.top-view-portrait #fence-panel.open #fence-panel-toggle::after {
+    content: '▼';
+}
+
+body.top-view-portrait .fence-section {
+    margin-bottom: 0;
+}
+
+body.top-view-portrait .fence-container {
+    flex-direction: row;
+    gap: 10px;
+}
+
+/* Landscape Top View - Swap player positions and rotate player 2 */
+body.top-view-landscape #fence-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+body.top-view-landscape #player1-section {
+    order: 2;
+}
+
+body.top-view-landscape #player2-section {
+    order: 1;
+}
+
+/* Only rotate player 2 in two-player mode (not AI) */
+body.top-view-landscape.two-player-mode #player2-section {
+    transform: rotate(180deg);
+}
+
+/* Top Fence Panel for Player 2 in Portrait Top View */
+#top-fence-panel-container {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    pointer-events: none;
+}
+
+#top-fence-panel-container > * {
+    pointer-events: auto;
+}
+
+#top-fence-panel {
+    position: relative;
+    top: 0;
+    transform: translateY(-100%);
+    background: rgba(0, 0, 0, 0.8);
+    padding: 10px 20px;
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+    border-radius: 0 0 15px 15px;
+    color: white;
+    transition: transform 0.3s ease;
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+#top-fence-panel.open {
+    transform: translateY(0);
+}
+
+#top-fence-panel-toggle {
+    position: absolute;
+    bottom: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80px;
+    height: 30px;
+    background: rgba(0, 0, 0, 0.8);
+    border: none;
+    border-radius: 0 0 10px 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 16px;
+    transition: background 0.3s;
+}
+
+#top-fence-panel-toggle:hover {
+    background: rgba(0, 0, 0, 1);
+}
+
+#top-fence-panel-toggle::after {
+    content: '▼';
+}
+
+#top-fence-panel.open #top-fence-panel-toggle::after {
+    content: '▲';
+}
+
+#top-player2-section {
+    margin-bottom: 0;
+    text-align: center;
+    transform: rotate(180deg);
+}
+
+#top-player2-section .fence-container {
+    flex-direction: row;
+    gap: 10px;
+}
+
+/* Show top panel and hide player 2 in bottom panel for portrait top view - only in two-player mode */
+body.top-view-portrait.two-player-mode #top-fence-panel-container {
+    display: block;
+}
+
+body.top-view-portrait.two-player-mode #player2-section {
+    display: none;
+}
+
+
