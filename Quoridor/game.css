@@ -55,6 +55,40 @@ body {
     margin-top: 0.5px;
 }
 
+/* Side Panel Containers */
+#left-panel-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 200px;
+    overflow: visible;
+    z-index: 100;
+    pointer-events: none;
+}
+
+#right-panel-container {
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 100%;
+    width: 200px;
+    overflow: visible;
+    z-index: 100;
+    pointer-events: none;
+}
+
+@media (orientation: landscape) {
+    #left-panel-container,
+    #right-panel-container {
+        height: 100vh;
+    }
+}
+
+#left-panel-container > *, #right-panel-container > * {
+    pointer-events: auto;
+}
+
 /* UI Overlay */
 #ui-overlay {
     position: absolute;
@@ -267,7 +301,7 @@ body {
 /* Fence Panel Styles */
 #fence-panel {
     position: absolute;
-    top: 0px;
+    top: 0;
     top: calc(0px + env(safe-area-inset-top, 0px));
     right: 0;
     transform: translateX(100%);
@@ -366,31 +400,6 @@ body {
     border-radius: 4px;
 }
 
-/* Drop Hint */
-.drop-hint {
-    position: absolute;
-    bottom: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.7);
-    color: white;
-    padding: 10px 20px;
-    border-radius: 10px;
-    font-size: 14px;
-    z-index: 100;
-    display: none;
-    min-width: 350px;
-}
-
-@media (orientation: landscape) {
-    .drop-hint {
-        bottom: calc(10px - env(safe-area-inset-left, 0px));
-    }
-}
-
-.drop-hint.active {
-    display: block;
-}
 
 /* Collapsible Header */
 .collapsible-header {
@@ -420,7 +429,7 @@ body {
     gap: 5px;
 }
 
-#game-info-btn, #controls-btn, #ai-btn, #rules-btn, #switch-btn, #train-btn, #restart-game-btn {
+#game-info-btn, #controls-btn, #ai-btn, #rules-btn, #switch-btn, #train-btn, #restart-game-btn, #view-btn {
     background: rgba(0, 0, 0, 0.7);
     color: white;
     border: none;
@@ -433,7 +442,7 @@ body {
     text-align: left;
 }
 
-#game-info-btn:hover, #controls-btn:hover, #ai-btn:hover, #rules-btn:hover, #switch-btn:hover, #train-btn:hover, #restart-game-btn:hover {
+#game-info-btn:hover, #controls-btn:hover, #ai-btn:hover, #rules-btn:hover, #switch-btn:hover, #train-btn:hover, #restart-game-btn:hover, #view-btn:hover {
     background: rgba(0, 0, 0, 0.9);
 }
 
@@ -463,6 +472,14 @@ body {
 
 #train-btn.active:hover {
     background: #d68910;
+}
+
+#view-btn.active {
+    background: #3498db;
+}
+
+#view-btn.active:hover {
+    background: #2980b9;
 }
 
 /* Button Wrapper */

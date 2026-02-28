@@ -29,6 +29,12 @@ let aiThinking = false;
 let trainEnabled = false;
 let trainProposalGroup = null;
 
+// View mode state
+let viewMode = '3d'; // '3d' or 'top'
+let isAnimatingView = false;
+let animationStartTime = 0;
+const VIEW_ANIMATION_DURATION = 800; // ms
+
 // Drag & Drop state
 let isDragging = false;
 let dragOrientation = 'h';
@@ -54,8 +60,8 @@ function init() {
 
     // Camera setup
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 10, -10);
-    camera.lookAt(0, 0, 1);
+    camera.position.set(0, 8.1, -8.1);
+    camera.lookAt(0, 0, 0);
 
     // Renderer setup
     renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -68,10 +74,11 @@ function init() {
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.minDistance = 8;
+    controls.minDistance = 10;
     controls.maxDistance = 30;
     controls.maxPolarAngle = Math.PI / 2.2;
-    controls.target.set(0, 0, -0.5);
+    controls.enablePan = false;
+    controls.target.set(0, 0, 0);
 
     // Raycaster for mouse interaction
     raycaster = new THREE.Raycaster();
@@ -128,6 +135,9 @@ function init() {
 
     // Train toggle button
     document.getElementById('train-btn').addEventListener('click', toggleTrain);
+
+    // View toggle button
+    document.getElementById('view-btn').addEventListener('click', toggleView);
 
     // Initialize UI state (including fence panel transparency)
     updateUI();
@@ -371,6 +381,9 @@ function updateValidMoves() {
 
     if (isDragging || gameOver) return;
 
+    // Don't show highlights when AI is enabled and it's AI's turn
+    if (aiEnabled && currentPlayer === aiPlayer) return;
+
     validMoves = getValidMoves(currentPlayer);
     const boardOffset = -(BOARD_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
 
@@ -563,13 +576,6 @@ function switchPlayer() {
 }
 
 function updateUI() {
-    const playerIndicator = document.getElementById('current-player');
-    const playerEmoji = currentPlayer === 1 ? '🔴' : '🟢';
-    playerIndicator.textContent = `${playerEmoji} Player ${currentPlayer}'s Turn`;
-    playerIndicator.className = currentPlayer === 1 ? 'player1-turn' : 'player2-turn';
-
-    document.getElementById('player1-fences').textContent = `🔴 Player 1 (Fences: ${fences[1]})`;
-    document.getElementById('player2-fences').textContent = `🟢 Player 2 (Fences: ${fences[2]})`;
 
     // Update fence panel counts
     document.getElementById('p1-fence-count').textContent = `${fences[1]} remaining`;
@@ -609,8 +615,10 @@ function updateFencePanelState() {
         }
     });
 
+    // Player 2 fences: also disable when AI is enabled (AI controls Player 2)
+    const isAIPlayer2 = aiEnabled && aiPlayer === 2;
     p2Fences.forEach(fence => {
-        if (currentPlayer !== 2 || fences[2] <= 0 || gameOver) {
+        if (currentPlayer !== 2 || fences[2] <= 0 || gameOver || isAIPlayer2) {
             fence.classList.add('disabled');
         } else {
             fence.classList.remove('disabled');
@@ -618,18 +626,19 @@ function updateFencePanelState() {
     });
 
     // Make entire section transparent for inactive player
+    // Also make AI section transparent when AI is enabled
     if (p1Section) {
         p1Section.style.opacity = (currentPlayer === 1 && fences[1] > 0 && !gameOver) ? '1' : '0.3';
     }
     if (p2Section) {
-        p2Section.style.opacity = (currentPlayer === 2 && fences[2] > 0 && !gameOver) ? '1' : '0.3';
+        const p2Active = currentPlayer === 2 && fences[2] > 0 && !gameOver && !isAIPlayer2;
+        p2Section.style.opacity = p2Active ? '1' : '0.3';
     }
 }
 
 function setupDragAndDrop() {
     const draggableFences = document.querySelectorAll('.draggable-fence');
     const dragPreview = document.getElementById('drag-preview');
-    const dropHint = document.getElementById('drop-hint');
 
     // Use custom mouse-based drag instead of HTML5 drag API
     // This allows keyboard events to work during drag
@@ -672,8 +681,6 @@ function setupDragAndDrop() {
         // Hide the original element during drag
         fence.style.opacity = '0.3';
 
-        // Show drop hint
-        dropHint.classList.add('active');
 
         // Hide move highlights during fence placement
         updateValidMoves();
@@ -737,7 +744,6 @@ function setupDragAndDrop() {
         // Reset drag state
         isDragging = false;
         dragPreview.style.display = 'none';
-        dropHint.classList.remove('active');
         clearPreview();
         updateValidMoves();
 
@@ -837,6 +843,11 @@ function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+
+    // Update top view camera position if in top view mode
+    if (viewMode === 'top') {
+        setTopView();
+    }
 }
 
 function onClick(event) {
@@ -988,10 +999,16 @@ function animate() {
 function toggleAI() {
     aiEnabled = !aiEnabled;
     const btn = document.getElementById('ai-btn');
+    const player1Name = document.getElementById('player1-name');
+    const player2Name = document.getElementById('player2-name');
 
     if (aiEnabled) {
         btn.textContent = '🤖 AI: On';
         btn.classList.add('active');
+
+        // Rename players
+        if (player1Name) player1Name.textContent = '🔴 Player';
+        if (player2Name) player2Name.textContent = '🟢 AI';
 
         // If it's already AI's turn, start thinking
         if (currentPlayer === aiPlayer && !gameOver && !aiThinking) {
@@ -1004,7 +1021,15 @@ function toggleAI() {
     } else {
         btn.textContent = '🤖 AI';
         btn.classList.remove('active');
+
+        // Reset player names
+        if (player1Name) player1Name.textContent = '🔴 Player 1';
+        if (player2Name) player2Name.textContent = '🟢 Player 2';
     }
+
+    // Update UI to reflect changes (fence panel state, valid moves)
+    updateFencePanelState();
+    updateValidMoves();
 }
 
 // Switch starting player - switches between Player 1 and Player 2 at game start
@@ -1470,17 +1495,182 @@ function toggleTrain() {
     const btn = document.getElementById('train-btn');
 
     if (trainEnabled) {
-        btn.textContent = '🎓 Train: On';
+        btn.textContent = '🎓 Assist: On';
         btn.classList.add('active');
         // Show proposal for current player if it's Player 1's turn
         if (currentPlayer === 1 && !gameOver) {
             showTrainProposal();
         }
     } else {
-        btn.textContent = '🎓 Train';
+        btn.textContent = '🎓 Assist';
         btn.classList.remove('active');
         clearTrainProposal();
     }
+}
+
+// ==================== VIEW MODE ====================
+
+function toggleView() {
+    if (isAnimatingView) return; // Don't toggle while animating
+
+    const btn = document.getElementById('view-btn');
+
+    if (viewMode === '3d') {
+        viewMode = 'top';
+        btn.textContent = '👁️ View: Top';
+        btn.classList.add('active');
+        animateToTopView();
+    } else {
+        viewMode = '3d';
+        btn.textContent = '👁️ View: 3D';
+        btn.classList.remove('active');
+        animateTo3DView();
+    }
+}
+
+function getTopViewCameraDistance() {
+    const boardSize = BOARD_SIZE * CELL_SIZE + 0.5;
+    const aspect = window.innerWidth / window.innerHeight;
+    const fov = camera.fov * (Math.PI / 180);
+
+    let cameraDistance;
+    if (aspect >= 1) {
+        cameraDistance = (boardSize / 2) / Math.tan(fov / 2);
+    } else {
+        cameraDistance = (boardSize / 2) / (Math.tan(fov / 2) * aspect);
+    }
+    return cameraDistance * 1.1;
+}
+
+function animateToTopView() {
+    isAnimatingView = true;
+    controls.enabled = false;
+
+    const startPos = camera.position.clone();
+    const startUp = camera.up.clone();
+    const startTarget = controls.target.clone();
+
+    const endPos = new THREE.Vector3(0, getTopViewCameraDistance(), 0);
+    const endUp = new THREE.Vector3(0, 0, 1);
+    const endTarget = new THREE.Vector3(0, 0, 0);
+
+    animationStartTime = Date.now();
+
+    function animateStep() {
+        const elapsed = Date.now() - animationStartTime;
+        const progress = Math.min(elapsed / VIEW_ANIMATION_DURATION, 1);
+
+        // Easing function (ease-in-out)
+        const eased = progress < 0.5
+            ? 2 * progress * progress
+            : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+        // Interpolate position
+        camera.position.lerpVectors(startPos, endPos, eased);
+
+        // Interpolate up vector
+        camera.up.lerpVectors(startUp, endUp, eased).normalize();
+
+        // Interpolate target
+        controls.target.lerpVectors(startTarget, endTarget, eased);
+
+        camera.lookAt(controls.target);
+        controls.update();
+
+        if (progress < 1) {
+            requestAnimationFrame(animateStep);
+        } else {
+            isAnimatingView = false;
+            // Ensure final state
+            camera.position.copy(endPos);
+            camera.up.copy(endUp);
+            controls.target.copy(endTarget);
+            camera.lookAt(controls.target);
+            controls.update();
+        }
+    }
+
+    animateStep();
+}
+
+function animateTo3DView() {
+    isAnimatingView = true;
+
+    const startPos = camera.position.clone();
+    const startUp = camera.up.clone();
+    const startTarget = controls.target.clone();
+
+    const endPos = new THREE.Vector3(0, 8, -8);
+    const endUp = new THREE.Vector3(0, 1, 0);
+    const endTarget = new THREE.Vector3(0, 0, -0.5);
+
+    animationStartTime = Date.now();
+
+    function animateStep() {
+        const elapsed = Date.now() - animationStartTime;
+        const progress = Math.min(elapsed / VIEW_ANIMATION_DURATION, 1);
+
+        // Easing function (ease-in-out)
+        const eased = progress < 0.5
+            ? 2 * progress * progress
+            : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+        // Interpolate position
+        camera.position.lerpVectors(startPos, endPos, eased);
+
+        // Interpolate up vector
+        camera.up.lerpVectors(startUp, endUp, eased).normalize();
+
+        // Interpolate target
+        controls.target.lerpVectors(startTarget, endTarget, eased);
+
+        camera.lookAt(controls.target);
+        controls.update();
+
+        if (progress < 1) {
+            requestAnimationFrame(animateStep);
+        } else {
+            isAnimatingView = false;
+            controls.enabled = true;
+            // Ensure final state
+            camera.position.copy(endPos);
+            camera.up.copy(endUp);
+            controls.target.copy(endTarget);
+            camera.lookAt(controls.target);
+            controls.update();
+        }
+    }
+
+    animateStep();
+}
+
+function setTopView() {
+    // Calculate the optimal camera distance to fit the board
+    const cameraDistance = getTopViewCameraDistance();
+
+    // Position camera directly above the board center
+    // Rotate 180 degrees by setting camera up vector to negative Z
+    camera.up.set(0, 0, 1);
+    camera.position.set(0, cameraDistance, 0);
+    camera.lookAt(0, 0, 0);
+
+    // Lock OrbitControls
+    controls.enabled = false;
+    controls.target.set(0, 0, 0);
+    controls.update();
+}
+
+function set3DView() {
+    // Restore default 3D camera position
+    // Reset camera up vector to default
+    camera.up.set(0, 1, 0);
+    camera.position.set(0, 8, -8);
+    camera.lookAt(0, 0, 1);
+
+    // Unlock OrbitControls
+    controls.enabled = true;
+    controls.target.set(0, 0, -0.5);
+    controls.update();
 }
 
 function showTrainProposal() {
