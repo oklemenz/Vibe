@@ -892,15 +892,24 @@ function showFencePreview(x, y, orientation) {
     }
 
     const canPlace = canPlaceFence(x, y, orientation) && fences[currentPlayer] > 0;
+
+    // Don't show preview if there's already a fence at this exact position
+    const hasExistingFence = placedFences.some(f => f.x === x && f.y === y);
+    if (hasExistingFence && !canPlace) {
+        return; // Don't render preview over existing fence
+    }
+
     const fenceMaterial = new THREE.MeshStandardMaterial({
         color: canPlace ? 0x00ff00 : 0xff0000,
         transparent: true,
-        opacity: 0.5
+        opacity: 0.6,
+        depthWrite: false, // Prevent z-fighting with existing fences
     });
     const fenceMesh = new THREE.Mesh(fenceGeometry, fenceMaterial);
+    fenceMesh.renderOrder = 999; // Render on top
     fenceMesh.position.set(
         boardOffset + x * CELL_SIZE + CELL_SIZE / 2,
-        FENCE_HEIGHT / 2,
+        FENCE_HEIGHT / 2 + 0.01, // Slightly higher to avoid z-fighting with board
         boardOffset + y * CELL_SIZE + CELL_SIZE / 2
     );
     previewGroup.add(fenceMesh);

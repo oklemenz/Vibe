@@ -85,10 +85,6 @@ body {
     }
 }
 
-#left-panel-container > *, #right-panel-container > * {
-    pointer-events: auto;
-}
-
 /* UI Overlay */
 #ui-overlay {
     position: absolute;
@@ -103,11 +99,18 @@ body {
     border-radius: 0 15px 15px 0;
     transition: transform 0.3s ease;
     max-height: 400px;
+    pointer-events: none;
 }
 
 #ui-overlay.open {
     transform: translateX(0);
     padding-left: calc(0px + env(safe-area-inset-left, 0px))
+}
+
+/* Only toggle button and buttons receive pointer events in UI overlay */
+#ui-panel-toggle,
+#ui-overlay button {
+    pointer-events: auto;
 }
 
 #ui-panel-toggle {
@@ -334,10 +337,17 @@ body {
     color: white;
     transition: transform 0.3s ease;
     max-height: 400px;
+    pointer-events: none;
 }
 
 #fence-panel.open {
     transform: translateX(0);
+}
+
+/* Only toggle button and fences receive pointer events */
+#fence-panel-toggle,
+#fence-panel .draggable-fence:not(.disabled) {
+    pointer-events: auto;
 }
 
 #fence-panel h3 {
@@ -782,23 +792,25 @@ body.top-view-portrait .fence-container {
     gap: 10px;
 }
 
-/* Landscape Top View - Swap player positions and rotate player 2 */
-body.top-view-landscape #fence-panel {
-    display: flex;
-    flex-direction: column;
-}
+/* Landscape Top View - Swap player positions and rotate player 2 - only on mobile devices */
+@media (hover: none) and (pointer: coarse) {
+    body.top-view-landscape #fence-panel {
+        display: flex;
+        flex-direction: column;
+    }
 
-body.top-view-landscape #player1-section {
-    order: 2;
-}
+    body.top-view-landscape #player1-section {
+        order: 2;
+    }
 
-body.top-view-landscape #player2-section {
-    order: 1;
-}
+    body.top-view-landscape #player2-section {
+        order: 1;
+    }
 
-/* Only rotate player 2 in two-player mode (not AI) */
-body.top-view-landscape.two-player-mode #player2-section {
-    transform: rotate(180deg);
+    /* Only rotate player 2 in two-player mode (not AI) */
+    body.top-view-landscape.two-player-mode #player2-section {
+        transform: rotate(180deg);
+    }
 }
 
 /* Top Fence Panel for Player 2 in Portrait Top View */
@@ -810,10 +822,6 @@ body.top-view-landscape.two-player-mode #player2-section {
     transform: translateX(-50%);
     z-index: 100;
     pointer-events: none;
-}
-
-#top-fence-panel-container > * {
-    pointer-events: auto;
 }
 
 #top-fence-panel {
@@ -830,6 +838,13 @@ body.top-view-landscape.two-player-mode #player2-section {
     flex-direction: row;
     gap: 20px;
     align-items: flex-start;
+    pointer-events: none;
+}
+
+/* Only toggle button and fences receive pointer events */
+#top-fence-panel-toggle,
+#top-fence-panel .draggable-fence:not(.disabled) {
+    pointer-events: auto;
 }
 
 #top-fence-panel.open {
@@ -870,7 +885,13 @@ body.top-view-landscape.two-player-mode #player2-section {
 #top-player2-section {
     margin-bottom: 0;
     text-align: center;
-    transform: rotate(180deg);
+}
+
+/* Only rotate upside-down on mobile devices */
+@media (hover: none) and (pointer: coarse) {
+    #top-player2-section {
+        transform: rotate(180deg);
+    }
 }
 
 #top-player2-section .fence-container {
@@ -878,13 +899,15 @@ body.top-view-landscape.two-player-mode #player2-section {
     gap: 10px;
 }
 
-/* Show top panel and hide player 2 in bottom panel for portrait top view - only in two-player mode */
-body.top-view-portrait.two-player-mode #top-fence-panel-container {
-    display: block;
-}
+/* Show top panel and hide player 2 in bottom panel for portrait top view - only in two-player mode on mobile */
+@media (hover: none) and (pointer: coarse) {
+    body.top-view-portrait.two-player-mode #top-fence-panel-container {
+        display: block;
+    }
 
-body.top-view-portrait.two-player-mode #player2-section {
-    display: none;
+    body.top-view-portrait.two-player-mode #player2-section {
+        display: none;
+    }
 }
 
 
