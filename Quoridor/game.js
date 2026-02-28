@@ -690,13 +690,14 @@ function setupDragAndDrop() {
             e.preventDefault();
         });
 
-        // Touch events for mobile
+        // Touch events for mobile - use touchstart with improved handling
         fence.addEventListener('touchstart', (e) => {
+            e.stopPropagation(); // Prevent event from bubbling
             const touch = e.touches[0];
             if (startFenceDrag(fence, touch.clientX, touch.clientY)) {
                 e.preventDefault();
             }
-        }, { passive: false });
+        }, { passive: false, capture: true });
     });
 
     // Helper function to start fence drag
@@ -1167,7 +1168,7 @@ function toggleAI() {
     const rulesPlayer2 = document.getElementById('rules-player2');
 
     if (aiEnabled) {
-        btn.textContent = '🤖 AI: On';
+        btn.textContent = '🤖 AI On';
         btn.classList.add('active');
 
         // Rename players in fence panel
@@ -1672,7 +1673,7 @@ function toggleTrain() {
     const btn = document.getElementById('train-btn');
 
     if (trainEnabled) {
-        btn.textContent = '🎓 Assist: On';
+        btn.textContent = '🎓 Assist On';
         btn.classList.add('active');
         // Show proposal for current player if it's Player 1's turn
         if (currentPlayer === 1 && !gameOver) {
@@ -1718,12 +1719,12 @@ function toggleView() {
 
     if (viewMode === '3d') {
         viewMode = 'top';
-        btn.textContent = '👁️ View: Top';
+        btn.textContent = '👁️ View Top';
         btn.classList.add('active');
         animateToTopView();
     } else {
         viewMode = '3d';
-        btn.textContent = '👁️ View: 3D';
+        btn.textContent = '👁️ View 3D';
         btn.classList.remove('active');
         animateTo3DView();
     }

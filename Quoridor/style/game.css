@@ -99,40 +99,75 @@ body {
     border-radius: 0 15px 15px 0;
     transition: transform 0.3s ease;
     max-height: 400px;
-    pointer-events: none;
+    pointer-events: auto; /* Panel receives events */
+    touch-action: none; /* Suppress default touch events like scroll, pinch */
 }
 
 #ui-overlay.open {
     transform: translateX(0);
-    padding-left: calc(0px + env(safe-area-inset-left, 0px))
+    padding-left: calc(10px + env(safe-area-inset-left, 10px))
 }
 
-/* Only toggle button and buttons receive pointer events in UI overlay */
+/* Center left panel vertically on mobile portrait */
+@media (hover: none) and (pointer: coarse) and (orientation: portrait) {
+    #ui-overlay {
+        top: 50%;
+        transform: translateX(-100%) translateY(-50%);
+    }
+
+    #ui-overlay.open {
+        transform: translateX(0) translateY(-50%);
+    }
+}
+
+/* Center left panel vertically on mobile (all orientations) */
+@media (hover: none) and (pointer: coarse) {
+    #ui-overlay {
+        top: 50%;
+        transform: translateX(-100%) translateY(-50%);
+    }
+
+    #ui-overlay.open {
+        transform: translateX(0) translateY(-50%);
+    }
+}
+
+/* Toggle button and buttons are interactive */
 #ui-panel-toggle,
 #ui-overlay button {
     pointer-events: auto;
+    touch-action: manipulation;
+    cursor: pointer;
 }
 
 #ui-panel-toggle {
     position: absolute;
-    right: -30px;
+    right: -24px;
     top: 20px;
-    width: 30px;
-    height: 80px;
+    width: 24px;
+    height: 60px;
     background: rgba(0, 0, 0, 0.8);
     border: none;
-    border-radius: 0 10px 10px 0;
+    border-radius: 0 8px 8px 0;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    font-size: 16px;
+    font-size: 12px;
     transition: background 0.3s;
 }
 
 #ui-panel-toggle:hover {
     background: rgba(0, 0, 0, 1);
+}
+
+/* Center drawer handle vertically on mobile */
+@media (hover: none) and (pointer: coarse) {
+    #ui-panel-toggle {
+        top: 50%;
+        transform: translateY(-50%);
+    }
 }
 
 #ui-panel-toggle::after {
@@ -337,46 +372,92 @@ body {
     color: white;
     transition: transform 0.3s ease;
     max-height: 400px;
-    pointer-events: none;
+    pointer-events: auto; /* Panel receives events */
+    touch-action: none; /* Suppress default touch events like scroll, pinch */
 }
 
 #fence-panel.open {
     transform: translateX(0);
 }
 
-/* Only toggle button and fences receive pointer events */
-#fence-panel-toggle,
+/* Toggle button and fences are interactive */
+#fence-panel-toggle {
+    pointer-events: auto;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
 #fence-panel .draggable-fence:not(.disabled) {
     pointer-events: auto;
+    touch-action: none; /* Allow drag */
 }
 
 #fence-panel h3 {
     text-align: center;
-    margin-bottom: 15px;
+    margin-bottom: 10px;
     font-size: 18px;
 }
 
 .fence-section {
-    margin-bottom: 20px;
     text-align: center;
 }
 
+/* Default order for fence panel elements */
+#player1-section {
+    order: 0;
+}
+
+.fence-panel-separator {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.3);
+    margin: 10px 0;
+    width: 100%;
+    order: 1;
+}
+
+#player2-section {
+    order: 2;
+}
+
+/* Vertical separator when panel is at bottom (portrait top-view) */
+body.top-view-portrait .fence-panel-separator {
+    border-top: none;
+    border-left: 1px solid rgba(255, 255, 255, 0.3);
+    margin: 0 8px;
+    width: 1px;
+    height: auto;
+    align-self: stretch;
+}
+
 .fence-section h4 {
-    margin-bottom: 10px;
+    margin-bottom: 5px;
     font-size: 14px;
+    font-weight: normal;
 }
 
 .fence-container {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    padding: 5px;
 }
 
 .draggable-fence {
     cursor: grab;
     transition: transform 0.2s, box-shadow 0.2s;
     border-radius: 4px;
+    position: relative;
+}
+
+/* Larger touch target for mobile */
+.draggable-fence::before {
+    content: '';
+    position: absolute;
+    top: -15px;
+    left: -15px;
+    right: -15px;
+    bottom: -15px;
 }
 
 .draggable-fence:hover {
@@ -386,6 +467,7 @@ body {
 
 .draggable-fence:active {
     cursor: grabbing;
+    transform: scale(1.15);
 }
 
 .draggable-fence.disabled {
@@ -396,11 +478,11 @@ body {
 
 .fence-horizontal {
     width: 80px;
-    height: 15px;
+    height: 20px;
 }
 
 .fence-vertical {
-    width: 15px;
+    width: 20px;
     height: 80px;
 }
 
@@ -417,7 +499,7 @@ body {
 .fence-count {
     font-size: 12px;
     color: #aaa;
-    margin-top: 5px;
+    margin: 8px 0;
     font-weight: bold;
 }
 
@@ -550,19 +632,19 @@ body {
 /* Fence Panel Toggle */
 #fence-panel-toggle {
     position: absolute;
-    left: -30px;
+    left: -24px;
     top: 20px;
-    width: 30px;
-    height: 80px;
+    width: 24px;
+    height: 60px;
     background: rgba(0, 0, 0, 0.8);
     border: none;
-    border-radius: 10px 0 0 10px;
+    border-radius: 8px 0 0 8px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    font-size: 16px;
+    font-size: 12px;
     transition: background 0.3s;
 }
 
@@ -576,6 +658,24 @@ body {
 
 #fence-panel.open #fence-panel-toggle::after {
     content: '▶';
+}
+
+/* Center right panel vertically on mobile (all orientations) */
+@media (hover: none) and (pointer: coarse) {
+    #fence-panel {
+        top: 50%;
+        transform: translateX(100%) translateY(-50%);
+    }
+
+    #fence-panel.open {
+        transform: translateX(0) translateY(-50%);
+    }
+
+    /* Center drawer handle vertically */
+    #fence-panel-toggle {
+        top: 50%;
+        transform: translateY(-50%);
+    }
 }
 
 /* Confirm Restart Modal */
@@ -750,14 +850,14 @@ body.top-view-portrait #fence-panel {
     right: auto;
     bottom: 0;
     transform: translateY(100%);
-    border-radius: 15px 15px 0 0;
-    padding: 10px 20px;
-    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    border-radius: 12px 12px 0 0;
+    padding: 3px 10px;
+    padding-bottom: calc(3px + env(safe-area-inset-bottom, 0px));
     max-height: none;
     display: flex;
     flex-direction: row;
-    gap: 20px;
-    align-items: flex-start;
+    gap: 10px;
+    align-items: center;
 }
 
 body.top-view-portrait #fence-panel.open {
@@ -766,13 +866,14 @@ body.top-view-portrait #fence-panel.open {
 
 body.top-view-portrait #fence-panel-toggle {
     position: absolute;
-    top: -30px;
+    top: -24px;
     left: 50%;
     transform: translateX(-50%);
     right: auto;
-    width: 80px;
-    height: 30px;
-    border-radius: 10px 10px 0 0;
+    width: 60px;
+    height: 24px;
+    border-radius: 8px 8px 0 0;
+    font-size: 12px;
 }
 
 body.top-view-portrait #fence-panel-toggle::after {
@@ -792,19 +893,75 @@ body.top-view-portrait .fence-container {
     gap: 10px;
 }
 
+/* Mobile portrait: wider panels with label on the left */
+@media (hover: none) and (pointer: coarse) and (orientation: portrait) {
+    body.top-view-portrait #fence-panel,
+    body.top-view-portrait #top-fence-panel {
+        flex-direction: row;
+        align-items: center;
+        gap: 10px;
+        padding: 3px 10px;
+    }
+
+    body.top-view-portrait .fence-section,
+    body.top-view-portrait #top-player2-section {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+        text-align: left;
+    }
+
+    body.top-view-portrait .fence-section h4,
+    body.top-view-portrait #top-player2-section h4,
+    body.top-view-portrait .fence-section > div:first-child,
+    body.top-view-portrait #top-player2-section > h4 {
+        margin-bottom: 0;
+        white-space: nowrap;
+        min-width: 75px;
+        font-size: 13px;
+    }
+
+    body.top-view-portrait .fence-container,
+    body.top-view-portrait #top-player2-section .fence-container {
+        flex-direction: row;
+        gap: 6px;
+        align-items: center;
+        padding: 2px;
+    }
+
+    /* Smaller fences in top/bottom panels */
+    body.top-view-portrait .draggable-fence.fence-horizontal {
+        width: 50px;
+        height: 12px;
+    }
+
+    body.top-view-portrait .draggable-fence.fence-vertical {
+        width: 12px;
+        height: 50px;
+    }
+
+    body.top-view-portrait .fence-count {
+        font-size: 10px;
+        margin-top: 0;
+    }
+}
+
 /* Landscape Top View - Swap player positions and rotate player 2 - only on mobile devices */
 @media (hover: none) and (pointer: coarse) {
     body.top-view-landscape #fence-panel {
         display: flex;
         flex-direction: column;
+        padding-bottom: 12px;
     }
 
+    /* Swap players: Player2 first, then separator, then Player1 */
     body.top-view-landscape #player1-section {
         order: 2;
     }
 
     body.top-view-landscape #player2-section {
-        order: 1;
+        order: 0;
     }
 
     /* Only rotate player 2 in two-player mode (not AI) */
@@ -821,7 +978,6 @@ body.top-view-portrait .fence-container {
     left: 50%;
     transform: translateX(-50%);
     z-index: 100;
-    pointer-events: none;
 }
 
 #top-fence-panel {
@@ -829,22 +985,29 @@ body.top-view-portrait .fence-container {
     top: 0;
     transform: translateY(-100%);
     background: rgba(0, 0, 0, 0.8);
-    padding: 10px 20px;
-    padding-top: calc(10px + env(safe-area-inset-top, 0px));
-    border-radius: 0 0 15px 15px;
+    padding: 3px 10px;
+    padding-top: calc(3px + env(safe-area-inset-top, 0px));
+    border-radius: 0 0 12px 12px;
     color: white;
     transition: transform 0.3s ease;
     display: flex;
     flex-direction: row;
-    gap: 20px;
-    align-items: flex-start;
-    pointer-events: none;
+    gap: 10px;
+    align-items: center;
+    pointer-events: auto; /* Panel receives events */
+    touch-action: none; /* Suppress default touch events like scroll, pinch */
 }
 
-/* Only toggle button and fences receive pointer events */
-#top-fence-panel-toggle,
+/* Toggle button and fences are interactive */
+#top-fence-panel-toggle {
+    pointer-events: auto;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
 #top-fence-panel .draggable-fence:not(.disabled) {
     pointer-events: auto;
+    touch-action: none; /* Allow drag */
 }
 
 #top-fence-panel.open {
@@ -853,20 +1016,20 @@ body.top-view-portrait .fence-container {
 
 #top-fence-panel-toggle {
     position: absolute;
-    bottom: -30px;
+    bottom: -24px;
     left: 50%;
     transform: translateX(-50%);
-    width: 80px;
-    height: 30px;
+    width: 60px;
+    height: 24px;
     background: rgba(0, 0, 0, 0.8);
     border: none;
-    border-radius: 0 0 10px 10px;
+    border-radius: 0 0 8px 8px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    font-size: 16px;
+    font-size: 12px;
     transition: background 0.3s;
 }
 
@@ -885,13 +1048,19 @@ body.top-view-portrait .fence-container {
 #top-player2-section {
     margin-bottom: 0;
     text-align: center;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
 }
 
-/* Only rotate upside-down on mobile devices */
-@media (hover: none) and (pointer: coarse) {
-    #top-player2-section {
-        transform: rotate(180deg);
-    }
+#top-player2-section h4 {
+    font-weight: normal;
+    margin: 0;
+}
+
+#top-player2-section .fence-count {
+    margin: 0 8px;
 }
 
 #top-player2-section .fence-container {
@@ -899,14 +1068,24 @@ body.top-view-portrait .fence-container {
     gap: 10px;
 }
 
-/* Show top panel and hide player 2 in bottom panel for portrait top view - only in two-player mode on mobile */
-@media (hover: none) and (pointer: coarse) {
-    body.top-view-portrait.two-player-mode #top-fence-panel-container {
+/* On mobile portrait: always show top panel and hide player 2 in bottom panel */
+@media (hover: none) and (pointer: coarse) and (orientation: portrait) {
+    body.top-view-portrait #top-fence-panel-container {
         display: block;
     }
 
-    body.top-view-portrait.two-player-mode #player2-section {
+    body.top-view-portrait #player2-section {
         display: none;
+    }
+
+    /* Hide separator when player 2 is in top panel */
+    body.top-view-portrait .fence-panel-separator {
+        display: none;
+    }
+
+    /* Only rotate upside-down when AI is OFF (two-player-mode) */
+    body.top-view-portrait.two-player-mode #top-player2-section {
+        transform: rotate(180deg);
     }
 }
 

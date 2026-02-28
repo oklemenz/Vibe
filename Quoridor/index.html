@@ -24,7 +24,7 @@
         <div id="ui-overlay">
             <button id="ui-panel-toggle"></button>
             <div class="top-bar">
-                <button id="view-btn">👁️ View: 3D</button>
+                <button id="view-btn">👁️ View 3D</button>
                 <button id="ai-btn">🤖 AI</button>
                 <button id="train-btn">🎓 Assist</button>
                 <button id="restart-game-btn">🔄 Restart</button>
@@ -40,7 +40,7 @@
         <div id="fence-panel">
             <button id="fence-panel-toggle"></button>
             <div class="fence-section" id="player1-section">
-                <h4 style="color: #ff6b6b;" id="player1-name">🔴 Player 1</h4>
+                <div style="color: #ff6b6b;" id="player1-name">🔴 Player 1</div>
                 <div class="fence-container">
                     <div class="draggable-fence fence-horizontal player1-fence"
                          data-player="1" data-orientation="h"></div>
@@ -49,8 +49,9 @@
                     <div class="fence-count" id="p1-fence-count">10 remaining</div>
                 </div>
             </div>
+            <hr class="fence-panel-separator">
             <div class="fence-section" id="player2-section">
-                <h4 style="color: #4ecdc4;" id="player2-name">🟢 Player 2</h4>
+                <div style="color: #4ecdc4;" id="player2-name">🟢 Player 2</div>
                 <div class="fence-container">
                     <div class="draggable-fence fence-horizontal player2-fence"
                          data-player="2" data-orientation="h"></div>
