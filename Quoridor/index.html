@@ -7,7 +7,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Quoridor" />
-    <link rel="stylesheet" href="game.css">
+    <link rel="icon" type="image/png" href="img/favicon.png"/>
+    <link rel="shortcut icon" type="image/png" href="img/touch-icon-152.png"/>
+    <link rel="apple-touch-icon" href="img/touch-icon-152.png"/>
+    <link rel="apple-touch-icon" sizes="152x152" href="img/touch-icon-152.png"/>
+    <link rel="apple-touch-icon" sizes="180x180" href="img/touch-icon-180.png"/>
+    <link rel="manifest" href="site.webmanifest"/>
+    <link rel="stylesheet" href="style/game.css">
     <title>Quoridor</title>
 </head>
 <body>
@@ -83,7 +89,7 @@
     <!-- Introduction Dialog -->
     <div id="intro-modal">
         <div id="intro-content">
-            <h1>🎮 Quoridor</h1>
+            <h1>Quoridor</h1>
             <div class="intro-rules">
                 <p><strong>🎯 Goal:</strong> Reach the opposite side of the board first!</p>
                 <p id="rules-player1"><strong>🔴 Player 1:</strong> Move from bottom to top</p>
@@ -93,7 +99,7 @@
                 <p><strong>🧱 Fence:</strong> Drag a fence from the right panel onto the board to block your opponent</p>
                 <p><strong>⚠️ Rule:</strong> You cannot completely block a player's path to the goal</p>
             </div>
-            <button id="intro-start-btn">▶️ Play</button>
+            <button id="intro-start-btn">Play</button>
         </div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
