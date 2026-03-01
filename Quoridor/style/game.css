@@ -97,10 +97,14 @@ body {
     z-index: 100;
     background: rgba(0, 0, 0, 0.8);
     border-radius: 0 15px 15px 0;
-    transition: transform 0.3s ease;
     max-height: 400px;
     pointer-events: auto; /* Panel receives events */
     touch-action: none; /* Suppress default touch events like scroll, pinch */
+}
+
+/* Transition only when panel has been interacted with */
+#ui-overlay.enable-transition {
+    transition: transform 0.3s ease;
 }
 
 #ui-overlay.open {
@@ -142,9 +146,9 @@ body {
 
 #ui-panel-toggle {
     position: absolute;
-    right: -24px;
+    right: calc(-24px - env(safe-area-inset-left, 0px));
     top: 20px;
-    width: 24px;
+    width: calc(24px + env(safe-area-inset-left, 0px));
     height: 60px;
     background: rgba(0, 0, 0, 0.8);
     border: none;
@@ -153,9 +157,17 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    padding-left: env(safe-area-inset-left, 0px);
     color: white;
     font-size: 12px;
     transition: background 0.3s;
+}
+
+/* When panel is open, use normal size (no inset compensation needed) */
+#ui-overlay.open #ui-panel-toggle {
+    right: -24px;
+    width: 24px;
+    padding-left: 0;
 }
 
 #ui-panel-toggle:hover {
@@ -370,10 +382,14 @@ body {
     border-radius: 15px 0 0 15px;
     z-index: 100;
     color: white;
-    transition: transform 0.3s ease;
     max-height: 400px;
     pointer-events: auto; /* Panel receives events */
     touch-action: none; /* Suppress default touch events like scroll, pinch */
+}
+
+/* Transition only when panel has been interacted with (has transitioning class) */
+#fence-panel.enable-transition {
+    transition: transform 0.3s ease;
 }
 
 #fence-panel.open {
@@ -410,7 +426,8 @@ body {
 .fence-panel-separator {
     border: none;
     border-top: 1px solid rgba(255, 255, 255, 0.3);
-    margin: 10px 0;
+    margin: 5px 0;
+    padding-top: 5px;
     width: 100%;
     order: 1;
 }
@@ -419,15 +436,6 @@ body {
     order: 2;
 }
 
-/* Vertical separator when panel is at bottom (portrait top-view) */
-body.top-view-portrait .fence-panel-separator {
-    border-top: none;
-    border-left: 1px solid rgba(255, 255, 255, 0.3);
-    margin: 0 8px;
-    width: 1px;
-    height: auto;
-    align-self: stretch;
-}
 
 .fence-section h4 {
     margin-bottom: 5px;
@@ -826,7 +834,7 @@ body.top-view-portrait .fence-panel-separator {
     font-size: 18px;
     font-weight: bold;
     transition: transform 0.2s, box-shadow 0.2s;
-    margin-bottom: -10px;
+    margin-bottom: -5px;
 }
 
 #intro-start-btn:hover {
@@ -834,8 +842,8 @@ body.top-view-portrait .fence-panel-separator {
     box-shadow: 0 5px 20px rgba(108, 92, 231, 0.4);
 }
 
-/* Portrait Top View - Move fence panel to bottom */
-body.top-view-portrait #right-panel-container {
+/* Portrait Mode - Move fence panel to bottom (all devices) */
+body.portrait-mode #right-panel-container {
     top: auto;
     bottom: 0;
     right: 50%;
@@ -844,7 +852,7 @@ body.top-view-portrait #right-panel-container {
     height: auto;
 }
 
-body.top-view-portrait #fence-panel {
+body.portrait-mode #fence-panel {
     position: relative;
     top: auto;
     right: auto;
@@ -860,11 +868,11 @@ body.top-view-portrait #fence-panel {
     align-items: center;
 }
 
-body.top-view-portrait #fence-panel.open {
+body.portrait-mode #fence-panel.open {
     transform: translateY(0);
 }
 
-body.top-view-portrait #fence-panel-toggle {
+body.portrait-mode #fence-panel-toggle {
     position: absolute;
     top: -24px;
     left: 50%;
@@ -876,35 +884,57 @@ body.top-view-portrait #fence-panel-toggle {
     font-size: 12px;
 }
 
-body.top-view-portrait #fence-panel-toggle::after {
+body.portrait-mode #fence-panel-toggle::after {
     content: '▲';
 }
 
-body.top-view-portrait #fence-panel.open #fence-panel-toggle::after {
+body.portrait-mode #fence-panel.open #fence-panel-toggle::after {
     content: '▼';
 }
 
-body.top-view-portrait .fence-section {
+body.portrait-mode .fence-section {
     margin-bottom: 0;
 }
 
-body.top-view-portrait .fence-container {
+body.portrait-mode .fence-container {
     flex-direction: row;
     gap: 10px;
 }
 
+/* Hide separator in portrait mode - players are side by side */
+body.portrait-mode .fence-panel-separator {
+    display: none;
+}
+
+/* Top Fence Panel - only show on mobile portrait (for Player 2 separate panel) */
+/* On mobile portrait: show top panel and hide player 2 in bottom panel */
+@media (hover: none) and (pointer: coarse) and (orientation: portrait) {
+    body.portrait-mode #top-fence-panel-container {
+        display: block;
+    }
+
+    body.portrait-mode #player2-section {
+        display: none;
+    }
+
+    /* Only rotate upside-down when AI is OFF (two-player-mode) */
+    body.portrait-mode.two-player-mode #top-player2-section {
+        transform: rotate(180deg);
+    }
+}
+
 /* Mobile portrait: wider panels with label on the left */
 @media (hover: none) and (pointer: coarse) and (orientation: portrait) {
-    body.top-view-portrait #fence-panel,
-    body.top-view-portrait #top-fence-panel {
+    body.mobile-portrait #fence-panel,
+    body.mobile-portrait #top-fence-panel {
         flex-direction: row;
         align-items: center;
         gap: 10px;
         padding: 3px 10px;
     }
 
-    body.top-view-portrait .fence-section,
-    body.top-view-portrait #top-player2-section {
+    body.mobile-portrait .fence-section,
+    body.mobile-portrait #top-player2-section {
         display: flex;
         flex-direction: row;
         align-items: center;
@@ -912,18 +942,18 @@ body.top-view-portrait .fence-container {
         text-align: left;
     }
 
-    body.top-view-portrait .fence-section h4,
-    body.top-view-portrait #top-player2-section h4,
-    body.top-view-portrait .fence-section > div:first-child,
-    body.top-view-portrait #top-player2-section > h4 {
+    body.mobile-portrait .fence-section h4,
+    body.mobile-portrait #top-player2-section h4,
+    body.mobile-portrait .fence-section > div:first-child,
+    body.mobile-portrait #top-player2-section > h4 {
         margin-bottom: 0;
         white-space: nowrap;
-        min-width: 75px;
+        min-width: 50px;
         font-size: 13px;
     }
 
-    body.top-view-portrait .fence-container,
-    body.top-view-portrait #top-player2-section .fence-container {
+    body.mobile-portrait .fence-container,
+    body.mobile-portrait #top-player2-section .fence-container {
         flex-direction: row;
         gap: 6px;
         align-items: center;
@@ -931,41 +961,42 @@ body.top-view-portrait .fence-container {
     }
 
     /* Smaller fences in top/bottom panels */
-    body.top-view-portrait .draggable-fence.fence-horizontal {
+    body.mobile-portrait .draggable-fence.fence-horizontal {
         width: 50px;
         height: 12px;
     }
 
-    body.top-view-portrait .draggable-fence.fence-vertical {
+    body.mobile-portrait .draggable-fence.fence-vertical {
         width: 12px;
         height: 50px;
     }
 
-    body.top-view-portrait .fence-count {
+    body.mobile-portrait .fence-count {
         font-size: 10px;
-        margin-top: 0;
+        margin: 0 5px;
     }
 }
 
-/* Landscape Top View - Swap player positions and rotate player 2 - only on mobile devices */
+/* Landscape Mode on Mobile - Swap player positions and rotate player 2 */
 @media (hover: none) and (pointer: coarse) {
-    body.top-view-landscape #fence-panel {
+    body.mobile-landscape #fence-panel {
         display: flex;
         flex-direction: column;
         padding-bottom: 12px;
     }
 
     /* Swap players: Player2 first, then separator, then Player1 */
-    body.top-view-landscape #player1-section {
+    body.mobile-landscape #player1-section {
         order: 2;
     }
 
-    body.top-view-landscape #player2-section {
+    body.mobile-landscape #player2-section {
         order: 0;
+        margin-bottom: 5px;
     }
 
     /* Only rotate player 2 in two-player mode (not AI) */
-    body.top-view-landscape.two-player-mode #player2-section {
+    body.mobile-landscape.two-player-mode #player2-section {
         transform: rotate(180deg);
     }
 }
@@ -975,6 +1006,7 @@ body.top-view-portrait .fence-container {
     display: none;
     position: absolute;
     top: 0;
+    top: env(safe-area-inset-top, 0px);
     left: 50%;
     transform: translateX(-50%);
     z-index: 100;
@@ -986,16 +1018,19 @@ body.top-view-portrait .fence-container {
     transform: translateY(-100%);
     background: rgba(0, 0, 0, 0.8);
     padding: 3px 10px;
-    padding-top: calc(3px + env(safe-area-inset-top, 0px));
     border-radius: 0 0 12px 12px;
     color: white;
-    transition: transform 0.3s ease;
     display: flex;
     flex-direction: row;
     gap: 10px;
     align-items: center;
     pointer-events: auto; /* Panel receives events */
     touch-action: none; /* Suppress default touch events like scroll, pinch */
+}
+
+/* Transition only when panel has been interacted with */
+#top-fence-panel.enable-transition {
+    transition: transform 0.3s ease;
 }
 
 /* Toggle button and fences are interactive */
@@ -1060,7 +1095,7 @@ body.top-view-portrait .fence-container {
 }
 
 #top-player2-section .fence-count {
-    margin: 0 8px;
+    margin: 0 5px;
 }
 
 #top-player2-section .fence-container {
@@ -1068,25 +1103,5 @@ body.top-view-portrait .fence-container {
     gap: 10px;
 }
 
-/* On mobile portrait: always show top panel and hide player 2 in bottom panel */
-@media (hover: none) and (pointer: coarse) and (orientation: portrait) {
-    body.top-view-portrait #top-fence-panel-container {
-        display: block;
-    }
-
-    body.top-view-portrait #player2-section {
-        display: none;
-    }
-
-    /* Hide separator when player 2 is in top panel */
-    body.top-view-portrait .fence-panel-separator {
-        display: none;
-    }
-
-    /* Only rotate upside-down when AI is OFF (two-player-mode) */
-    body.top-view-portrait.two-player-mode #top-player2-section {
-        transform: rotate(180deg);
-    }
-}
 
 

@@ -9,6 +9,50 @@ const FENCE_LENGTH = 2;
 const PAWN_RADIUS = 0.3;
 const PAWN_HEIGHT = 0.6;
 
+// Local Storage Keys
+const STORAGE_KEYS = {
+    VIEW_MODE: 'quoridor_viewMode',
+    AI_ENABLED: 'quoridor_aiEnabled',
+    TRAIN_ENABLED: 'quoridor_trainEnabled',
+    INTRO_SHOWN: 'quoridor_introShown',
+    PANEL_LEFT_OPEN: 'quoridor_panelLeftOpen',
+    PANEL_RIGHT_OPEN: 'quoridor_panelRightOpen',
+    PANEL_TOP_OPEN: 'quoridor_panelTopOpen'
+};
+
+// Load settings from Local Storage
+function loadSettings() {
+    const savedViewMode = localStorage.getItem(STORAGE_KEYS.VIEW_MODE);
+    if (savedViewMode) {
+        viewMode = savedViewMode;
+    }
+
+    const savedAiEnabled = localStorage.getItem(STORAGE_KEYS.AI_ENABLED);
+    if (savedAiEnabled !== null) {
+        aiEnabled = savedAiEnabled === 'true';
+    }
+
+    const savedTrainEnabled = localStorage.getItem(STORAGE_KEYS.TRAIN_ENABLED);
+    if (savedTrainEnabled !== null) {
+        trainEnabled = savedTrainEnabled === 'true';
+    }
+}
+
+// Save a setting to Local Storage
+function saveSetting(key, value) {
+    localStorage.setItem(key, value);
+}
+
+// Check if intro should be shown
+function shouldShowIntro() {
+    return localStorage.getItem(STORAGE_KEYS.INTRO_SHOWN) !== 'true';
+}
+
+// Mark intro as shown
+function markIntroAsShown() {
+    localStorage.setItem(STORAGE_KEYS.INTRO_SHOWN, 'true');
+}
+
 // Game state
 let currentPlayer = 1;
 let fences = { 1: 10, 2: 10 };
@@ -148,11 +192,56 @@ function init() {
     // View toggle button
     document.getElementById('view-btn').addEventListener('click', toggleView);
 
+    // Load saved settings from Local Storage
+    loadSettings();
+
+    // Apply loaded settings to UI
+    applyLoadedSettings();
+
     // Initialize UI state (including fence panel transparency)
     updateUI();
 
-    // Set initial camera position based on screen size
-    set3DView();
+    // Set initial camera position based on screen size and loaded view mode
+    if (viewMode === 'top') {
+        setTopView();
+    } else {
+        set3DView();
+    }
+
+    // Update layout classes for panel positioning on mobile devices
+    updateMobileLayoutClass();
+}
+
+// Apply loaded settings to UI elements
+function applyLoadedSettings() {
+    // Apply AI setting
+    const aiBtn = document.getElementById('ai-btn');
+    if (aiEnabled) {
+        aiBtn.textContent = '🤖 AI On';
+        aiBtn.classList.add('active');
+        document.getElementById('player2-name').innerHTML = '🟢 AI';
+        document.getElementById('top-player2-name').innerHTML = '🟢 AI';
+    }
+
+    // Apply Train/Assist setting
+    const trainBtn = document.getElementById('train-btn');
+    if (trainEnabled) {
+        trainBtn.textContent = '🎓 Assist On';
+        trainBtn.classList.add('active');
+        // Show train proposal if it's Player 1's turn
+        if (currentPlayer === 1 && !gameOver) {
+            setTimeout(() => {
+                showTrainProposal();
+            }, 100);
+        }
+    }
+
+    // Apply View setting
+    const viewBtn = document.getElementById('view-btn');
+    if (viewMode === 'top') {
+        viewBtn.textContent = '👁️ View Top';
+        viewBtn.classList.add('active');
+    }
 }
 
 function setupLighting() {
@@ -643,6 +732,7 @@ function updateFencePanelState() {
     const p2Fences = document.querySelectorAll('.player2-fence');
     const p1Section = document.getElementById('player1-section');
     const p2Section = document.getElementById('player2-section');
+    const topP2Section = document.getElementById('top-player2-section');
 
     p1Fences.forEach(fence => {
         if (currentPlayer !== 1 || fences[1] <= 0 || gameOver) {
@@ -667,9 +757,15 @@ function updateFencePanelState() {
     if (p1Section) {
         p1Section.style.opacity = (currentPlayer === 1 && fences[1] > 0 && !gameOver) ? '1' : '0.3';
     }
+
+    const p2Active = currentPlayer === 2 && fences[2] > 0 && !gameOver && !isAIPlayer2;
     if (p2Section) {
-        const p2Active = currentPlayer === 2 && fences[2] > 0 && !gameOver && !isAIPlayer2;
         p2Section.style.opacity = p2Active ? '1' : '0.3';
+    }
+
+    // Also update top panel for Player 2 (used in mobile portrait mode)
+    if (topP2Section) {
+        topP2Section.style.opacity = p2Active ? '1' : '0.3';
     }
 }
 
@@ -930,7 +1026,7 @@ function onWindowResize() {
     }
 
     // Update layout class for fence panel positioning
-    updateTopViewLayoutClass();
+    updateMobileLayoutClass();
 }
 
 function onClick(event) {
@@ -1160,6 +1256,10 @@ function animate() {
 
 function toggleAI() {
     aiEnabled = !aiEnabled;
+
+    // Save setting to Local Storage
+    saveSetting(STORAGE_KEYS.AI_ENABLED, aiEnabled);
+
     const btn = document.getElementById('ai-btn');
     const player1Name = document.getElementById('player1-name');
     const player2Name = document.getElementById('player2-name');
@@ -1207,7 +1307,7 @@ function toggleAI() {
     updateValidMoves();
 
     // Update layout class for player 2 rotation
-    updateTopViewLayoutClass();
+    updateMobileLayoutClass();
 }
 
 // Switch starting player - switches between Player 1 and Player 2 at game start
@@ -1670,6 +1770,10 @@ function makeAIMove() {
 
 function toggleTrain() {
     trainEnabled = !trainEnabled;
+
+    // Save setting to Local Storage
+    saveSetting(STORAGE_KEYS.TRAIN_ENABLED, trainEnabled);
+
     const btn = document.getElementById('train-btn');
 
     if (trainEnabled) {
@@ -1688,23 +1792,42 @@ function toggleTrain() {
 
 // ==================== VIEW MODE ====================
 
-function updateTopViewLayoutClass() {
+function updateMobileLayoutClass() {
     const isPortrait = window.innerWidth < window.innerHeight;
     const isLandscape = window.innerWidth >= window.innerHeight;
+    const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-    // Remove both classes first
-    document.body.classList.remove('top-view-portrait');
-    document.body.classList.remove('top-view-landscape');
+    // Remove all layout classes first
+    document.body.classList.remove('mobile-portrait');
+    document.body.classList.remove('mobile-landscape');
+    document.body.classList.remove('portrait-mode');
+    document.body.classList.remove('landscape-mode');
 
-    if (viewMode === 'top') {
+    // Remove transition class to prevent animation during orientation change
+    const fencePanel = document.getElementById('fence-panel');
+    const topFencePanel = document.getElementById('top-fence-panel');
+    const uiOverlay = document.getElementById('ui-overlay');
+    if (fencePanel) fencePanel.classList.remove('enable-transition');
+    if (topFencePanel) topFencePanel.classList.remove('enable-transition');
+    if (uiOverlay) uiOverlay.classList.remove('enable-transition');
+
+    // Add portrait/landscape classes for all devices (panel positioning)
+    if (isPortrait) {
+        document.body.classList.add('portrait-mode');
+    } else if (isLandscape) {
+        document.body.classList.add('landscape-mode');
+    }
+
+    // Add mobile-specific classes for touch behavior
+    if (isMobile) {
         if (isPortrait) {
-            document.body.classList.add('top-view-portrait');
+            document.body.classList.add('mobile-portrait');
         } else if (isLandscape) {
-            document.body.classList.add('top-view-landscape');
+            document.body.classList.add('mobile-landscape');
         }
     }
 
-    // Set two-player-mode class (for upside-down player 2 in landscape top view)
+    // Set two-player-mode class (for upside-down player 2 in landscape view)
     if (!aiEnabled) {
         document.body.classList.add('two-player-mode');
     } else {
@@ -1729,7 +1852,10 @@ function toggleView() {
         animateTo3DView();
     }
 
-    updateTopViewLayoutClass();
+    // Save setting to Local Storage
+    saveSetting(STORAGE_KEYS.VIEW_MODE, viewMode);
+
+    updateMobileLayoutClass();
 }
 
 function getTopViewCameraDistance() {

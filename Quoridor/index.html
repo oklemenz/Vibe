@@ -15,8 +15,21 @@
     <link rel="manifest" href="site.webmanifest"/>
     <link rel="stylesheet" href="style/game.css">
     <title>Quoridor</title>
+    <style>
+        /* Hide everything until loaded - black screen */
+        body.loading {
+            background: #1a1a2e;
+        }
+        body.loading > *:not(#game-container) {
+            visibility: hidden;
+            opacity: 0;
+        }
+        body.loading #game-container {
+            visibility: hidden;
+        }
+    </style>
 </head>
-<body>
+<body class="loading">
     <div id="game-container"></div>
 
     <!-- Left Panel Container -->
@@ -105,8 +118,8 @@
         </div>
     </div>
 
-    <!-- Introduction Dialog -->
-    <div id="intro-modal">
+    <!-- Introduction Dialog - initially hidden, shown via JS if first time -->
+    <div id="intro-modal" class="hidden">
         <div id="intro-content">
             <h1>Quoridor</h1>
             <div class="intro-rules">
@@ -126,32 +139,71 @@
     <script src="game.js"></script>
     <script>
 
-    // Fence Panel Slide Toggle
+    // Helper function to get panel state from storage
+    function getPanelState(key, defaultValue) {
+        const stored = localStorage.getItem(key);
+        if (stored !== null) {
+            return stored === 'true';
+        }
+        return defaultValue;
+    }
+
+    // Fence Panel Slide Toggle (right/bottom panel)
     const fencePanel = document.getElementById('fence-panel');
     const fencePanelToggle = document.getElementById('fence-panel-toggle');
+
+    // Load saved state (default: open)
+    if (getPanelState(STORAGE_KEYS.PANEL_RIGHT_OPEN, true)) {
+        fencePanel.classList.add('open');
+    } else {
+        fencePanel.classList.remove('open');
+    }
+
     fencePanelToggle.addEventListener('click', function() {
+        // Enable transition for user interaction
+        fencePanel.classList.add('enable-transition');
         fencePanel.classList.toggle('open');
+        // Save state
+        localStorage.setItem(STORAGE_KEYS.PANEL_RIGHT_OPEN, fencePanel.classList.contains('open'));
     });
-    // Standard: Fence Panel offen
-    fencePanel.classList.add('open');
 
     // Top Fence Panel Slide Toggle (for Portrait Top View)
     const topFencePanel = document.getElementById('top-fence-panel');
     const topFencePanelToggle = document.getElementById('top-fence-panel-toggle');
+
+    // Load saved state (default: open)
+    if (getPanelState(STORAGE_KEYS.PANEL_TOP_OPEN, true)) {
+        topFencePanel.classList.add('open');
+    } else {
+        topFencePanel.classList.remove('open');
+    }
+
     topFencePanelToggle.addEventListener('click', function() {
+        // Enable transition for user interaction
+        topFencePanel.classList.add('enable-transition');
         topFencePanel.classList.toggle('open');
+        // Save state
+        localStorage.setItem(STORAGE_KEYS.PANEL_TOP_OPEN, topFencePanel.classList.contains('open'));
     });
-    // Standard: Top Fence Panel offen
-    topFencePanel.classList.add('open');
 
     // UI Panel (left side) Slide Toggle
     const uiOverlay = document.getElementById('ui-overlay');
     const uiPanelToggle = document.getElementById('ui-panel-toggle');
+
+    // Load saved state (default: closed)
+    if (getPanelState(STORAGE_KEYS.PANEL_LEFT_OPEN, false)) {
+        uiOverlay.classList.add('open');
+    } else {
+        uiOverlay.classList.remove('open');
+    }
+
     uiPanelToggle.addEventListener('click', function() {
+        // Enable transition for user interaction
+        uiOverlay.classList.add('enable-transition');
         uiOverlay.classList.toggle('open');
+        // Save state
+        localStorage.setItem(STORAGE_KEYS.PANEL_LEFT_OPEN, uiOverlay.classList.contains('open'));
     });
-    // Standard: UI Panel geschlossen
-    // uiOverlay.classList.add('open');
 
     // Restart Game Button with Confirmation Dialog
     const restartGameBtn = document.getElementById('restart-game-btn');
@@ -193,10 +245,20 @@
     const introModal = document.getElementById('intro-modal');
     const introStartBtn = document.getElementById('intro-start-btn');
 
+    // Show intro only if it's the first time (modal starts hidden)
+    if (typeof shouldShowIntro === 'function' && shouldShowIntro()) {
+        introModal.classList.remove('hidden');
+    }
+
     introStartBtn.addEventListener('click', function(e) {
         e.stopPropagation();
         e.preventDefault();
         introModal.classList.add('hidden');
+
+        // Mark intro as shown in Local Storage
+        if (typeof markIntroAsShown === 'function') {
+            markIntroAsShown();
+        }
     });
 
     // Prevent clicks on the intro modal from reaching the game
@@ -210,6 +272,16 @@
         e.stopPropagation();
         // Zeige Intro-Modal
         introModal.classList.remove('hidden');
+    });
+
+    // Remove loading class to show UI after everything is initialized and rendered
+    // Use double requestAnimationFrame + small delay to ensure all layouts are complete
+    requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+            setTimeout(function() {
+                document.body.classList.remove('loading');
+            }, 50);
+        });
     });
     </script>
 </body>
