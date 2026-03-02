@@ -67,6 +67,207 @@ let gameOver = false;
 let aiEnabled = false;
 let aiPlayer = 2; // AI plays as Player 2
 let aiThinking = false;
+let aiWorker = null; // Web Worker for AI calculations
+let assistWorker = null; // Web Worker for Assist calculations
+let workersAvailable = false; // Flag for worker availability
+let workerBlobURL = null; // Cached blob URL for workers
+
+// Create worker from serialized functions (avoids code duplication)
+function createWorkerBlobURL() {
+    if (workerBlobURL) return workerBlobURL;
+
+    // Serialize existing functions to create worker code
+    const workerCode = `
+"use strict";
+const BOARD_SIZE = 9;
+
+self.onmessage = function(e) {
+    const { type, data } = e.data;
+    if (type === 'calculate') {
+        const { player, pawns, placedFences, fences, calculationId } = data;
+        try {
+            const bestMove = findBestMoveForPlayer(player, pawns, placedFences, fences);
+            self.postMessage({ type: 'result', bestMove, data: { calculationId } });
+        } catch (error) {
+            self.postMessage({ type: 'error', error: error.message, data: { calculationId } });
+        }
+    }
+};
+
+// Serialized functions from game.js
+${findBestMoveForPlayer.toString()}
+${minimaxForPlayer.toString()}
+${evaluateStateForPlayer.toString()}
+${generateFenceMovesForPlayer.toString()}
+${getShortestPathDistance.toString()}
+${getShortestPath.toString()}
+${isFenceBlockingTest.toString()}
+${hasPathToGoalTest.toString()}
+${canPlaceFenceTest.toString()}
+${getValidMovesTest.toString()}
+`;
+
+    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    workerBlobURL = URL.createObjectURL(blob);
+    return workerBlobURL;
+}
+
+// Initialize AI Worker - uses serialized functions as blob worker
+function initAIWorker() {
+    if (typeof Worker === 'undefined') {
+        workersAvailable = false;
+        return;
+    }
+
+    try {
+        const blobURL = createWorkerBlobURL();
+        aiWorker = new Worker(blobURL);
+        aiWorker.onmessage = handleAIWorkerMessage;
+        aiWorker.onerror = (e) => {
+            console.warn('AI Worker failed, using synchronous fallback');
+            aiWorker = null;
+            workersAvailable = false;
+        };
+        workersAvailable = true;
+    } catch (e) {
+        console.warn('Web Workers not available, using synchronous calculation');
+        workersAvailable = false;
+        aiWorker = null;
+    }
+}
+
+// Initialize Assist Worker
+function initAssistWorker() {
+    if (typeof Worker === 'undefined' || !workersAvailable) {
+        return;
+    }
+
+    try {
+        const blobURL = createWorkerBlobURL();
+        assistWorker = new Worker(blobURL);
+        assistWorker.onmessage = handleAssistWorkerMessage;
+        assistWorker.onerror = (e) => {
+            console.warn('Assist Worker failed, using synchronous fallback');
+            assistWorker = null;
+        };
+    } catch (e) {
+        assistWorker = null;
+    }
+}
+
+// Handle AI Worker response
+function handleAIWorkerMessage(e) {
+    const { type, bestMove, error } = e.data;
+
+    if (type === 'result' && bestMove && aiThinking) {
+        executeAIMove(bestMove);
+    } else if (type === 'error') {
+        console.error('AI Worker calculation error:', error);
+    }
+
+    aiThinking = false;
+    hideAIThinkingIndicator();
+}
+
+// Handle Assist Worker response
+function handleAssistWorkerMessage(e) {
+    const { type, bestMove, error } = e.data;
+
+    // Only process if this is still for the current calculation
+    // (player might have moved before calculation finished)
+    if (assistCalculationPlayer !== currentPlayer) {
+        return;
+    }
+
+    // Only hide the indicator, don't reset assistCalculationPlayer yet
+    hideCurrentPlayerThinkingIndicator();
+    assistCalculationPlayer = null;
+
+    if (type === 'result' && bestMove) {
+        displayTrainProposal(bestMove);
+    } else if (type === 'error') {
+        console.error('Assist Worker calculation error:', error);
+    }
+}
+
+// Cancel any pending AI/Assist calculations
+function cancelPendingCalculations() {
+
+    // Terminate and recreate workers to cancel pending calculations
+    if (aiWorker && workersAvailable) {
+        aiWorker.terminate();
+        initAIWorker();
+    }
+    if (assistWorker && workersAvailable) {
+        assistWorker.terminate();
+        initAssistWorker();
+    }
+    aiThinking = false;
+    assistCalculationPlayer = null;
+    hideAIThinkingIndicator();
+    hideCurrentPlayerThinkingIndicator();
+    clearTrainProposal();
+}
+
+// Start AI calculation - uses worker if available, otherwise sync fallback
+function startAICalculation() {
+    if (aiWorker && workersAvailable) {
+        // Use Web Worker (non-blocking)
+        aiWorker.postMessage({
+            type: 'calculate',
+            data: {
+                player: aiPlayer,
+                pawns: { 1: { ...pawns[1] }, 2: { ...pawns[2] } },
+                placedFences: [...placedFences],
+                fences: { ...fences }
+            }
+        });
+    } else {
+        // Synchronous fallback - use setTimeout to allow UI to update
+        setTimeout(() => {
+            const bestMove = findBestMoveForPlayer(aiPlayer);
+            aiThinking = false;
+            hideAIThinkingIndicator();
+            if (bestMove) {
+                executeAIMove(bestMove);
+            }
+        }, 50);
+    }
+}
+
+// Start Assist calculation - uses worker if available, otherwise sync fallback
+function startAssistCalculation() {
+    // Track which player this calculation is for
+    assistCalculationPlayer = currentPlayer;
+
+    showCurrentPlayerThinkingIndicator();
+
+    if (assistWorker && workersAvailable) {
+        // Use Web Worker (non-blocking)
+        assistWorker.postMessage({
+            type: 'calculate',
+            data: {
+                player: currentPlayer,
+                pawns: { 1: { ...pawns[1] }, 2: { ...pawns[2] } },
+                placedFences: [...placedFences],
+                fences: { ...fences }
+            }
+        });
+    } else {
+        // Synchronous fallback - use setTimeout to allow UI to update
+        setTimeout(() => {
+            // Check if this calculation is still valid
+            if (assistCalculationPlayer !== currentPlayer) return;
+
+            const bestMove = findBestMoveForPlayer(currentPlayer);
+            hideCurrentPlayerThinkingIndicator();
+            assistCalculationPlayer = null;
+            if (bestMove) {
+                displayTrainProposal(bestMove);
+            }
+        }, 50);
+    }
+}
 
 // Show AI thinking indicator (pulsating green icon)
 function showAIThinkingIndicator() {
@@ -144,17 +345,17 @@ function showCurrentPlayerThinkingIndicator() {
 }
 
 function hideCurrentPlayerThinkingIndicator() {
-    if (currentPlayer === 1) {
-        hidePlayer1ThinkingIndicator();
-    } else {
-        hidePlayer2ThinkingIndicator();
-    }
+    // Hide CSS indicators for both players (in case currentPlayer changed)
+    hidePlayer1ThinkingIndicator();
+    hidePlayer2ThinkingIndicator();
 }
-
 
 // Training mode state
 let trainEnabled = false;
 let trainProposalGroup = null;
+
+// Assist calculation tracking
+let assistCalculationPlayer = null; // Track which player the assist is calculating for
 
 // View mode state
 let viewMode = '3d'; // '3d' or 'top'
@@ -181,6 +382,10 @@ init();
 animate();
 
 function init() {
+    // Initialize Web Workers for AI calculations
+    initAIWorker();
+    initAssistWorker();
+
     // Scene setup
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1a1a2e);
@@ -201,6 +406,7 @@ function init() {
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
+    controls.enableZoom = false; // Disable zooming
     controls.minDistance = 10;
     controls.maxDistance = 30;
     controls.maxPolarAngle = Math.PI / 2.2;
@@ -764,23 +970,13 @@ function switchPlayer() {
     if (aiEnabled && currentPlayer === aiPlayer && !gameOver && !aiThinking) {
         aiThinking = true;
         showAIThinkingIndicator();
-        // Small delay to allow UI to update and show it's AI's turn
-        setTimeout(() => {
-            makeAIMove();
-            aiThinking = false;
-            hideAIThinkingIndicator();
-            // Show training proposal after AI move if it's now Player 1's turn
-            if (trainEnabled && currentPlayer === 1 && !gameOver) {
-                showTrainProposal();
-            }
-        }, 500);
+        // Start AI calculation in Web Worker
+        startAICalculation();
     } else if (trainEnabled && !gameOver) {
         // Show training proposal for current player (both players when AI is off)
         // Only show for Player 2 if AI is not enabled
         if (currentPlayer === 1 || (currentPlayer === 2 && !aiEnabled)) {
-            setTimeout(() => {
-                showTrainProposal();
-            }, 100);
+            startAssistCalculation();
         }
     }
 }
@@ -963,6 +1159,9 @@ function setupDragAndDrop() {
         const boardPos = getBoardPositionFromMouse(clientX, clientY);
 
         if (boardPos && placeFence(boardPos.x, boardPos.y, dragOrientation)) {
+            // Cancel any pending AI/Assist calculations
+            cancelPendingCalculations();
+
             if (!checkWin()) {
                 switchPlayer();
             }
@@ -1127,6 +1326,10 @@ function onClick(event) {
     const highlightIntersects = raycaster.intersectObjects(highlightsGroup.children);
     if (highlightIntersects.length > 0) {
         const target = highlightIntersects[0].object.userData;
+
+        // Cancel any pending AI/Assist calculations
+        cancelPendingCalculations();
+
         if (movePawn(target.x, target.y)) {
             if (!checkWin()) {
                 switchPlayer();
@@ -1231,6 +1434,10 @@ function onTouchEnd(event) {
     const highlightIntersects = raycaster.intersectObjects(highlightsGroup.children);
     if (highlightIntersects.length > 0) {
         const target = highlightIntersects[0].object.userData;
+
+        // Cancel any pending AI/Assist calculations
+        cancelPendingCalculations();
+
         if (movePawn(target.x, target.y)) {
             if (!checkWin()) {
                 switchPlayer();
@@ -1261,6 +1468,9 @@ function onTouchEnd(event) {
         const validMove = validMoves.find(move => move.x === touchedX && move.y === touchedY);
 
         if (validMove) {
+            // Cancel any pending AI/Assist calculations
+            cancelPendingCalculations();
+
             if (movePawn(validMove.x, validMove.y)) {
                 if (!checkWin()) {
                     switchPlayer();
@@ -1340,6 +1550,7 @@ function restartGame() {
 
 function animate() {
     requestAnimationFrame(animate);
+
     controls.update();
     renderer.render(scene, camera);
 }
@@ -1372,19 +1583,26 @@ function toggleAI() {
         if (rulesPlayer1) rulesPlayer1.innerHTML = '<strong>🔴 Player:</strong> Move from bottom to top';
         if (rulesPlayer2) rulesPlayer2.innerHTML = '<strong>🟢 AI:</strong> Move from top to bottom';
 
+        // Clear any existing assist proposal for Player 2 (AI doesn't need it)
+        if (currentPlayer === aiPlayer) {
+            clearTrainProposal();
+            hideCurrentPlayerThinkingIndicator();
+        }
+
         // If it's already AI's turn, start thinking
         if (currentPlayer === aiPlayer && !gameOver && !aiThinking) {
             aiThinking = true;
             showAIThinkingIndicator();
-            setTimeout(() => {
-                makeAIMove();
-                aiThinking = false;
-                hideAIThinkingIndicator();
-            }, 500);
+            startAICalculation();
         }
     } else {
         btn.textContent = '🤖 AI';
         btn.classList.remove('active');
+
+        // Cancel any pending AI calculation - Player 2 takes control again
+        if (aiThinking) {
+            cancelPendingCalculations();
+        }
 
         // Reset player names in fence panel
         if (player1Name) player1Name.textContent = '🔴 Player 1';
@@ -1394,6 +1612,11 @@ function toggleAI() {
         // Reset player names in rules dialog
         if (rulesPlayer1) rulesPlayer1.innerHTML = '<strong>🔴 Player 1:</strong> Move from bottom to top';
         if (rulesPlayer2) rulesPlayer2.innerHTML = '<strong>🟢 Player 2:</strong> Move from top to bottom';
+
+        // Show assist proposal for Player 2 if train mode is enabled
+        if (trainEnabled && currentPlayer === 2 && !gameOver) {
+            startAssistCalculation();
+        }
     }
 
     // Update UI to reflect changes (fence panel state, valid moves)
@@ -1431,16 +1654,12 @@ function toggleP2First() {
     if (aiEnabled && currentPlayer === aiPlayer && !aiThinking) {
         aiThinking = true;
         showAIThinkingIndicator();
-        setTimeout(() => {
-            makeAIMove();
-            aiThinking = false;
-            hideAIThinkingIndicator();
-        }, 500);
-    } else if (trainEnabled && currentPlayer === 1) {
-        // Show training proposal if enabled and it's Player 1's turn
-        setTimeout(() => {
-            showTrainProposal();
-        }, 100);
+        startAICalculation();
+    } else if (trainEnabled && !gameOver) {
+        // Show training proposal for current player
+        if (currentPlayer === 1 || (currentPlayer === 2 && !aiEnabled)) {
+            startAssistCalculation();
+        }
     }
 }
 
@@ -1895,11 +2114,10 @@ function findBestMove() {
     return findBestMoveForPlayer(aiPlayer);
 }
 
-// Execute the AI's move
-function makeAIMove() {
-    if (gameOver || currentPlayer !== aiPlayer) return;
 
-    const bestMove = findBestMove();
+// Execute the AI's move (called from worker callback or synchronously)
+function executeAIMove(bestMove) {
+    if (gameOver || currentPlayer !== aiPlayer) return;
 
     if (!bestMove) {
         console.error('AI could not find a valid move!');
@@ -1933,6 +2151,19 @@ function makeAIMove() {
             }
         }
     }
+
+    // Show training proposal after AI move if it's now Player 1's turn
+    if (trainEnabled && currentPlayer === 1 && !gameOver) {
+        startAssistCalculation();
+    }
+}
+
+// Legacy function for backward compatibility
+function makeAIMove() {
+    const bestMove = findBestMove();
+    if (bestMove) {
+        executeAIMove(bestMove);
+    }
 }
 
 // ==================== TRAINING MODE ====================
@@ -1951,15 +2182,18 @@ function toggleTrain() {
         // Show proposal for current player
         // For Player 1: always show
         // For Player 2: only show when AI is off
-        // Use setTimeout to allow the button to fully render before calculation
         if (!gameOver && (currentPlayer === 1 || (currentPlayer === 2 && !aiEnabled))) {
-            setTimeout(() => {
-                showTrainProposal();
-            }, 150);
+            // Start async calculation
+            startAssistCalculation();
         }
     } else {
         btn.textContent = '🎓 Assist';
         btn.classList.remove('active');
+        // Cancel pending calculations and clear UI
+        if (assistWorker) {
+            assistWorker.terminate();
+            initAssistWorker();
+        }
         clearTrainProposal();
         hidePlayer1ThinkingIndicator();
         hidePlayer2ThinkingIndicator();
@@ -2230,56 +2464,50 @@ function showTrainProposal() {
         return;
     }
 
+    // Clear previous proposal and start async calculation
+    clearTrainProposal();
+    startAssistCalculation();
+}
+
+// Display the training proposal visualization (called from worker callback)
+function displayTrainProposal(bestMove) {
+    if (!bestMove || !trainEnabled || gameOver) return;
+
     // Clear previous proposal
     clearTrainProposal();
 
-    // Show thinking indicator while calculating
-    showCurrentPlayerThinkingIndicator();
+    const boardOffset = -(BOARD_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
 
-    // Use requestAnimationFrame + setTimeout to ensure UI fully updates before blocking calculation
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            setTimeout(() => {
-                // Find the best move for current player using the same AI logic
-                const bestMove = findBestMoveForPlayer(currentPlayer);
+    if (bestMove.type === 'move') {
+        // Show outlined/transparent highlight for the suggested move position
+        const geometry = new THREE.RingGeometry(0.25, 0.4, 32);
+        const material = new THREE.MeshBasicMaterial({
+            color: 0x00ff00,
+            transparent: true,
+            opacity: 0.6,
+            side: THREE.DoubleSide
+        });
+        const ring = new THREE.Mesh(geometry, material);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.set(
+            boardOffset + bestMove.x * CELL_SIZE,
+            0.15,
+            boardOffset + bestMove.y * CELL_SIZE
+        );
+        trainProposalGroup.add(ring);
 
-                // Hide thinking indicator after calculation
-                hideCurrentPlayerThinkingIndicator();
-
-                if (!bestMove) return;
-
-                const boardOffset = -(BOARD_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
-
-                if (bestMove.type === 'move') {
-                    // Show outlined/transparent highlight for the suggested move position
-                const geometry = new THREE.RingGeometry(0.25, 0.4, 32);
-                const material = new THREE.MeshBasicMaterial({
-                    color: 0x00ff00,
-                transparent: true,
-                opacity: 0.6,
-                side: THREE.DoubleSide
-            });
-            const ring = new THREE.Mesh(geometry, material);
-            ring.rotation.x = -Math.PI / 2;
-            ring.position.set(
-                boardOffset + bestMove.x * CELL_SIZE,
-                0.15,
-                boardOffset + bestMove.y * CELL_SIZE
-            );
-            trainProposalGroup.add(ring);
-
-            // Add pulsing animation indicator (a second ring)
-            const outerGeometry = new THREE.RingGeometry(0.35, 0.45, 32);
-            const outerMaterial = new THREE.MeshBasicMaterial({
-                color: 0x00ff00,
-                transparent: true,
-                opacity: 0.3,
-                side: THREE.DoubleSide
-            });
-            const outerRing = new THREE.Mesh(outerGeometry, outerMaterial);
-            outerRing.rotation.x = -Math.PI / 2;
-            outerRing.position.set(
-                boardOffset + bestMove.x * CELL_SIZE,
+        // Add pulsing animation indicator (a second ring)
+        const outerGeometry = new THREE.RingGeometry(0.35, 0.45, 32);
+        const outerMaterial = new THREE.MeshBasicMaterial({
+            color: 0x00ff00,
+            transparent: true,
+            opacity: 0.3,
+            side: THREE.DoubleSide
+        });
+        const outerRing = new THREE.Mesh(outerGeometry, outerMaterial);
+        outerRing.rotation.x = -Math.PI / 2;
+        outerRing.position.set(
+            boardOffset + bestMove.x * CELL_SIZE,
             0.14,
             boardOffset + bestMove.y * CELL_SIZE
         );
@@ -2322,9 +2550,6 @@ function showTrainProposal() {
         wireframe.position.copy(fenceMesh.position);
         trainProposalGroup.add(wireframe);
     }
-            }, 50); // Small delay after double requestAnimationFrame
-        });
-    });
 }
 
 function clearTrainProposal() {
@@ -2335,13 +2560,18 @@ function clearTrainProposal() {
 
 // Find best move for a specific player (used for training mode)
 // Uses the same improved logic as the AI player
-function findBestMoveForPlayer(player) {
-    const testPawns = {
+// Parameters are optional - if not provided, uses global game state
+function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts) {
+    // Use provided data or fall back to global state
+    const testPawns = inputPawns ? {
+        1: { ...inputPawns[1] },
+        2: { ...inputPawns[2] }
+    } : {
         1: { ...pawns[1] },
         2: { ...pawns[2] }
     };
-    const testFences = [...placedFences];
-    const testFencesCounts = { ...fences };
+    const testFences = inputFences ? [...inputFences] : [...placedFences];
+    const testFencesCounts = inputFenceCounts ? { ...inputFenceCounts } : { ...fences };
 
     let bestMove = null;
     let bestScore = -Infinity;
