@@ -161,8 +161,8 @@ body {
     cursor: pointer;
     display: flex;
     align-items: center;
-    justify-content: center;
-    padding-left: calc(6px + env(safe-area-inset-left, 0px));
+    justify-content: flex-end;
+    padding-right: 6px;
     color: white;
     font-size: 12px;
     transition: background 0.3s;
@@ -172,6 +172,7 @@ body {
 #ui-overlay.open #ui-panel-toggle {
     right: -24px;
     width: 24px;
+    justify-content: center;
 }
 
 #ui-panel-toggle:hover {
@@ -657,7 +658,8 @@ body {
     cursor: pointer;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
+    padding-left: 6px;
     color: white;
     font-size: 12px;
     transition: background 0.3s;
@@ -667,6 +669,7 @@ body {
 #fence-panel.open #fence-panel-toggle {
     left: -24px;
     width: 24px;
+    justify-content: center;
 }
 
 #fence-panel-toggle:hover {
@@ -902,6 +905,7 @@ body.portrait-mode #fence-panel-toggle {
     height: 24px;
     border-radius: 8px 8px 0 0;
     font-size: 12px;
+    justify-content: center;
 }
 
 body.portrait-mode #fence-panel.open #fence-panel-toggle {
