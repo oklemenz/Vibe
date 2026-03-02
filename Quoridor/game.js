@@ -5,7 +5,7 @@ const BOARD_SIZE = 9;
 const CELL_SIZE = 1;
 const FENCE_THICKNESS = 0.1;
 const FENCE_HEIGHT = 0.5;
-const FENCE_LENGTH = 2;
+const FENCE_LENGTH = 1.85; // Slightly shorter than 2 cells to show gaps between fences
 const PAWN_RADIUS = 0.3;
 const PAWN_HEIGHT = 0.6;
 
@@ -277,6 +277,8 @@ function showAIThinkingIndicator() {
     if (topPlayer2Name) {
         topPlayer2Name.classList.add('ai-thinking');
     }
+    // Show pulsating ring around AI player's pawn
+    showThinkingRing(aiPlayer);
 }
 
 // Hide AI thinking indicator
@@ -290,6 +292,8 @@ function hideAIThinkingIndicator() {
     if (topPlayer2Name) {
         topPlayer2Name.classList.remove('ai-thinking');
     }
+    // Hide pulsating ring
+    hideThinkingRing();
 }
 
 // Show Player 1 thinking indicator (for Assist mode)
@@ -339,12 +343,83 @@ function showCurrentPlayerThinkingIndicator() {
     } else {
         showPlayer2ThinkingIndicator();
     }
+    // Show pulsating ring around the current player's pawn
+    showThinkingRing(currentPlayer);
 }
 
 function hideCurrentPlayerThinkingIndicator() {
     // Hide CSS indicators for both players (in case currentPlayer changed)
     hidePlayer1ThinkingIndicator();
     hidePlayer2ThinkingIndicator();
+    // Hide pulsating ring
+    hideThinkingRing();
+}
+
+// Show pulsating ring around pawn while calculating
+function showThinkingRing(player) {
+    // Safety check - ensure scene and pawns exist
+    if (!scene || !pawn1Mesh || !pawn2Mesh) return;
+
+    // Remove any existing ring first
+    hideThinkingRing();
+
+    const pawnMesh = player === 1 ? pawn1Mesh : pawn2Mesh;
+
+    // Create small ring at the bottom of the pawn
+    const ringGeometry = new THREE.TorusGeometry(PAWN_RADIUS * 0.9, 0.03, 8, 32);
+    const ringMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00ff00,  // Green color
+        transparent: true,
+        opacity: 0.8
+    });
+
+    thinkingRing = new THREE.Mesh(ringGeometry, ringMaterial);
+    thinkingRing.rotation.x = Math.PI / 2; // Lay flat
+    thinkingRing.position.set(
+        pawnMesh.position.x,
+        0.08,  // Just above board at pawn base
+        pawnMesh.position.z
+    );
+    thinkingRing.renderOrder = 10;
+
+    thinkingRingPlayer = player;
+    thinkingRingAnimationStart = Date.now();
+
+    scene.add(thinkingRing);
+}
+
+// Hide pulsating ring
+function hideThinkingRing() {
+    if (thinkingRing && scene) {
+        scene.remove(thinkingRing);
+        if (thinkingRing.geometry) thinkingRing.geometry.dispose();
+        if (thinkingRing.material) thinkingRing.material.dispose();
+        thinkingRing = null;
+    }
+    thinkingRingPlayer = null;
+}
+
+// Update thinking ring animation (called in animate loop)
+function updateThinkingRingAnimation() {
+    if (!thinkingRing || !thinkingRing.material) return;
+
+    const elapsed = Date.now() - thinkingRingAnimationStart;
+    const pulseDuration = 800; // Same as CSS animation
+    const progress = (elapsed % pulseDuration) / pulseDuration;
+
+    // Pulsating scale (1.0 to 1.3) - only expand outward
+    const scale = 1.0 + Math.sin(progress * Math.PI * 2) * 0.15 + 0.15;
+    thinkingRing.scale.set(scale, scale, scale);
+
+    // Pulsating opacity (0.5 to 0.9)
+    thinkingRing.material.opacity = 0.5 + Math.sin(progress * Math.PI * 2) * 0.2 + 0.2;
+
+    // Update position to follow pawn
+    const pawnMesh = thinkingRingPlayer === 1 ? pawn1Mesh : pawn2Mesh;
+    if (pawnMesh && thinkingRing) {
+        thinkingRing.position.x = pawnMesh.position.x;
+        thinkingRing.position.z = pawnMesh.position.z;
+    }
 }
 
 // Training mode state
@@ -353,6 +428,11 @@ let trainProposalGroup = null;
 
 // Assist calculation tracking
 let assistCalculationPlayer = null; // Track which player the assist is calculating for
+
+// Pulsating ring state for thinking indicator
+let thinkingRing = null;
+let thinkingRingPlayer = null;
+let thinkingRingAnimationStart = 0;
 
 // View mode state
 let viewMode = '3d'; // '3d' or 'top'
@@ -1201,11 +1281,13 @@ function showFencePreview(x, y, orientation) {
 
     const boardOffset = -(BOARD_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
 
+    // Make preview slightly larger than actual fence to avoid z-fighting
+    const previewScale = 1.01;
     let fenceGeometry;
     if (orientation === 'h') {
-        fenceGeometry = new THREE.BoxGeometry(FENCE_LENGTH, FENCE_HEIGHT, FENCE_THICKNESS);
+        fenceGeometry = new THREE.BoxGeometry(FENCE_LENGTH * previewScale, FENCE_HEIGHT * previewScale, FENCE_THICKNESS * previewScale);
     } else {
-        fenceGeometry = new THREE.BoxGeometry(FENCE_THICKNESS, FENCE_HEIGHT, FENCE_LENGTH);
+        fenceGeometry = new THREE.BoxGeometry(FENCE_THICKNESS * previewScale, FENCE_HEIGHT * previewScale, FENCE_LENGTH * previewScale);
     }
 
     const canPlace = canPlaceFence(x, y, orientation) && fences[currentPlayer] > 0;
@@ -1285,6 +1367,13 @@ let pointerOnHighlight = false;
 
 function onPointerDownForHighlight(event) {
     pointerOnHighlight = false;
+
+    // Temporarily disable OrbitControls zoom at pointer start
+    // This prevents accidental zoom when trying to click on game elements
+    if (viewMode !== 'top') {
+        controls.enableZoom = false;
+    }
+
     if (gameOver || isDragging) return;
     if (viewMode === 'top') return;
 
@@ -1323,9 +1412,10 @@ function onPointerUpForHighlight(event) {
         event.stopPropagation();
         event.stopImmediatePropagation();
     }
-    // Re-enable controls
+    // Re-enable controls and zoom
     if (viewMode !== 'top') {
         controls.enabled = true;
+        controls.enableZoom = false; // Keep zoom disabled as per earlier setting
     }
     pointerOnHighlight = false;
 }
@@ -1486,6 +1576,9 @@ function restartGame() {
 
 function animate() {
     requestAnimationFrame(animate);
+
+    // Update thinking ring animation
+    updateThinkingRingAnimation();
 
     controls.update();
     renderer.render(scene, camera);
@@ -2378,7 +2471,7 @@ function displayTrainProposal(bestMove) {
 
     if (bestMove.type === 'move') {
         // Show outlined/transparent highlight for the suggested move position
-        const geometry = new THREE.RingGeometry(0.25, 0.4, 32);
+        const geometry = new THREE.RingGeometry(0.18, 0.28, 32);
         const material = new THREE.MeshBasicMaterial({
             color: 0x00ff00, transparent: true, opacity: 0.6, side: THREE.DoubleSide
         });
@@ -2388,7 +2481,7 @@ function displayTrainProposal(bestMove) {
         trainProposalGroup.add(ring);
 
         // Add pulsing animation indicator (a second ring)
-        const outerGeometry = new THREE.RingGeometry(0.35, 0.45, 32);
+        const outerGeometry = new THREE.RingGeometry(0.25, 0.32, 32);
         const outerMaterial = new THREE.MeshBasicMaterial({
             color: 0x00ff00, transparent: true, opacity: 0.3, side: THREE.DoubleSide
         });
