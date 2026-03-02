@@ -147,6 +147,7 @@ body {
     pointer-events: auto;
     touch-action: manipulation;
     cursor: pointer;
+    padding-left: 6px;
 }
 
 #ui-panel-toggle {
@@ -172,7 +173,7 @@ body {
 #ui-overlay.open #ui-panel-toggle {
     right: -24px;
     width: 24px;
-    padding-left: 0;
+    padding-left: 6px;
 }
 
 #ui-panel-toggle:hover {
@@ -406,6 +407,7 @@ body {
     pointer-events: auto;
     cursor: pointer;
     touch-action: manipulation;
+    padding-right: 6px;
 }
 
 #fence-panel .draggable-fence:not(.disabled) {
@@ -648,9 +650,9 @@ body {
 /* Fence Panel Toggle */
 #fence-panel-toggle {
     position: absolute;
-    left: -24px;
+    left: calc(-24px - env(safe-area-inset-right, 0px));
     top: 20px;
-    width: 24px;
+    width: calc(24px + env(safe-area-inset-right, 0px));
     height: 60px;
     background: rgba(0, 0, 0, 0.8);
     border: none;
@@ -662,6 +664,13 @@ body {
     color: white;
     font-size: 12px;
     transition: background 0.3s;
+}
+
+/* When panel is open, use normal size (no inset compensation needed) */
+#fence-panel.open #fence-panel-toggle {
+    left: -24px;
+    width: 24px;
+    padding-right: 6px;
 }
 
 #fence-panel-toggle:hover {
@@ -897,6 +906,14 @@ body.portrait-mode #fence-panel-toggle {
     height: 24px;
     border-radius: 8px 8px 0 0;
     font-size: 12px;
+    padding-right: 0; /* Reset safe area padding for bottom panel */
+}
+
+body.portrait-mode #fence-panel.open #fence-panel-toggle {
+    left: 50%;
+    width: 60px;
+    padding-right: 6px;
+    transform: translateX(-50%); /* Keep centered */
 }
 
 body.portrait-mode #fence-panel-toggle::after {
