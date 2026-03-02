@@ -588,8 +588,11 @@ body {
     background: #219a52;
 }
 
-#switch-btn.hidden {
-    display: none;
+#switch-btn.disabled,
+#switch-btn:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+    pointer-events: none;
 }
 
 #train-btn.active {

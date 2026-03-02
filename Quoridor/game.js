@@ -55,10 +55,9 @@ function markIntroAsShown() {
 
 // Game state
 let currentPlayer = 1;
-let fences = { 1: 10, 2: 10 };
+let fences = {1: 10, 2: 10};
 let pawns = {
-    1: { x: 4, y: 0 },
-    2: { x: 4, y: 8 }
+    1: {x: 4, y: 0}, 2: {x: 4, y: 8}
 };
 let placedFences = []; // { x, y, orientation: 'h' | 'v' }
 let gameOver = false;
@@ -107,7 +106,7 @@ ${canPlaceFenceTest.toString()}
 ${getValidMovesTest.toString()}
 `;
 
-    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    const blob = new Blob([workerCode], {type: 'application/javascript'});
     workerBlobURL = URL.createObjectURL(blob);
     return workerBlobURL;
 }
@@ -157,7 +156,7 @@ function initAssistWorker() {
 
 // Handle AI Worker response
 function handleAIWorkerMessage(e) {
-    const { type, bestMove, error } = e.data;
+    const {type, bestMove, error} = e.data;
 
     if (type === 'result' && bestMove && aiThinking) {
         executeAIMove(bestMove);
@@ -171,7 +170,7 @@ function handleAIWorkerMessage(e) {
 
 // Handle Assist Worker response
 function handleAssistWorkerMessage(e) {
-    const { type, bestMove, error } = e.data;
+    const {type, bestMove, error} = e.data;
 
     // Only process if this is still for the current calculation
     // (player might have moved before calculation finished)
@@ -214,12 +213,11 @@ function startAICalculation() {
     if (aiWorker && workersAvailable) {
         // Use Web Worker (non-blocking)
         aiWorker.postMessage({
-            type: 'calculate',
-            data: {
+            type: 'calculate', data: {
                 player: aiPlayer,
-                pawns: { 1: { ...pawns[1] }, 2: { ...pawns[2] } },
+                pawns: {1: {...pawns[1]}, 2: {...pawns[2]}},
                 placedFences: [...placedFences],
-                fences: { ...fences }
+                fences: {...fences}
             }
         });
     } else {
@@ -245,12 +243,11 @@ function startAssistCalculation() {
     if (assistWorker && workersAvailable) {
         // Use Web Worker (non-blocking)
         assistWorker.postMessage({
-            type: 'calculate',
-            data: {
+            type: 'calculate', data: {
                 player: currentPlayer,
-                pawns: { 1: { ...pawns[1] }, 2: { ...pawns[2] } },
+                pawns: {1: {...pawns[1]}, 2: {...pawns[2]}},
                 placedFences: [...placedFences],
-                fences: { ...fences }
+                fences: {...fences}
             }
         });
     } else {
@@ -396,7 +393,7 @@ function init() {
     camera.lookAt(0, 0, 0);
 
     // Renderer setup
-    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer = new THREE.WebGLRenderer({antialias: true});
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -406,7 +403,7 @@ function init() {
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.enableZoom = false; // Disable zooming
+    controls.enableZoom = true;
     controls.minDistance = 10;
     controls.maxDistance = 30;
     controls.maxPolarAngle = Math.PI / 2.2;
@@ -456,9 +453,9 @@ function init() {
     window.addEventListener('keydown', onKeyDown);
 
     // Touch event listeners for mobile (for tap detection and move handling)
-    renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
-    renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
-    renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: false });
+    renderer.domElement.addEventListener('touchstart', onTouchStart, {passive: false});
+    renderer.domElement.addEventListener('touchmove', onTouchMove, {passive: false});
+    renderer.domElement.addEventListener('touchend', onTouchEnd, {passive: false});
 
     // Drag & Drop event listeners
     setupDragAndDrop();
@@ -563,7 +560,7 @@ function createBoard() {
 
     // Board base
     const baseGeometry = new THREE.BoxGeometry(BOARD_SIZE * CELL_SIZE + 0.5, 0.2, BOARD_SIZE * CELL_SIZE + 0.5);
-    const baseMaterial = new THREE.MeshStandardMaterial({ color: 0x2d2d44 });
+    const baseMaterial = new THREE.MeshStandardMaterial({color: 0x2d2d44});
     const base = new THREE.Mesh(baseGeometry, baseMaterial);
     base.position.y = -0.15;
     base.receiveShadow = true;
@@ -579,15 +576,11 @@ function createBoard() {
             if (isGoalRow1) cellColor = 0x4a3d5c;
             if (isGoalRow2) cellColor = 0x5c3d3d;
 
-            const cellMaterial = new THREE.MeshStandardMaterial({ color: cellColor });
+            const cellMaterial = new THREE.MeshStandardMaterial({color: cellColor});
             const cell = new THREE.Mesh(cellGeometry, cellMaterial);
-            cell.position.set(
-                boardOffset + x * CELL_SIZE,
-                0,
-                boardOffset + y * CELL_SIZE
-            );
+            cell.position.set(boardOffset + x * CELL_SIZE, 0, boardOffset + y * CELL_SIZE);
             cell.receiveShadow = true;
-            cell.userData = { type: 'cell', x, y };
+            cell.userData = {type: 'cell', x, y};
             boardGroup.add(cell);
         }
     }
@@ -597,26 +590,18 @@ function createBoard() {
         for (let y = 0; y < BOARD_SIZE - 1; y++) {
             // Horizontal fence slot
             const hSlotGeometry = new THREE.BoxGeometry(FENCE_LENGTH, 0.02, FENCE_THICKNESS);
-            const hSlotMaterial = new THREE.MeshBasicMaterial({ color: 0x222244, transparent: true, opacity: 0.3 });
+            const hSlotMaterial = new THREE.MeshBasicMaterial({color: 0x222244, transparent: true, opacity: 0.3});
             const hSlot = new THREE.Mesh(hSlotGeometry, hSlotMaterial);
-            hSlot.position.set(
-                boardOffset + x * CELL_SIZE + CELL_SIZE / 2,
-                0.02,
-                boardOffset + y * CELL_SIZE + CELL_SIZE / 2
-            );
-            hSlot.userData = { type: 'fenceSlot', x, y, orientation: 'h' };
+            hSlot.position.set(boardOffset + x * CELL_SIZE + CELL_SIZE / 2, 0.02, boardOffset + y * CELL_SIZE + CELL_SIZE / 2);
+            hSlot.userData = {type: 'fenceSlot', x, y, orientation: 'h'};
             boardGroup.add(hSlot);
 
             // Vertical fence slot
             const vSlotGeometry = new THREE.BoxGeometry(FENCE_THICKNESS, 0.02, FENCE_LENGTH);
-            const vSlotMaterial = new THREE.MeshBasicMaterial({ color: 0x222244, transparent: true, opacity: 0.3 });
+            const vSlotMaterial = new THREE.MeshBasicMaterial({color: 0x222244, transparent: true, opacity: 0.3});
             const vSlot = new THREE.Mesh(vSlotGeometry, vSlotMaterial);
-            vSlot.position.set(
-                boardOffset + x * CELL_SIZE + CELL_SIZE / 2,
-                0.02,
-                boardOffset + y * CELL_SIZE + CELL_SIZE / 2
-            );
-            vSlot.userData = { type: 'fenceSlot', x, y, orientation: 'v' };
+            vSlot.position.set(boardOffset + x * CELL_SIZE + CELL_SIZE / 2, 0.02, boardOffset + y * CELL_SIZE + CELL_SIZE / 2);
+            vSlot.userData = {type: 'fenceSlot', x, y, orientation: 'v'};
             boardGroup.add(vSlot);
         }
     }
@@ -628,52 +613,32 @@ function createPawns() {
     // Player 1 pawn (red)
     const pawn1Geometry = new THREE.CylinderGeometry(PAWN_RADIUS * 0.7, PAWN_RADIUS, PAWN_HEIGHT, 32);
     const pawn1Material = new THREE.MeshStandardMaterial({
-        color: 0xff6b6b,
-        metalness: 0.3,
-        roughness: 0.4
+        color: 0xff6b6b, metalness: 0.3, roughness: 0.4
     });
     pawn1Mesh = new THREE.Mesh(pawn1Geometry, pawn1Material);
-    pawn1Mesh.position.set(
-        boardOffset + pawns[1].x * CELL_SIZE,
-        PAWN_HEIGHT / 2 + 0.05,
-        boardOffset + pawns[1].y * CELL_SIZE
-    );
+    pawn1Mesh.position.set(boardOffset + pawns[1].x * CELL_SIZE, PAWN_HEIGHT / 2 + 0.05, boardOffset + pawns[1].y * CELL_SIZE);
     pawn1Mesh.castShadow = true;
-    pawn1Mesh.userData = { type: 'pawn', player: 1 };
+    pawn1Mesh.userData = {type: 'pawn', player: 1};
     pawnsGroup.add(pawn1Mesh);
 
     // Player 2 pawn (cyan)
     const pawn2Geometry = new THREE.CylinderGeometry(PAWN_RADIUS * 0.7, PAWN_RADIUS, PAWN_HEIGHT, 32);
     const pawn2Material = new THREE.MeshStandardMaterial({
-        color: 0x4ecdc4,
-        metalness: 0.3,
-        roughness: 0.4
+        color: 0x4ecdc4, metalness: 0.3, roughness: 0.4
     });
     pawn2Mesh = new THREE.Mesh(pawn2Geometry, pawn2Material);
-    pawn2Mesh.position.set(
-        boardOffset + pawns[2].x * CELL_SIZE,
-        PAWN_HEIGHT / 2 + 0.05,
-        boardOffset + pawns[2].y * CELL_SIZE
-    );
+    pawn2Mesh.position.set(boardOffset + pawns[2].x * CELL_SIZE, PAWN_HEIGHT / 2 + 0.05, boardOffset + pawns[2].y * CELL_SIZE);
     pawn2Mesh.castShadow = true;
-    pawn2Mesh.userData = { type: 'pawn', player: 2 };
+    pawn2Mesh.userData = {type: 'pawn', player: 2};
     pawnsGroup.add(pawn2Mesh);
 }
 
 function updatePawnPositions() {
     const boardOffset = -(BOARD_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
 
-    pawn1Mesh.position.set(
-        boardOffset + pawns[1].x * CELL_SIZE,
-        PAWN_HEIGHT / 2 + 0.05,
-        boardOffset + pawns[1].y * CELL_SIZE
-    );
+    pawn1Mesh.position.set(boardOffset + pawns[1].x * CELL_SIZE, PAWN_HEIGHT / 2 + 0.05, boardOffset + pawns[1].y * CELL_SIZE);
 
-    pawn2Mesh.position.set(
-        boardOffset + pawns[2].x * CELL_SIZE,
-        PAWN_HEIGHT / 2 + 0.05,
-        boardOffset + pawns[2].y * CELL_SIZE
-    );
+    pawn2Mesh.position.set(boardOffset + pawns[2].x * CELL_SIZE, PAWN_HEIGHT / 2 + 0.05, boardOffset + pawns[2].y * CELL_SIZE);
 }
 
 function isFenceBlocking(x1, y1, x2, y2) {
@@ -713,11 +678,10 @@ function getValidMoves(player) {
     const opponent = player === 1 ? 2 : 1;
     const opponentPos = pawns[opponent];
 
-    const directions = [
-        { dx: 0, dy: 1 },  // forward (relative)
-        { dx: 0, dy: -1 }, // backward
-        { dx: 1, dy: 0 },  // right
-        { dx: -1, dy: 0 }  // left
+    const directions = [{dx: 0, dy: 1},  // forward (relative)
+        {dx: 0, dy: -1}, // backward
+        {dx: 1, dy: 0},  // right
+        {dx: -1, dy: 0}  // left
     ];
 
     for (const dir of directions) {
@@ -737,26 +701,22 @@ function getValidMoves(player) {
             const jumpY = newY + dir.dy;
 
             // Check if we can jump straight over
-            if (jumpX >= 0 && jumpX < BOARD_SIZE && jumpY >= 0 && jumpY < BOARD_SIZE &&
-                !isFenceBlocking(newX, newY, jumpX, jumpY)) {
-                moves.push({ x: jumpX, y: jumpY });
+            if (jumpX >= 0 && jumpX < BOARD_SIZE && jumpY >= 0 && jumpY < BOARD_SIZE && !isFenceBlocking(newX, newY, jumpX, jumpY)) {
+                moves.push({x: jumpX, y: jumpY});
             } else {
                 // Can't jump straight, try diagonal
-                const sideDirs = dir.dx === 0
-                    ? [{ dx: 1, dy: 0 }, { dx: -1, dy: 0 }]
-                    : [{ dx: 0, dy: 1 }, { dx: 0, dy: -1 }];
+                const sideDirs = dir.dx === 0 ? [{dx: 1, dy: 0}, {dx: -1, dy: 0}] : [{dx: 0, dy: 1}, {dx: 0, dy: -1}];
 
                 for (const sideDir of sideDirs) {
                     const sideX = newX + sideDir.dx;
                     const sideY = newY + sideDir.dy;
-                    if (sideX >= 0 && sideX < BOARD_SIZE && sideY >= 0 && sideY < BOARD_SIZE &&
-                        !isFenceBlocking(newX, newY, sideX, sideY)) {
-                        moves.push({ x: sideX, y: sideY });
+                    if (sideX >= 0 && sideX < BOARD_SIZE && sideY >= 0 && sideY < BOARD_SIZE && !isFenceBlocking(newX, newY, sideX, sideY)) {
+                        moves.push({x: sideX, y: sideY});
                     }
                 }
             }
         } else {
-            moves.push({ x: newX, y: newY });
+            moves.push({x: newX, y: newY});
         }
     }
 
@@ -780,17 +740,11 @@ function updateValidMoves() {
     for (const move of validMoves) {
         const highlightGeometry = new THREE.BoxGeometry(CELL_SIZE * 0.8, 0.05, CELL_SIZE * 0.8);
         const highlightMaterial = new THREE.MeshBasicMaterial({
-            color: currentPlayer === 1 ? 0xff6b6b : 0x4ecdc4,
-            transparent: true,
-            opacity: 0.5
+            color: currentPlayer === 1 ? 0xff6b6b : 0x4ecdc4, transparent: true, opacity: 0.5
         });
         const highlight = new THREE.Mesh(highlightGeometry, highlightMaterial);
-        highlight.position.set(
-            boardOffset + move.x * CELL_SIZE,
-            0.1,
-            boardOffset + move.y * CELL_SIZE
-        );
-        highlight.userData = { type: 'moveHighlight', x: move.x, y: move.y };
+        highlight.position.set(boardOffset + move.x * CELL_SIZE, 0.1, boardOffset + move.y * CELL_SIZE);
+        highlight.userData = {type: 'moveHighlight', x: move.x, y: move.y};
         highlightsGroup.add(highlight);
     }
 }
@@ -828,7 +782,7 @@ function canPlaceFence(x, y, orientation) {
 
     // Check if fence blocks all paths to goal (using BFS)
     // Temporarily add the fence
-    placedFences.push({ x, y, orientation });
+    placedFences.push({x, y, orientation});
 
     const player1HasPath = hasPathToGoal(1);
     const player2HasPath = hasPathToGoal(2);
@@ -841,7 +795,7 @@ function canPlaceFence(x, y, orientation) {
 
 function hasPathToGoal(player) {
     const goalY = player === 1 ? 8 : 0;
-    const start = { x: pawns[player].x, y: pawns[player].y };
+    const start = {x: pawns[player].x, y: pawns[player].y};
     const visited = new Set();
     const queue = [start];
 
@@ -854,20 +808,14 @@ function hasPathToGoal(player) {
 
         if (current.y === goalY) return true;
 
-        const directions = [
-            { dx: 0, dy: 1 },
-            { dx: 0, dy: -1 },
-            { dx: 1, dy: 0 },
-            { dx: -1, dy: 0 }
-        ];
+        const directions = [{dx: 0, dy: 1}, {dx: 0, dy: -1}, {dx: 1, dy: 0}, {dx: -1, dy: 0}];
 
         for (const dir of directions) {
             const newX = current.x + dir.dx;
             const newY = current.y + dir.dy;
 
-            if (newX >= 0 && newX < BOARD_SIZE && newY >= 0 && newY < BOARD_SIZE &&
-                !isFenceBlocking(current.x, current.y, newX, newY)) {
-                queue.push({ x: newX, y: newY });
+            if (newX >= 0 && newX < BOARD_SIZE && newY >= 0 && newY < BOARD_SIZE && !isFenceBlocking(current.x, current.y, newX, newY)) {
+                queue.push({x: newX, y: newY});
             }
         }
     }
@@ -879,7 +827,7 @@ function placeFence(x, y, orientation) {
     if (!canPlaceFence(x, y, orientation)) return false;
     if (fences[currentPlayer] <= 0) return false;
 
-    placedFences.push({ x, y, orientation });
+    placedFences.push({x, y, orientation});
     fences[currentPlayer]--;
 
     const boardOffset = -(BOARD_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
@@ -893,15 +841,10 @@ function placeFence(x, y, orientation) {
 
     const fenceMaterial = new THREE.MeshStandardMaterial({
         color: 0xc9a66b,  // Neutral wood/brown color for all fences
-        metalness: 0.2,
-        roughness: 0.6
+        metalness: 0.2, roughness: 0.6
     });
     const fenceMesh = new THREE.Mesh(fenceGeometry, fenceMaterial);
-    fenceMesh.position.set(
-        boardOffset + x * CELL_SIZE + CELL_SIZE / 2,
-        FENCE_HEIGHT / 2,
-        boardOffset + y * CELL_SIZE + CELL_SIZE / 2
-    );
+    fenceMesh.position.set(boardOffset + x * CELL_SIZE + CELL_SIZE / 2, FENCE_HEIGHT / 2, boardOffset + y * CELL_SIZE + CELL_SIZE / 2);
     fenceMesh.castShadow = true;
     fencesGroup.add(fenceMesh);
 
@@ -912,7 +855,7 @@ function movePawn(x, y) {
     const isValid = validMoves.some(m => m.x === x && m.y === y);
     if (!isValid) return false;
 
-    pawns[currentPlayer] = { x, y };
+    pawns[currentPlayer] = {x, y};
     updatePawnPositions();
 
     return true;
@@ -1003,14 +946,14 @@ function updateUI() {
 
 function updateSwitchButtonState() {
     const switchBtn = document.getElementById('switch-btn');
-    const isGameStart = pawns[1].x === 4 && pawns[1].y === 0 &&
-                        pawns[2].x === 4 && pawns[2].y === 8 &&
-                        placedFences.length === 0;
+    const isGameStart = pawns[1].x === 4 && pawns[1].y === 0 && pawns[2].x === 4 && pawns[2].y === 8 && placedFences.length === 0;
 
     if (isGameStart && !gameOver) {
-        switchBtn.classList.remove('hidden');
+        switchBtn.disabled = false;
+        switchBtn.classList.remove('disabled');
     } else {
-        switchBtn.classList.add('hidden');
+        switchBtn.disabled = true;
+        switchBtn.classList.add('disabled');
     }
 }
 
@@ -1065,7 +1008,7 @@ function setupDragAndDrop() {
             if (startFenceDrag(fence, touch.clientX, touch.clientY)) {
                 e.preventDefault();
             }
-        }, { passive: false, capture: true });
+        }, {passive: false, capture: true});
     });
 
     // Helper function to start fence drag
@@ -1123,7 +1066,7 @@ function setupDragAndDrop() {
 
         updateDragPreviewHTML(touch.clientX, touch.clientY);
         updateDragPreview3D(touch.clientX, touch.clientY);
-    }, { passive: false });
+    }, {passive: false});
 
     // Handle mouse up (drop)
     document.addEventListener('mouseup', (e) => {
@@ -1136,7 +1079,7 @@ function setupDragAndDrop() {
         if (!isDragging) return;
         e.preventDefault();
         endFenceDrag(lastDragX, lastDragY);
-    }, { passive: false });
+    }, {passive: false});
 
     // Helper function to end fence drag
     function endFenceDrag(clientX, clientY) {
@@ -1230,7 +1173,7 @@ function getBoardPositionFromMouse(clientX, clientY) {
         }
 
         if (fx >= 0 && fx < BOARD_SIZE - 1 && fy >= 0 && fy < BOARD_SIZE - 1) {
-            return { x: fx, y: fy };
+            return {x: fx, y: fy};
         }
     }
 
@@ -1274,18 +1217,12 @@ function showFencePreview(x, y, orientation) {
     }
 
     const fenceMaterial = new THREE.MeshStandardMaterial({
-        color: canPlace ? 0x00ff00 : 0xff0000,
-        transparent: true,
-        opacity: 0.6,
-        depthWrite: false, // Prevent z-fighting with existing fences
+        color: canPlace ? 0x00ff00 : 0xff0000, transparent: true, opacity: 0.6, depthWrite: false, // Prevent z-fighting with existing fences
     });
     const fenceMesh = new THREE.Mesh(fenceGeometry, fenceMaterial);
     fenceMesh.renderOrder = 999; // Render on top
-    fenceMesh.position.set(
-        boardOffset + x * CELL_SIZE + CELL_SIZE / 2,
-        FENCE_HEIGHT / 2 + 0.01, // Slightly higher to avoid z-fighting with board
-        boardOffset + y * CELL_SIZE + CELL_SIZE / 2
-    );
+    fenceMesh.position.set(boardOffset + x * CELL_SIZE + CELL_SIZE / 2, FENCE_HEIGHT / 2 + 0.01, // Slightly higher to avoid z-fighting with board
+        boardOffset + y * CELL_SIZE + CELL_SIZE / 2);
     previewGroup.add(fenceMesh);
 }
 
@@ -1510,10 +1447,9 @@ function rotateCurrentFence() {
 function restartGame() {
     // Reset game state
     currentPlayer = 1;  // Always start with Player 1
-    fences = { 1: 10, 2: 10 };
+    fences = {1: 10, 2: 10};
     pawns = {
-        1: { x: 4, y: 0 },
-        2: { x: 4, y: 8 }
+        1: {x: 4, y: 0}, 2: {x: 4, y: 8}
     };
     placedFences = [];
     isDragging = false;
@@ -1630,9 +1566,7 @@ function toggleAI() {
 // Switch starting player - switches between Player 1 and Player 2 at game start
 function toggleP2First() {
     // Check if game just started
-    const isGameStart = pawns[1].x === 4 && pawns[1].y === 0 &&
-                        pawns[2].x === 4 && pawns[2].y === 8 &&
-                        placedFences.length === 0;
+    const isGameStart = pawns[1].x === 4 && pawns[1].y === 0 && pawns[2].x === 4 && pawns[2].y === 8 && placedFences.length === 0;
 
     // Only allow switch at game start
     if (!isGameStart || gameOver) {
@@ -1666,9 +1600,9 @@ function toggleP2First() {
 // Calculate shortest path distance to goal using BFS
 function getShortestPathDistance(player, testPawns, testFences) {
     const goalY = player === 1 ? 8 : 0;
-    const start = { x: testPawns[player].x, y: testPawns[player].y };
+    const start = {x: testPawns[player].x, y: testPawns[player].y};
     const visited = new Set();
-    const queue = [{ ...start, dist: 0 }];
+    const queue = [{...start, dist: 0}];
 
     while (queue.length > 0) {
         const current = queue.shift();
@@ -1679,20 +1613,14 @@ function getShortestPathDistance(player, testPawns, testFences) {
 
         if (current.y === goalY) return current.dist;
 
-        const directions = [
-            { dx: 0, dy: 1 },
-            { dx: 0, dy: -1 },
-            { dx: 1, dy: 0 },
-            { dx: -1, dy: 0 }
-        ];
+        const directions = [{dx: 0, dy: 1}, {dx: 0, dy: -1}, {dx: 1, dy: 0}, {dx: -1, dy: 0}];
 
         for (const dir of directions) {
             const newX = current.x + dir.dx;
             const newY = current.y + dir.dy;
 
-            if (newX >= 0 && newX < BOARD_SIZE && newY >= 0 && newY < BOARD_SIZE &&
-                !isFenceBlockingTest(current.x, current.y, newX, newY, testFences)) {
-                queue.push({ x: newX, y: newY, dist: current.dist + 1 });
+            if (newX >= 0 && newX < BOARD_SIZE && newY >= 0 && newY < BOARD_SIZE && !isFenceBlockingTest(current.x, current.y, newX, newY, testFences)) {
+                queue.push({x: newX, y: newY, dist: current.dist + 1});
             }
         }
     }
@@ -1732,7 +1660,7 @@ function isFenceBlockingTest(x1, y1, x2, y2, testFences) {
 // Check if path exists with test state
 function hasPathToGoalTest(player, testPawns, testFences) {
     const goalY = player === 1 ? 8 : 0;
-    const start = { x: testPawns[player].x, y: testPawns[player].y };
+    const start = {x: testPawns[player].x, y: testPawns[player].y};
     const visited = new Set();
     const queue = [start];
 
@@ -1745,20 +1673,14 @@ function hasPathToGoalTest(player, testPawns, testFences) {
 
         if (current.y === goalY) return true;
 
-        const directions = [
-            { dx: 0, dy: 1 },
-            { dx: 0, dy: -1 },
-            { dx: 1, dy: 0 },
-            { dx: -1, dy: 0 }
-        ];
+        const directions = [{dx: 0, dy: 1}, {dx: 0, dy: -1}, {dx: 1, dy: 0}, {dx: -1, dy: 0}];
 
         for (const dir of directions) {
             const newX = current.x + dir.dx;
             const newY = current.y + dir.dy;
 
-            if (newX >= 0 && newX < BOARD_SIZE && newY >= 0 && newY < BOARD_SIZE &&
-                !isFenceBlockingTest(current.x, current.y, newX, newY, testFences)) {
-                queue.push({ x: newX, y: newY });
+            if (newX >= 0 && newX < BOARD_SIZE && newY >= 0 && newY < BOARD_SIZE && !isFenceBlockingTest(current.x, current.y, newX, newY, testFences)) {
+                queue.push({x: newX, y: newY});
             }
         }
     }
@@ -1783,7 +1705,7 @@ function canPlaceFenceTest(x, y, orientation, testFences, testPawns) {
     }
 
     // Test if both players still have path to goal
-    const newFences = [...testFences, { x, y, orientation }];
+    const newFences = [...testFences, {x, y, orientation}];
     return hasPathToGoalTest(1, testPawns, newFences) && hasPathToGoalTest(2, testPawns, newFences);
 }
 
@@ -1794,12 +1716,7 @@ function getValidMovesTest(player, testPawns, testFences) {
     const opponent = player === 1 ? 2 : 1;
     const opponentPos = testPawns[opponent];
 
-    const directions = [
-        { dx: 0, dy: 1 },
-        { dx: 0, dy: -1 },
-        { dx: 1, dy: 0 },
-        { dx: -1, dy: 0 }
-    ];
+    const directions = [{dx: 0, dy: 1}, {dx: 0, dy: -1}, {dx: 1, dy: 0}, {dx: -1, dy: 0}];
 
     for (const dir of directions) {
         const newX = pos.x + dir.dx;
@@ -1812,25 +1729,21 @@ function getValidMovesTest(player, testPawns, testFences) {
             const jumpX = newX + dir.dx;
             const jumpY = newY + dir.dy;
 
-            if (jumpX >= 0 && jumpX < BOARD_SIZE && jumpY >= 0 && jumpY < BOARD_SIZE &&
-                !isFenceBlockingTest(newX, newY, jumpX, jumpY, testFences)) {
-                moves.push({ x: jumpX, y: jumpY });
+            if (jumpX >= 0 && jumpX < BOARD_SIZE && jumpY >= 0 && jumpY < BOARD_SIZE && !isFenceBlockingTest(newX, newY, jumpX, jumpY, testFences)) {
+                moves.push({x: jumpX, y: jumpY});
             } else {
-                const sideDirs = dir.dx === 0
-                    ? [{ dx: 1, dy: 0 }, { dx: -1, dy: 0 }]
-                    : [{ dx: 0, dy: 1 }, { dx: 0, dy: -1 }];
+                const sideDirs = dir.dx === 0 ? [{dx: 1, dy: 0}, {dx: -1, dy: 0}] : [{dx: 0, dy: 1}, {dx: 0, dy: -1}];
 
                 for (const sideDir of sideDirs) {
                     const sideX = newX + sideDir.dx;
                     const sideY = newY + sideDir.dy;
-                    if (sideX >= 0 && sideX < BOARD_SIZE && sideY >= 0 && sideY < BOARD_SIZE &&
-                        !isFenceBlockingTest(newX, newY, sideX, sideY, testFences)) {
-                        moves.push({ x: sideX, y: sideY });
+                    if (sideX >= 0 && sideX < BOARD_SIZE && sideY >= 0 && sideY < BOARD_SIZE && !isFenceBlockingTest(newX, newY, sideX, sideY, testFences)) {
+                        moves.push({x: sideX, y: sideY});
                     }
                 }
             }
         } else {
-            moves.push({ x: newX, y: newY });
+            moves.push({x: newX, y: newY});
         }
     }
 
@@ -1906,9 +1819,9 @@ function evaluateStateForPlayer(player, testPawns, testFences, testFencesCounts)
 // Get the shortest path as an array of cells
 function getShortestPath(player, testPawns, testFences) {
     const goalY = player === 1 ? 8 : 0;
-    const start = { x: testPawns[player].x, y: testPawns[player].y };
+    const start = {x: testPawns[player].x, y: testPawns[player].y};
     const visited = new Set();
-    const queue = [{ ...start, path: [start] }];
+    const queue = [{...start, path: [start]}];
 
     while (queue.length > 0) {
         const current = queue.shift();
@@ -1919,20 +1832,15 @@ function getShortestPath(player, testPawns, testFences) {
 
         if (current.y === goalY) return current.path;
 
-        const directions = [
-            { dx: 0, dy: player === 1 ? 1 : -1 }, // Towards goal first
-            { dx: 1, dy: 0 },
-            { dx: -1, dy: 0 },
-            { dx: 0, dy: player === 1 ? -1 : 1 }
-        ];
+        const directions = [{dx: 0, dy: player === 1 ? 1 : -1}, // Towards goal first
+            {dx: 1, dy: 0}, {dx: -1, dy: 0}, {dx: 0, dy: player === 1 ? -1 : 1}];
 
         for (const dir of directions) {
             const newX = current.x + dir.dx;
             const newY = current.y + dir.dy;
 
-            if (newX >= 0 && newX < BOARD_SIZE && newY >= 0 && newY < BOARD_SIZE &&
-                !isFenceBlockingTest(current.x, current.y, newX, newY, testFences)) {
-                queue.push({ x: newX, y: newY, path: [...current.path, { x: newX, y: newY }] });
+            if (newX >= 0 && newX < BOARD_SIZE && newY >= 0 && newY < BOARD_SIZE && !isFenceBlockingTest(current.x, current.y, newX, newY, testFences)) {
+                queue.push({x: newX, y: newY, path: [...current.path, {x: newX, y: newY}]});
             }
         }
     }
@@ -1966,15 +1874,12 @@ function generateFenceMovesForPlayer(player, testFences, testPawns, testFencesCo
     // Priority 1: Fences that block opponent's current path
     for (let x = 0; x <= BOARD_SIZE - 2; x++) {
         for (let y = 0; y <= BOARD_SIZE - 2; y++) {
-            const nearPath = pathCells.has(`${x},${y}`) ||
-                            pathCells.has(`${x+1},${y}`) ||
-                            pathCells.has(`${x},${y+1}`) ||
-                            pathCells.has(`${x+1},${y+1}`);
+            const nearPath = pathCells.has(`${x},${y}`) || pathCells.has(`${x + 1},${y}`) || pathCells.has(`${x},${y + 1}`) || pathCells.has(`${x + 1},${y + 1}`);
 
             if (nearPath) {
                 for (const orientation of ['h', 'v']) {
                     if (canPlaceFenceTest(x, y, orientation, testFences, testPawns)) {
-                        moves.push({ type: 'fence', x, y, orientation, priority: 1 });
+                        moves.push({type: 'fence', x, y, orientation, priority: 1});
                     }
                 }
             }
@@ -1988,7 +1893,7 @@ function generateFenceMovesForPlayer(player, testFences, testPawns, testFencesCo
                 if (canPlaceFenceTest(x, y, orientation, testFences, testPawns)) {
                     const exists = moves.some(m => m.x === x && m.y === y && m.orientation === orientation);
                     if (!exists) {
-                        moves.push({ type: 'fence', x, y, orientation, priority: 2 });
+                        moves.push({type: 'fence', x, y, orientation, priority: 2});
                     }
                 }
             }
@@ -2002,7 +1907,7 @@ function generateFenceMovesForPlayer(player, testFences, testPawns, testFencesCo
             if (canPlaceFenceTest(x, oppGoalY, orientation, testFences, testPawns)) {
                 const exists = moves.some(m => m.x === x && m.y === oppGoalY && m.orientation === orientation);
                 if (!exists) {
-                    moves.push({ type: 'fence', x, y: oppGoalY, orientation, priority: 3 });
+                    moves.push({type: 'fence', x, y: oppGoalY, orientation, priority: 3});
                 }
             }
         }
@@ -2050,10 +1955,9 @@ function minimaxForPlayer(player, testPawns, testFences, testFencesCounts, depth
         // Evaluate pawn moves first (usually better)
         for (const move of moveMoves) {
             const newPawns = {
-                1: { ...testPawns[1] },
-                2: { ...testPawns[2] }
+                1: {...testPawns[1]}, 2: {...testPawns[2]}
             };
-            newPawns[currentTurnPlayer] = { x: move.x, y: move.y };
+            newPawns[currentTurnPlayer] = {x: move.x, y: move.y};
 
             const evalScore = minimaxForPlayer(player, newPawns, testFences, testFencesCounts, depth - 1, alpha, beta, false);
             maxEval = Math.max(maxEval, evalScore);
@@ -2065,8 +1969,8 @@ function minimaxForPlayer(player, testPawns, testFences, testFencesCounts, depth
         const fenceLimit = depth >= 3 ? 8 : 12;
         const limitedFenceMoves = fenceMoves.slice(0, fenceLimit);
         for (const move of limitedFenceMoves) {
-            const newFences = [...testFences, { x: move.x, y: move.y, orientation: move.orientation }];
-            const newCounts = { ...testFencesCounts };
+            const newFences = [...testFences, {x: move.x, y: move.y, orientation: move.orientation}];
+            const newCounts = {...testFencesCounts};
             newCounts[currentTurnPlayer]--;
 
             const evalScore = minimaxForPlayer(player, testPawns, newFences, newCounts, depth - 1, alpha, beta, false);
@@ -2081,10 +1985,9 @@ function minimaxForPlayer(player, testPawns, testFences, testFencesCounts, depth
 
         for (const move of moveMoves) {
             const newPawns = {
-                1: { ...testPawns[1] },
-                2: { ...testPawns[2] }
+                1: {...testPawns[1]}, 2: {...testPawns[2]}
             };
-            newPawns[currentTurnPlayer] = { x: move.x, y: move.y };
+            newPawns[currentTurnPlayer] = {x: move.x, y: move.y};
 
             const evalScore = minimaxForPlayer(player, newPawns, testFences, testFencesCounts, depth - 1, alpha, beta, true);
             minEval = Math.min(minEval, evalScore);
@@ -2095,8 +1998,8 @@ function minimaxForPlayer(player, testPawns, testFences, testFencesCounts, depth
         const fenceLimit = depth >= 3 ? 8 : 12;
         const limitedFenceMoves = fenceMoves.slice(0, fenceLimit);
         for (const move of limitedFenceMoves) {
-            const newFences = [...testFences, { x: move.x, y: move.y, orientation: move.orientation }];
-            const newCounts = { ...testFencesCounts };
+            const newFences = [...testFences, {x: move.x, y: move.y, orientation: move.orientation}];
+            const newCounts = {...testFencesCounts};
             newCounts[currentTurnPlayer]--;
 
             const evalScore = minimaxForPlayer(player, testPawns, newFences, newCounts, depth - 1, alpha, beta, true);
@@ -2126,7 +2029,7 @@ function executeAIMove(bestMove) {
 
     if (bestMove.type === 'move') {
         // Make the pawn move
-        pawns[aiPlayer] = { x: bestMove.x, y: bestMove.y };
+        pawns[aiPlayer] = {x: bestMove.x, y: bestMove.y};
         updatePawnPositions();
 
         if (!checkWin()) {
@@ -2143,7 +2046,7 @@ function executeAIMove(bestMove) {
             const moves = getValidMoves(aiPlayer);
             if (moves.length > 0) {
                 const move = moves[0];
-                pawns[aiPlayer] = { x: move.x, y: move.y };
+                pawns[aiPlayer] = {x: move.x, y: move.y};
                 updatePawnPositions();
                 if (!checkWin()) {
                     switchPlayer();
@@ -2315,7 +2218,7 @@ function get3DViewCameraPosition() {
     const y = distance * Math.sin(viewAngle);
     const z = -distance * Math.cos(viewAngle);
 
-    return { x: 0, y: y, z: z };
+    return {x: 0, y: y, z: z};
 }
 
 function animateToTopView() {
@@ -2337,9 +2240,7 @@ function animateToTopView() {
         const progress = Math.min(elapsed / VIEW_ANIMATION_DURATION, 1);
 
         // Easing function (ease-in-out)
-        const eased = progress < 0.5
-            ? 2 * progress * progress
-            : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+        const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
 
         // Interpolate position
         camera.position.lerpVectors(startPos, endPos, eased);
@@ -2388,9 +2289,7 @@ function animateTo3DView() {
         const progress = Math.min(elapsed / VIEW_ANIMATION_DURATION, 1);
 
         // Easing function (ease-in-out)
-        const eased = progress < 0.5
-            ? 2 * progress * progress
-            : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+        const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
 
         // Interpolate position
         camera.position.lerpVectors(startPos, endPos, eased);
@@ -2455,8 +2354,7 @@ function showTrainProposal() {
     // Check if we should show proposal
     // For Player 1: always when train is enabled
     // For Player 2: only when train is enabled AND AI is off
-    const shouldShow = trainEnabled && !gameOver &&
-        (currentPlayer === 1 || (currentPlayer === 2 && !aiEnabled));
+    const shouldShow = trainEnabled && !gameOver && (currentPlayer === 1 || (currentPlayer === 2 && !aiEnabled));
 
     if (!shouldShow) {
         clearTrainProposal();
@@ -2482,35 +2380,21 @@ function displayTrainProposal(bestMove) {
         // Show outlined/transparent highlight for the suggested move position
         const geometry = new THREE.RingGeometry(0.25, 0.4, 32);
         const material = new THREE.MeshBasicMaterial({
-            color: 0x00ff00,
-            transparent: true,
-            opacity: 0.6,
-            side: THREE.DoubleSide
+            color: 0x00ff00, transparent: true, opacity: 0.6, side: THREE.DoubleSide
         });
         const ring = new THREE.Mesh(geometry, material);
         ring.rotation.x = -Math.PI / 2;
-        ring.position.set(
-            boardOffset + bestMove.x * CELL_SIZE,
-            0.15,
-            boardOffset + bestMove.y * CELL_SIZE
-        );
+        ring.position.set(boardOffset + bestMove.x * CELL_SIZE, 0.15, boardOffset + bestMove.y * CELL_SIZE);
         trainProposalGroup.add(ring);
 
         // Add pulsing animation indicator (a second ring)
         const outerGeometry = new THREE.RingGeometry(0.35, 0.45, 32);
         const outerMaterial = new THREE.MeshBasicMaterial({
-            color: 0x00ff00,
-            transparent: true,
-            opacity: 0.3,
-            side: THREE.DoubleSide
+            color: 0x00ff00, transparent: true, opacity: 0.3, side: THREE.DoubleSide
         });
         const outerRing = new THREE.Mesh(outerGeometry, outerMaterial);
         outerRing.rotation.x = -Math.PI / 2;
-        outerRing.position.set(
-            boardOffset + bestMove.x * CELL_SIZE,
-            0.14,
-            boardOffset + bestMove.y * CELL_SIZE
-        );
+        outerRing.position.set(boardOffset + bestMove.x * CELL_SIZE, 0.14, boardOffset + bestMove.y * CELL_SIZE);
         trainProposalGroup.add(outerRing);
 
     } else if (bestMove.type === 'fence') {
@@ -2523,28 +2407,18 @@ function displayTrainProposal(bestMove) {
         }
 
         const fenceMaterial = new THREE.MeshStandardMaterial({
-            color: 0x00ff00,
-            transparent: true,
-            opacity: 0.4,
-            emissive: 0x00ff00,
-            emissiveIntensity: 0.2
+            color: 0x00ff00, transparent: true, opacity: 0.4, emissive: 0x00ff00, emissiveIntensity: 0.2
         });
 
         const fenceMesh = new THREE.Mesh(fenceGeometry, fenceMaterial);
-        fenceMesh.position.set(
-            boardOffset + bestMove.x * CELL_SIZE + CELL_SIZE / 2,
-            FENCE_HEIGHT / 2,
-            boardOffset + bestMove.y * CELL_SIZE + CELL_SIZE / 2
-        );
+        fenceMesh.position.set(boardOffset + bestMove.x * CELL_SIZE + CELL_SIZE / 2, FENCE_HEIGHT / 2, boardOffset + bestMove.y * CELL_SIZE + CELL_SIZE / 2);
         fenceMesh.castShadow = true;
         trainProposalGroup.add(fenceMesh);
 
         // Add wireframe outline
         const wireGeometry = new THREE.EdgesGeometry(fenceGeometry);
         const wireMaterial = new THREE.LineBasicMaterial({
-            color: 0x00ff00,
-            transparent: true,
-            opacity: 0.8
+            color: 0x00ff00, transparent: true, opacity: 0.8
         });
         const wireframe = new THREE.LineSegments(wireGeometry, wireMaterial);
         wireframe.position.copy(fenceMesh.position);
@@ -2564,14 +2438,12 @@ function clearTrainProposal() {
 function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts) {
     // Use provided data or fall back to global state
     const testPawns = inputPawns ? {
-        1: { ...inputPawns[1] },
-        2: { ...inputPawns[2] }
+        1: {...inputPawns[1]}, 2: {...inputPawns[2]}
     } : {
-        1: { ...pawns[1] },
-        2: { ...pawns[2] }
+        1: {...pawns[1]}, 2: {...pawns[2]}
     };
     const testFences = inputFences ? [...inputFences] : [...placedFences];
-    const testFencesCounts = inputFenceCounts ? { ...inputFenceCounts } : { ...fences };
+    const testFencesCounts = inputFenceCounts ? {...inputFenceCounts} : {...fences};
 
     let bestMove = null;
     let bestScore = -Infinity;
@@ -2594,45 +2466,43 @@ function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts
 
     for (const move of moveMoves) {
         const newPawns = {
-            1: { ...testPawns[1] },
-            2: { ...testPawns[2] }
+            1: {...testPawns[1]}, 2: {...testPawns[2]}
         };
-        newPawns[player] = { x: move.x, y: move.y };
+        newPawns[player] = {x: move.x, y: move.y};
 
         // Check for immediate win
         const goalY = player === 1 ? 8 : 0;
         if (move.y === goalY) {
-            return { type: 'move', x: move.x, y: move.y };
+            return {type: 'move', x: move.x, y: move.y};
         }
 
         const score = minimaxForPlayer(player, newPawns, testFences, testFencesCounts, depth - 1, -Infinity, Infinity, false);
 
         if (score > bestScore) {
             bestScore = score;
-            bestMove = { type: 'move', x: move.x, y: move.y };
+            bestMove = {type: 'move', x: move.x, y: move.y};
         }
     }
 
     // Evaluate fence moves (strategic subset)
     // Only consider fences if we have them and it makes strategic sense
-    const shouldConsiderFences = testFencesCounts[player] > 0 &&
-        (oppDist <= playerDist + 2 || // Opponent is close or ahead
-         oppDist <= 4 ||              // Opponent is near goal
-         testFencesCounts[player] >= 5); // We have lots of fences
+    const shouldConsiderFences = testFencesCounts[player] > 0 && (oppDist <= playerDist + 2 || // Opponent is close or ahead
+        oppDist <= 4 ||              // Opponent is near goal
+        testFencesCounts[player] >= 5); // We have lots of fences
 
     if (shouldConsiderFences) {
         const fenceMoves = generateFenceMovesForPlayer(player, testFences, testPawns, testFencesCounts);
 
         // Score and sort fence moves by immediate impact
         const scoredFences = fenceMoves.map(move => {
-            const newFences = [...testFences, { x: move.x, y: move.y, orientation: move.orientation }];
+            const newFences = [...testFences, {x: move.x, y: move.y, orientation: move.orientation}];
             const oppDistBefore = getShortestPathDistance(oppPlayer, testPawns, testFences);
             const oppDistAfter = getShortestPathDistance(oppPlayer, testPawns, newFences);
             const playerDistAfter = getShortestPathDistance(player, testPawns, newFences);
 
             // Impact = how much we slow opponent minus how much we slow ourselves
             const impact = (oppDistAfter - oppDistBefore) - (playerDistAfter - playerDist) * 0.5;
-            return { ...move, impact };
+            return {...move, impact};
         });
 
         // Sort by impact and take top candidates
@@ -2641,20 +2511,18 @@ function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts
         const topFences = scoredFences.filter(f => f.impact > 0).slice(0, 20);
 
         for (const move of topFences) {
-            const newFences = [...testFences, { x: move.x, y: move.y, orientation: move.orientation }];
-            const newCounts = { ...testFencesCounts };
+            const newFences = [...testFences, {x: move.x, y: move.y, orientation: move.orientation}];
+            const newCounts = {...testFencesCounts};
             newCounts[player]--;
 
             const score = minimaxForPlayer(player, testPawns, newFences, newCounts, depth - 1, -Infinity, Infinity, false);
 
             if (score > bestScore) {
                 bestScore = score;
-                bestMove = { type: 'fence', x: move.x, y: move.y, orientation: move.orientation };
+                bestMove = {type: 'fence', x: move.x, y: move.y, orientation: move.orientation};
             }
         }
     }
 
     return bestMove;
 }
-
-
