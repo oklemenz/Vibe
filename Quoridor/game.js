@@ -292,8 +292,6 @@ function hideAIThinkingIndicator() {
     if (topPlayer2Name) {
         topPlayer2Name.classList.remove('ai-thinking');
     }
-    // Hide pulsating ring
-    hideThinkingRing();
 }
 
 // Show Player 1 thinking indicator (for Assist mode)
@@ -408,7 +406,7 @@ function updateThinkingRingAnimation() {
     const progress = (elapsed % pulseDuration) / pulseDuration;
 
     // Pulsating scale (1.0 to 1.3) - only expand outward
-    const scale = 1.0 + Math.sin(progress * Math.PI * 2) * 0.15 + 0.15;
+    const scale = 1.0 + Math.sin(progress * Math.PI * 2) * 0.10 + 0.10;
     thinkingRing.scale.set(scale, scale, scale);
 
     // Pulsating opacity (0.5 to 0.9)
@@ -2147,11 +2145,6 @@ function executeAIMove(bestMove) {
             }
         }
     }
-
-    // Show training proposal after AI move if it's now Player 1's turn
-    if (trainEnabled && currentPlayer === 1 && !gameOver) {
-        startAssistCalculation();
-    }
 }
 
 // Legacy function for backward compatibility
@@ -2190,9 +2183,11 @@ function toggleTrain() {
             assistWorker.terminate();
             initAssistWorker();
         }
+        assistCalculationPlayer = null;
         clearTrainProposal();
         hidePlayer1ThinkingIndicator();
         hidePlayer2ThinkingIndicator();
+        hideThinkingRing();
     }
 }
 

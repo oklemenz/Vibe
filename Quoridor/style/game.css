@@ -978,7 +978,7 @@ body.portrait-mode .fence-panel-separator {
     body.mobile-portrait #top-player2-section > h4 {
         margin-bottom: 0;
         white-space: nowrap;
-        min-width: 50px;
+        min-width: 60px;
         font-size: 13px;
     }
 
