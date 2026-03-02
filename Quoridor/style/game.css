@@ -1115,5 +1115,30 @@ body.portrait-mode .fence-panel-separator {
     gap: 10px;
 }
 
+/* AI Thinking Indicator Animation */
+@keyframes ai-thinking-pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.15);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.ai-thinking-indicator {
+    display: inline-block;
+    animation: ai-thinking-pulse 0.8s ease-in-out infinite;
+}
+
+/* AI thinking state for player name */
+#player2-name.ai-thinking,
+#top-player2-name.ai-thinking {
+    display: inline-block;
+    animation: ai-thinking-pulse 0.8s ease-in-out infinite;
+}
+
 
 
