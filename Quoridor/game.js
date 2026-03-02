@@ -1032,6 +1032,10 @@ function onWindowResize() {
 function onClick(event) {
     if (gameOver || isDragging) return;
 
+    // Don't allow clicks when AI is playing
+    if (aiEnabled && currentPlayer === aiPlayer) return;
+    if (aiThinking) return;
+
     // Don't process clicks if intro modal is visible
     const introModal = document.getElementById('intro-modal');
     if (introModal && !introModal.classList.contains('hidden')) return;
@@ -1061,6 +1065,10 @@ function onPointerDownForHighlight(event) {
     pointerOnHighlight = false;
     if (gameOver || isDragging) return;
     if (viewMode === 'top') return;
+
+    // Don't allow interactions when AI is playing
+    if (aiEnabled && currentPlayer === aiPlayer) return;
+    if (aiThinking) return;
 
     // Check if pointer is on a move highlight
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -1117,6 +1125,10 @@ function onTouchMove() {
 function onTouchEnd(event) {
     if (gameOver || isDragging) return;
 
+    // Don't allow touches when AI is playing
+    if (aiEnabled && currentPlayer === aiPlayer) return;
+    if (aiThinking) return;
+
     // Don't process touches if intro modal is visible
     const introModal = document.getElementById('intro-modal');
     if (introModal && !introModal.classList.contains('hidden')) return;
@@ -1152,27 +1164,20 @@ function onTouchEnd(event) {
         const point = boardIntersects[0].point;
         const boardOffset = -(BOARD_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
 
-        // Calculate touched cell position
-        const touchedX = (point.x - boardOffset + CELL_SIZE / 2) / CELL_SIZE;
-        const touchedY = (point.z - boardOffset + CELL_SIZE / 2) / CELL_SIZE;
+        // Calculate touched cell position (rounded to nearest cell)
+        const touchedX = Math.round((point.x - boardOffset) / CELL_SIZE);
+        const touchedY = Math.round((point.z - boardOffset) / CELL_SIZE);
 
-        // Find the closest valid move within tolerance
-        let closestMove = null;
-        let closestDistance = 1.5; // Maximum distance in cells to consider (1.5 = adjacent + some tolerance)
-
-        for (const move of validMoves) {
-            const dx = move.x - touchedX;
-            const dy = move.y - touchedY;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            if (distance < closestDistance) {
-                closestDistance = distance;
-                closestMove = move;
-            }
+        // Ignore if touched position is the current player's position
+        if (touchedX === pawns[currentPlayer].x && touchedY === pawns[currentPlayer].y) {
+            return;
         }
 
-        if (closestMove) {
-            if (movePawn(closestMove.x, closestMove.y)) {
+        // Only move if the touched cell is exactly a valid move
+        const validMove = validMoves.find(move => move.x === touchedX && move.y === touchedY);
+
+        if (validMove) {
+            if (movePawn(validMove.x, validMove.y)) {
                 if (!checkWin()) {
                     switchPlayer();
                 }

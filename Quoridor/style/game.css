@@ -15,10 +15,15 @@ html, body {
     }
 }
 
-body, body * {
+/* Disable all text selection and touch callouts */
+html, body, body * {
     -webkit-touch-callout: none;
     -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
     user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: none;
 }
 
 .game, .game_container, #game-container {
@@ -776,10 +781,15 @@ body {
     z-index: 300;
     justify-content: center;
     align-items: center;
+    pointer-events: auto;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 #intro-modal.hidden {
     display: none;
+    pointer-events: none;
 }
 
 #intro-content {
@@ -791,6 +801,8 @@ body {
     border: 2px solid #6c5ce7;
     max-width: 400px;
     margin: 20px;
+    pointer-events: auto;
+    touch-action: none;
 }
 
 @media (orientation: landscape) {
