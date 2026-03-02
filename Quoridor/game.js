@@ -94,6 +94,63 @@ function hideAIThinkingIndicator() {
     }
 }
 
+// Show Player 1 thinking indicator (for Assist mode)
+function showPlayer1ThinkingIndicator() {
+    const player1Name = document.getElementById('player1-name');
+    if (player1Name) {
+        player1Name.classList.add('ai-thinking');
+    }
+}
+
+// Hide Player 1 thinking indicator
+function hidePlayer1ThinkingIndicator() {
+    const player1Name = document.getElementById('player1-name');
+    if (player1Name) {
+        player1Name.classList.remove('ai-thinking');
+    }
+}
+
+// Show Player 2 thinking indicator (for Assist mode when AI is off)
+function showPlayer2ThinkingIndicator() {
+    const player2Name = document.getElementById('player2-name');
+    const topPlayer2Name = document.getElementById('top-player2-name');
+    if (player2Name) {
+        player2Name.classList.add('ai-thinking');
+    }
+    if (topPlayer2Name) {
+        topPlayer2Name.classList.add('ai-thinking');
+    }
+}
+
+// Hide Player 2 thinking indicator
+function hidePlayer2ThinkingIndicator() {
+    const player2Name = document.getElementById('player2-name');
+    const topPlayer2Name = document.getElementById('top-player2-name');
+    if (player2Name) {
+        player2Name.classList.remove('ai-thinking');
+    }
+    if (topPlayer2Name) {
+        topPlayer2Name.classList.remove('ai-thinking');
+    }
+}
+
+// Show/hide thinking indicator for current player
+function showCurrentPlayerThinkingIndicator() {
+    if (currentPlayer === 1) {
+        showPlayer1ThinkingIndicator();
+    } else {
+        showPlayer2ThinkingIndicator();
+    }
+}
+
+function hideCurrentPlayerThinkingIndicator() {
+    if (currentPlayer === 1) {
+        hidePlayer1ThinkingIndicator();
+    } else {
+        hidePlayer2ThinkingIndicator();
+    }
+}
+
 
 // Training mode state
 let trainEnabled = false;
@@ -700,6 +757,9 @@ function switchPlayer() {
     updateUI();
     updateValidMoves();
 
+    // Ensure fence panel state is updated immediately
+    updateFencePanelState();
+
     // Check if AI should make a move
     if (aiEnabled && currentPlayer === aiPlayer && !gameOver && !aiThinking) {
         aiThinking = true;
@@ -714,11 +774,14 @@ function switchPlayer() {
                 showTrainProposal();
             }
         }, 500);
-    } else if (trainEnabled && currentPlayer === 1 && !gameOver) {
-        // Show training proposal for Player 1
-        setTimeout(() => {
-            showTrainProposal();
-        }, 100);
+    } else if (trainEnabled && !gameOver) {
+        // Show training proposal for current player (both players when AI is off)
+        // Only show for Player 2 if AI is not enabled
+        if (currentPlayer === 1 || (currentPlayer === 2 && !aiEnabled)) {
+            setTimeout(() => {
+                showTrainProposal();
+            }, 100);
+        }
     }
 }
 
@@ -756,45 +819,30 @@ function updateSwitchButtonState() {
 }
 
 function updateFencePanelState() {
+    // Get all fence elements (including top panel)
     const p1Fences = document.querySelectorAll('.player1-fence');
     const p2Fences = document.querySelectorAll('.player2-fence');
-    const p1Section = document.getElementById('player1-section');
-    const p2Section = document.getElementById('player2-section');
-    const topP2Section = document.getElementById('top-player2-section');
 
+    // Player 1 fences: enabled when it's Player 1's turn, has fences, and game not over
+    const p1Enabled = currentPlayer === 1 && fences[1] > 0 && !gameOver;
     p1Fences.forEach(fence => {
-        if (currentPlayer !== 1 || fences[1] <= 0 || gameOver) {
-            fence.classList.add('disabled');
-        } else {
+        if (p1Enabled) {
             fence.classList.remove('disabled');
+        } else {
+            fence.classList.add('disabled');
         }
     });
 
-    // Player 2 fences: also disable when AI is enabled (AI controls Player 2)
+    // Player 2 fences: enabled when it's Player 2's turn, has fences, game not over, and AI is not controlling
     const isAIPlayer2 = aiEnabled && aiPlayer === 2;
+    const p2Enabled = currentPlayer === 2 && fences[2] > 0 && !gameOver && !isAIPlayer2;
     p2Fences.forEach(fence => {
-        if (currentPlayer !== 2 || fences[2] <= 0 || gameOver || isAIPlayer2) {
-            fence.classList.add('disabled');
-        } else {
+        if (p2Enabled) {
             fence.classList.remove('disabled');
+        } else {
+            fence.classList.add('disabled');
         }
     });
-
-    // Make entire section transparent for inactive player
-    // Also make AI section transparent when AI is enabled
-    if (p1Section) {
-        p1Section.style.opacity = (currentPlayer === 1 && fences[1] > 0 && !gameOver) ? '1' : '0.3';
-    }
-
-    const p2Active = currentPlayer === 2 && fences[2] > 0 && !gameOver && !isAIPlayer2;
-    if (p2Section) {
-        p2Section.style.opacity = p2Active ? '1' : '0.3';
-    }
-
-    // Also update top panel for Player 2 (used in mobile portrait mode)
-    if (topP2Section) {
-        topP2Section.style.opacity = p2Active ? '1' : '0.3';
-    }
 }
 
 function setupDragAndDrop() {
@@ -896,31 +944,33 @@ function setupDragAndDrop() {
 
     // Helper function to end fence drag
     function endFenceDrag(clientX, clientY) {
-        // Try to place fence at current position
-        const boardPos = getBoardPositionFromMouse(clientX, clientY);
-
-        if (boardPos && placeFence(boardPos.x, boardPos.y, dragOrientation)) {
-            clearPreview();
-            if (!checkWin()) {
-                switchPlayer();
-            }
-        }
-
-        // Reset drag state
+        // Reset drag state first
         isDragging = false;
         dragPreview.style.display = 'none';
         clearPreview();
-        updateValidMoves();
 
         // Re-enable OrbitControls after fence dragging (if not in top view)
         if (viewMode !== 'top') {
             controls.enabled = true;
         }
 
-        // Reset fence element opacity
+        // Remove inline opacity style so CSS classes can take effect
         document.querySelectorAll('.draggable-fence').forEach(f => {
-            f.style.opacity = '1';
+            f.style.opacity = '';
         });
+
+        // Try to place fence at current position
+        const boardPos = getBoardPositionFromMouse(clientX, clientY);
+
+        if (boardPos && placeFence(boardPos.x, boardPos.y, dragOrientation)) {
+            if (!checkWin()) {
+                switchPlayer();
+            }
+        }
+
+        // Always update valid moves and fence panel state
+        updateValidMoves();
+        updateFencePanelState();
     }
 
     // Keyboard rotation during drag - this now works!
@@ -1081,6 +1131,10 @@ function onClick(event) {
             if (!checkWin()) {
                 switchPlayer();
             }
+            // Ensure fence panel is updated after move
+            setTimeout(() => {
+                updateFencePanelState();
+            }, 50);
         }
     }
 }
@@ -1181,6 +1235,8 @@ function onTouchEnd(event) {
             if (!checkWin()) {
                 switchPlayer();
             }
+            // Ensure fence panel is updated after move
+            updateFencePanelState();
         }
         return;
     }
@@ -1209,6 +1265,8 @@ function onTouchEnd(event) {
                 if (!checkWin()) {
                     switchPlayer();
                 }
+                // Ensure fence panel is updated after move
+                updateFencePanelState();
             }
         }
     }
@@ -1560,15 +1618,15 @@ function getValidMovesTest(player, testPawns, testFences) {
     return moves;
 }
 
-// Evaluate board state (positive = good for AI, negative = good for opponent)
-function evaluateState(testPawns, testFences, testFencesCounts) {
-    const aiDist = getShortestPathDistance(aiPlayer, testPawns, testFences);
-    const oppPlayer = aiPlayer === 1 ? 2 : 1;
+// Evaluate board state for a specific player (positive = good for player, negative = good for opponent)
+function evaluateStateForPlayer(player, testPawns, testFences, testFencesCounts) {
+    const playerDist = getShortestPathDistance(player, testPawns, testFences);
+    const oppPlayer = player === 1 ? 2 : 1;
     const oppDist = getShortestPathDistance(oppPlayer, testPawns, testFences);
 
     // Check for immediate wins
-    if (aiPlayer === 1 && testPawns[1].y === 8) return 10000;
-    if (aiPlayer === 2 && testPawns[2].y === 0) return 10000;
+    if (player === 1 && testPawns[1].y === 8) return 10000;
+    if (player === 2 && testPawns[2].y === 0) return 10000;
     if (oppPlayer === 1 && testPawns[1].y === 8) return -10000;
     if (oppPlayer === 2 && testPawns[2].y === 0) return -10000;
 
@@ -1576,12 +1634,12 @@ function evaluateState(testPawns, testFences, testFencesCounts) {
 
     // Primary factor: Path distance difference (heavily weighted)
     // Positive when we're closer to goal than opponent
-    const pathAdvantage = oppDist - aiDist;
+    const pathAdvantage = oppDist - playerDist;
     score += pathAdvantage * 100;
 
-    // Critical advantage: When AI is about to win
-    if (aiDist <= 2) {
-        score += (3 - aiDist) * 50;
+    // Critical advantage: When player is about to win
+    if (playerDist <= 2) {
+        score += (3 - playerDist) * 50;
     }
 
     // Defensive: Penalize when opponent is about to win
@@ -1590,18 +1648,17 @@ function evaluateState(testPawns, testFences, testFencesCounts) {
     }
 
     // Tempo advantage: Who is closer to winning the race?
-    // If it's AI's turn and distances are equal, AI has tempo
-    if (aiDist <= oppDist) {
+    if (playerDist <= oppDist) {
         score += 25;
     }
 
     // Center control bonus: Being in the center provides more options
-    const aiCenterDist = Math.abs(testPawns[aiPlayer].x - 4);
+    const playerCenterDist = Math.abs(testPawns[player].x - 4);
     const oppCenterDist = Math.abs(testPawns[oppPlayer].x - 4);
-    score += (oppCenterDist - aiCenterDist) * 5;
+    score += (oppCenterDist - playerCenterDist) * 5;
 
     // Progressive position bonus - reward advancement
-    if (aiPlayer === 1) {
+    if (player === 1) {
         score += testPawns[1].y * 8;
         score -= (8 - testPawns[2].y) * 8;
     } else {
@@ -1610,97 +1667,22 @@ function evaluateState(testPawns, testFences, testFencesCounts) {
     }
 
     // Fence advantage (but don't over-value)
-    const fenceAdvantage = testFencesCounts[aiPlayer] - testFencesCounts[oppPlayer];
+    const fenceAdvantage = testFencesCounts[player] - testFencesCounts[oppPlayer];
     score += fenceAdvantage * 3;
 
     // Having fences when opponent is close to winning is valuable
-    if (oppDist <= 3 && testFencesCounts[aiPlayer] > 0) {
-        score += testFencesCounts[aiPlayer] * 5;
+    if (oppDist <= 3 && testFencesCounts[player] > 0) {
+        score += testFencesCounts[player] * 5;
     }
 
     // Penalty for having no fences when opponent has lots
-    if (testFencesCounts[aiPlayer] === 0 && testFencesCounts[oppPlayer] > 3) {
+    if (testFencesCounts[player] === 0 && testFencesCounts[oppPlayer] > 3) {
         score -= 20;
     }
 
     return score;
 }
 
-// Generate all possible fence placements (smart subset)
-function generateFenceMoves(player, testFences, testPawns, testFencesCounts) {
-    if (testFencesCounts[player] <= 0) return [];
-
-    const moves = [];
-    const oppPlayer = player === 1 ? 2 : 1;
-    const oppPos = testPawns[oppPlayer];
-
-    // Calculate opponent's shortest path to find critical blocking points
-    const oppPath = getShortestPath(oppPlayer, testPawns, testFences);
-    const pathCells = new Set();
-    if (oppPath) {
-        for (const cell of oppPath) {
-            pathCells.add(`${cell.x},${cell.y}`);
-            // Also add adjacent cells for blocking opportunities
-            for (let dx = -1; dx <= 1; dx++) {
-                for (let dy = -1; dy <= 1; dy++) {
-                    pathCells.add(`${cell.x + dx},${cell.y + dy}`);
-                }
-            }
-        }
-    }
-
-    // Priority 1: Fences that block opponent's current path
-    for (let x = 0; x <= BOARD_SIZE - 2; x++) {
-        for (let y = 0; y <= BOARD_SIZE - 2; y++) {
-            // Check if this position is near opponent's path
-            const nearPath = pathCells.has(`${x},${y}`) ||
-                            pathCells.has(`${x+1},${y}`) ||
-                            pathCells.has(`${x},${y+1}`) ||
-                            pathCells.has(`${x+1},${y+1}`);
-
-            if (nearPath) {
-                for (const orientation of ['h', 'v']) {
-                    if (canPlaceFenceTest(x, y, orientation, testFences, testPawns)) {
-                        moves.push({ type: 'fence', x, y, orientation, priority: 1 });
-                    }
-                }
-            }
-        }
-    }
-
-    // Priority 2: Fences near opponent's position (within 2 cells)
-    for (let x = Math.max(0, oppPos.x - 2); x <= Math.min(BOARD_SIZE - 2, oppPos.x + 2); x++) {
-        for (let y = Math.max(0, oppPos.y - 2); y <= Math.min(BOARD_SIZE - 2, oppPos.y + 2); y++) {
-            for (const orientation of ['h', 'v']) {
-                if (canPlaceFenceTest(x, y, orientation, testFences, testPawns)) {
-                    // Avoid duplicates
-                    const exists = moves.some(m => m.x === x && m.y === y && m.orientation === orientation);
-                    if (!exists) {
-                        moves.push({ type: 'fence', x, y, orientation, priority: 2 });
-                    }
-                }
-            }
-        }
-    }
-
-    // Priority 3: Strategic positions - goal row blocking
-    const oppGoalY = oppPlayer === 1 ? 7 : 0; // Row just before goal
-    for (let x = 0; x <= BOARD_SIZE - 2; x++) {
-        for (const orientation of ['h', 'v']) {
-            if (canPlaceFenceTest(x, oppGoalY, orientation, testFences, testPawns)) {
-                const exists = moves.some(m => m.x === x && m.y === oppGoalY && m.orientation === orientation);
-                if (!exists) {
-                    moves.push({ type: 'fence', x, y: oppGoalY, orientation, priority: 3 });
-                }
-            }
-        }
-    }
-
-    // Sort by priority
-    moves.sort((a, b) => a.priority - b.priority);
-
-    return moves;
-}
 
 // Get the shortest path as an array of cells
 function getShortestPath(player, testPawns, testFences) {
@@ -1739,33 +1721,109 @@ function getShortestPath(player, testPawns, testFences) {
     return null;
 }
 
-// Minimax with alpha-beta pruning
-function minimax(testPawns, testFences, testFencesCounts, depth, alpha, beta, isMaximizing) {
+// Generate fence moves for a specific player (smart subset)
+function generateFenceMovesForPlayer(player, testFences, testPawns, testFencesCounts) {
+    if (testFencesCounts[player] <= 0) return [];
+
+    const moves = [];
+    const oppPlayer = player === 1 ? 2 : 1;
+    const oppPos = testPawns[oppPlayer];
+
+    // Calculate opponent's shortest path to find critical blocking points
+    const oppPath = getShortestPath(oppPlayer, testPawns, testFences);
+    const pathCells = new Set();
+    if (oppPath) {
+        for (const cell of oppPath) {
+            pathCells.add(`${cell.x},${cell.y}`);
+            // Also add adjacent cells for blocking opportunities
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    pathCells.add(`${cell.x + dx},${cell.y + dy}`);
+                }
+            }
+        }
+    }
+
+    // Priority 1: Fences that block opponent's current path
+    for (let x = 0; x <= BOARD_SIZE - 2; x++) {
+        for (let y = 0; y <= BOARD_SIZE - 2; y++) {
+            const nearPath = pathCells.has(`${x},${y}`) ||
+                            pathCells.has(`${x+1},${y}`) ||
+                            pathCells.has(`${x},${y+1}`) ||
+                            pathCells.has(`${x+1},${y+1}`);
+
+            if (nearPath) {
+                for (const orientation of ['h', 'v']) {
+                    if (canPlaceFenceTest(x, y, orientation, testFences, testPawns)) {
+                        moves.push({ type: 'fence', x, y, orientation, priority: 1 });
+                    }
+                }
+            }
+        }
+    }
+
+    // Priority 2: Fences near opponent's position (within 2 cells)
+    for (let x = Math.max(0, oppPos.x - 2); x <= Math.min(BOARD_SIZE - 2, oppPos.x + 2); x++) {
+        for (let y = Math.max(0, oppPos.y - 2); y <= Math.min(BOARD_SIZE - 2, oppPos.y + 2); y++) {
+            for (const orientation of ['h', 'v']) {
+                if (canPlaceFenceTest(x, y, orientation, testFences, testPawns)) {
+                    const exists = moves.some(m => m.x === x && m.y === y && m.orientation === orientation);
+                    if (!exists) {
+                        moves.push({ type: 'fence', x, y, orientation, priority: 2 });
+                    }
+                }
+            }
+        }
+    }
+
+    // Priority 3: Strategic positions - goal row blocking
+    const oppGoalY = oppPlayer === 1 ? 7 : 0;
+    for (let x = 0; x <= BOARD_SIZE - 2; x++) {
+        for (const orientation of ['h', 'v']) {
+            if (canPlaceFenceTest(x, oppGoalY, orientation, testFences, testPawns)) {
+                const exists = moves.some(m => m.x === x && m.y === oppGoalY && m.orientation === orientation);
+                if (!exists) {
+                    moves.push({ type: 'fence', x, y: oppGoalY, orientation, priority: 3 });
+                }
+            }
+        }
+    }
+
+    // Sort by priority
+    moves.sort((a, b) => a.priority - b.priority);
+
+    return moves;
+}
+
+// Minimax with alpha-beta pruning for a specific player
+function minimaxForPlayer(player, testPawns, testFences, testFencesCounts, depth, alpha, beta, isMaximizing) {
+    const oppPlayer = player === 1 ? 2 : 1;
+
     // Check terminal conditions
     if (testPawns[1].y === 8) {
-        return aiPlayer === 1 ? 10000 + depth : -10000 - depth;
+        return player === 1 ? 10000 + depth : -10000 - depth;
     }
     if (testPawns[2].y === 0) {
-        return aiPlayer === 2 ? 10000 + depth : -10000 - depth;
+        return player === 2 ? 10000 + depth : -10000 - depth;
     }
 
     if (depth === 0) {
-        return evaluateState(testPawns, testFences, testFencesCounts);
+        return evaluateStateForPlayer(player, testPawns, testFences, testFencesCounts);
     }
 
-    const currentPlayer = isMaximizing ? aiPlayer : (aiPlayer === 1 ? 2 : 1);
+    const currentTurnPlayer = isMaximizing ? player : oppPlayer;
 
     // Generate and sort moves for better pruning
-    const moveMoves = getValidMovesTest(currentPlayer, testPawns, testFences);
+    const moveMoves = getValidMovesTest(currentTurnPlayer, testPawns, testFences);
 
     // Sort pawn moves by distance to goal (prefer moves toward goal)
     moveMoves.sort((a, b) => {
-        const distA = currentPlayer === 1 ? (8 - a.y) : a.y;
-        const distB = currentPlayer === 1 ? (8 - b.y) : b.y;
+        const distA = currentTurnPlayer === 1 ? (8 - a.y) : a.y;
+        const distB = currentTurnPlayer === 1 ? (8 - b.y) : b.y;
         return distA - distB;
     });
 
-    const fenceMoves = generateFenceMoves(currentPlayer, testFences, testPawns, testFencesCounts);
+    const fenceMoves = generateFenceMovesForPlayer(currentTurnPlayer, testFences, testPawns, testFencesCounts);
 
     if (isMaximizing) {
         let maxEval = -Infinity;
@@ -1776,9 +1834,9 @@ function minimax(testPawns, testFences, testFencesCounts, depth, alpha, beta, is
                 1: { ...testPawns[1] },
                 2: { ...testPawns[2] }
             };
-            newPawns[currentPlayer] = { x: move.x, y: move.y };
+            newPawns[currentTurnPlayer] = { x: move.x, y: move.y };
 
-            const evalScore = minimax(newPawns, testFences, testFencesCounts, depth - 1, alpha, beta, false);
+            const evalScore = minimaxForPlayer(player, newPawns, testFences, testFencesCounts, depth - 1, alpha, beta, false);
             maxEval = Math.max(maxEval, evalScore);
             alpha = Math.max(alpha, evalScore);
             if (beta <= alpha) break;
@@ -1790,9 +1848,9 @@ function minimax(testPawns, testFences, testFencesCounts, depth, alpha, beta, is
         for (const move of limitedFenceMoves) {
             const newFences = [...testFences, { x: move.x, y: move.y, orientation: move.orientation }];
             const newCounts = { ...testFencesCounts };
-            newCounts[currentPlayer]--;
+            newCounts[currentTurnPlayer]--;
 
-            const evalScore = minimax(testPawns, newFences, newCounts, depth - 1, alpha, beta, false);
+            const evalScore = minimaxForPlayer(player, testPawns, newFences, newCounts, depth - 1, alpha, beta, false);
             maxEval = Math.max(maxEval, evalScore);
             alpha = Math.max(alpha, evalScore);
             if (beta <= alpha) break;
@@ -1807,9 +1865,9 @@ function minimax(testPawns, testFences, testFencesCounts, depth, alpha, beta, is
                 1: { ...testPawns[1] },
                 2: { ...testPawns[2] }
             };
-            newPawns[currentPlayer] = { x: move.x, y: move.y };
+            newPawns[currentTurnPlayer] = { x: move.x, y: move.y };
 
-            const evalScore = minimax(newPawns, testFences, testFencesCounts, depth - 1, alpha, beta, true);
+            const evalScore = minimaxForPlayer(player, newPawns, testFences, testFencesCounts, depth - 1, alpha, beta, true);
             minEval = Math.min(minEval, evalScore);
             beta = Math.min(beta, evalScore);
             if (beta <= alpha) break;
@@ -1820,9 +1878,9 @@ function minimax(testPawns, testFences, testFencesCounts, depth, alpha, beta, is
         for (const move of limitedFenceMoves) {
             const newFences = [...testFences, { x: move.x, y: move.y, orientation: move.orientation }];
             const newCounts = { ...testFencesCounts };
-            newCounts[currentPlayer]--;
+            newCounts[currentTurnPlayer]--;
 
-            const evalScore = minimax(testPawns, newFences, newCounts, depth - 1, alpha, beta, true);
+            const evalScore = minimaxForPlayer(player, testPawns, newFences, newCounts, depth - 1, alpha, beta, true);
             minEval = Math.min(minEval, evalScore);
             beta = Math.min(beta, evalScore);
             if (beta <= alpha) break;
@@ -1832,96 +1890,9 @@ function minimax(testPawns, testFences, testFencesCounts, depth, alpha, beta, is
     }
 }
 
-// Find the best move for AI
+// Find the best move for AI (wrapper for findBestMoveForPlayer)
 function findBestMove() {
-    const testPawns = {
-        1: { ...pawns[1] },
-        2: { ...pawns[2] }
-    };
-    const testFences = [...placedFences];
-    const testFencesCounts = { ...fences };
-
-    let bestMove = null;
-    let bestScore = -Infinity;
-    const depth = 4; // Increased search depth for stronger AI
-
-    // Calculate distances for strategic decisions
-    const aiDist = getShortestPathDistance(aiPlayer, testPawns, testFences);
-    const oppPlayer = aiPlayer === 1 ? 2 : 1;
-    const oppDist = getShortestPathDistance(oppPlayer, testPawns, testFences);
-
-    // Evaluate pawn moves
-    const moveMoves = getValidMovesTest(aiPlayer, testPawns, testFences);
-
-    // Sort moves by distance to goal (prefer moves toward goal)
-    moveMoves.sort((a, b) => {
-        const distA = aiPlayer === 1 ? (8 - a.y) : a.y;
-        const distB = aiPlayer === 1 ? (8 - b.y) : b.y;
-        return distA - distB;
-    });
-
-    for (const move of moveMoves) {
-        const newPawns = {
-            1: { ...testPawns[1] },
-            2: { ...testPawns[2] }
-        };
-        newPawns[aiPlayer] = { x: move.x, y: move.y };
-
-        // Check for immediate win
-        if ((aiPlayer === 1 && move.y === 8) || (aiPlayer === 2 && move.y === 0)) {
-            return { type: 'move', x: move.x, y: move.y };
-        }
-
-        const score = minimax(newPawns, testFences, testFencesCounts, depth - 1, -Infinity, Infinity, false);
-
-        if (score > bestScore) {
-            bestScore = score;
-            bestMove = { type: 'move', x: move.x, y: move.y };
-        }
-    }
-
-    // Evaluate fence moves (strategic subset)
-    // Only consider fences if we have them and it makes strategic sense
-    const shouldConsiderFences = testFencesCounts[aiPlayer] > 0 &&
-        (oppDist <= aiDist + 2 || // Opponent is close or ahead
-         oppDist <= 4 ||           // Opponent is near goal
-         testFencesCounts[aiPlayer] >= 5); // We have lots of fences
-
-    if (shouldConsiderFences) {
-        const fenceMoves = generateFenceMoves(aiPlayer, testFences, testPawns, testFencesCounts);
-
-        // Score and sort fence moves by immediate impact
-        const scoredFences = fenceMoves.map(move => {
-            const newFences = [...testFences, { x: move.x, y: move.y, orientation: move.orientation }];
-            const oppDistBefore = getShortestPathDistance(oppPlayer, testPawns, testFences);
-            const oppDistAfter = getShortestPathDistance(oppPlayer, testPawns, newFences);
-            const aiDistAfter = getShortestPathDistance(aiPlayer, testPawns, newFences);
-
-            // Impact = how much we slow opponent minus how much we slow ourselves
-            const impact = (oppDistAfter - oppDistBefore) - (aiDistAfter - aiDist) * 0.5;
-            return { ...move, impact };
-        });
-
-        // Sort by impact and take top candidates
-        scoredFences.sort((a, b) => b.impact - a.impact);
-        // Take more candidates for deeper analysis
-        const topFences = scoredFences.filter(f => f.impact > 0).slice(0, 20);
-
-        for (const move of topFences) {
-            const newFences = [...testFences, { x: move.x, y: move.y, orientation: move.orientation }];
-            const newCounts = { ...testFencesCounts };
-            newCounts[aiPlayer]--;
-
-            const score = minimax(testPawns, newFences, newCounts, depth - 1, -Infinity, Infinity, false);
-
-            if (score > bestScore) {
-                bestScore = score;
-                bestMove = { type: 'fence', x: move.x, y: move.y, orientation: move.orientation };
-            }
-        }
-    }
-
-    return bestMove;
+    return findBestMoveForPlayer(aiPlayer);
 }
 
 // Execute the AI's move
@@ -1977,14 +1948,21 @@ function toggleTrain() {
     if (trainEnabled) {
         btn.textContent = '🎓 Assist On';
         btn.classList.add('active');
-        // Show proposal for current player if it's Player 1's turn
-        if (currentPlayer === 1 && !gameOver) {
-            showTrainProposal();
+        // Show proposal for current player
+        // For Player 1: always show
+        // For Player 2: only show when AI is off
+        // Use setTimeout to allow the button to fully render before calculation
+        if (!gameOver && (currentPlayer === 1 || (currentPlayer === 2 && !aiEnabled))) {
+            setTimeout(() => {
+                showTrainProposal();
+            }, 150);
         }
     } else {
         btn.textContent = '🎓 Assist';
         btn.classList.remove('active');
         clearTrainProposal();
+        hidePlayer1ThinkingIndicator();
+        hidePlayer2ThinkingIndicator();
     }
 }
 
@@ -2240,51 +2218,68 @@ function set3DView() {
 }
 
 function showTrainProposal() {
-    if (!trainEnabled || currentPlayer !== 1 || gameOver) {
+    // Check if we should show proposal
+    // For Player 1: always when train is enabled
+    // For Player 2: only when train is enabled AND AI is off
+    const shouldShow = trainEnabled && !gameOver &&
+        (currentPlayer === 1 || (currentPlayer === 2 && !aiEnabled));
+
+    if (!shouldShow) {
         clearTrainProposal();
+        hideCurrentPlayerThinkingIndicator();
         return;
     }
 
     // Clear previous proposal
     clearTrainProposal();
 
-    // Find the best move for Player 1 using the same AI logic
-    const bestMove = findBestMoveForPlayer(1);
+    // Show thinking indicator while calculating
+    showCurrentPlayerThinkingIndicator();
 
-    if (!bestMove) return;
+    // Use requestAnimationFrame + setTimeout to ensure UI fully updates before blocking calculation
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                // Find the best move for current player using the same AI logic
+                const bestMove = findBestMoveForPlayer(currentPlayer);
 
-    const boardOffset = -(BOARD_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
+                // Hide thinking indicator after calculation
+                hideCurrentPlayerThinkingIndicator();
 
-    if (bestMove.type === 'move') {
-        // Show outlined/transparent highlight for the suggested move position
-        const geometry = new THREE.RingGeometry(0.25, 0.4, 32);
-        const material = new THREE.MeshBasicMaterial({
-            color: 0x00ff00,
-            transparent: true,
-            opacity: 0.6,
-            side: THREE.DoubleSide
-        });
-        const ring = new THREE.Mesh(geometry, material);
-        ring.rotation.x = -Math.PI / 2;
-        ring.position.set(
-            boardOffset + bestMove.x * CELL_SIZE,
-            0.15,
-            boardOffset + bestMove.y * CELL_SIZE
-        );
-        trainProposalGroup.add(ring);
+                if (!bestMove) return;
 
-        // Add pulsing animation indicator (a second ring)
-        const outerGeometry = new THREE.RingGeometry(0.35, 0.45, 32);
-        const outerMaterial = new THREE.MeshBasicMaterial({
-            color: 0x00ff00,
-            transparent: true,
-            opacity: 0.3,
-            side: THREE.DoubleSide
-        });
-        const outerRing = new THREE.Mesh(outerGeometry, outerMaterial);
-        outerRing.rotation.x = -Math.PI / 2;
-        outerRing.position.set(
-            boardOffset + bestMove.x * CELL_SIZE,
+                const boardOffset = -(BOARD_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
+
+                if (bestMove.type === 'move') {
+                    // Show outlined/transparent highlight for the suggested move position
+                const geometry = new THREE.RingGeometry(0.25, 0.4, 32);
+                const material = new THREE.MeshBasicMaterial({
+                    color: 0x00ff00,
+                transparent: true,
+                opacity: 0.6,
+                side: THREE.DoubleSide
+            });
+            const ring = new THREE.Mesh(geometry, material);
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.set(
+                boardOffset + bestMove.x * CELL_SIZE,
+                0.15,
+                boardOffset + bestMove.y * CELL_SIZE
+            );
+            trainProposalGroup.add(ring);
+
+            // Add pulsing animation indicator (a second ring)
+            const outerGeometry = new THREE.RingGeometry(0.35, 0.45, 32);
+            const outerMaterial = new THREE.MeshBasicMaterial({
+                color: 0x00ff00,
+                transparent: true,
+                opacity: 0.3,
+                side: THREE.DoubleSide
+            });
+            const outerRing = new THREE.Mesh(outerGeometry, outerMaterial);
+            outerRing.rotation.x = -Math.PI / 2;
+            outerRing.position.set(
+                boardOffset + bestMove.x * CELL_SIZE,
             0.14,
             boardOffset + bestMove.y * CELL_SIZE
         );
@@ -2327,6 +2322,9 @@ function showTrainProposal() {
         wireframe.position.copy(fenceMesh.position);
         trainProposalGroup.add(wireframe);
     }
+            }, 50); // Small delay after double requestAnimationFrame
+        });
+    });
 }
 
 function clearTrainProposal() {
@@ -2336,6 +2334,7 @@ function clearTrainProposal() {
 }
 
 // Find best move for a specific player (used for training mode)
+// Uses the same improved logic as the AI player
 function findBestMoveForPlayer(player) {
     const testPawns = {
         1: { ...pawns[1] },
@@ -2346,10 +2345,23 @@ function findBestMoveForPlayer(player) {
 
     let bestMove = null;
     let bestScore = -Infinity;
-    const depth = 3;
+    const depth = 4; // Same depth as AI
+
+    // Calculate distances for strategic decisions
+    const playerDist = getShortestPathDistance(player, testPawns, testFences);
+    const oppPlayer = player === 1 ? 2 : 1;
+    const oppDist = getShortestPathDistance(oppPlayer, testPawns, testFences);
 
     // Evaluate pawn moves
     const moveMoves = getValidMovesTest(player, testPawns, testFences);
+
+    // Sort moves by distance to goal (prefer moves toward goal)
+    moveMoves.sort((a, b) => {
+        const distA = player === 1 ? (8 - a.y) : a.y;
+        const distB = player === 1 ? (8 - b.y) : b.y;
+        return distA - distB;
+    });
+
     for (const move of moveMoves) {
         const newPawns = {
             1: { ...testPawns[1] },
@@ -2371,20 +2383,32 @@ function findBestMoveForPlayer(player) {
         }
     }
 
-    // Evaluate fence moves
-    if (testFencesCounts[player] > 0) {
+    // Evaluate fence moves (strategic subset)
+    // Only consider fences if we have them and it makes strategic sense
+    const shouldConsiderFences = testFencesCounts[player] > 0 &&
+        (oppDist <= playerDist + 2 || // Opponent is close or ahead
+         oppDist <= 4 ||              // Opponent is near goal
+         testFencesCounts[player] >= 5); // We have lots of fences
+
+    if (shouldConsiderFences) {
         const fenceMoves = generateFenceMovesForPlayer(player, testFences, testPawns, testFencesCounts);
 
+        // Score and sort fence moves by immediate impact
         const scoredFences = fenceMoves.map(move => {
             const newFences = [...testFences, { x: move.x, y: move.y, orientation: move.orientation }];
-            const oppPlayer = player === 1 ? 2 : 1;
             const oppDistBefore = getShortestPathDistance(oppPlayer, testPawns, testFences);
             const oppDistAfter = getShortestPathDistance(oppPlayer, testPawns, newFences);
-            return { ...move, impact: oppDistAfter - oppDistBefore };
+            const playerDistAfter = getShortestPathDistance(player, testPawns, newFences);
+
+            // Impact = how much we slow opponent minus how much we slow ourselves
+            const impact = (oppDistAfter - oppDistBefore) - (playerDistAfter - playerDist) * 0.5;
+            return { ...move, impact };
         });
 
+        // Sort by impact and take top candidates
         scoredFences.sort((a, b) => b.impact - a.impact);
-        const topFences = scoredFences.slice(0, 15);
+        // Take more candidates for deeper analysis
+        const topFences = scoredFences.filter(f => f.impact > 0).slice(0, 20);
 
         for (const move of topFences) {
             const newFences = [...testFences, { x: move.x, y: move.y, orientation: move.orientation }];
@@ -2403,137 +2427,4 @@ function findBestMoveForPlayer(player) {
     return bestMove;
 }
 
-// Minimax for any player (for training mode)
-function minimaxForPlayer(player, testPawns, testFences, testFencesCounts, depth, alpha, beta, isMaximizing) {
-    const oppPlayer = player === 1 ? 2 : 1;
 
-    // Check for terminal states
-    if (testPawns[player].y === (player === 1 ? 8 : 0)) {
-        return 1000 + depth;
-    }
-    if (testPawns[oppPlayer].y === (oppPlayer === 1 ? 8 : 0)) {
-        return -1000 - depth;
-    }
-
-    if (depth === 0) {
-        const playerDist = getShortestPathDistance(player, testPawns, testFences);
-        const oppDist = getShortestPathDistance(oppPlayer, testPawns, testFences);
-        return oppDist - playerDist;
-    }
-
-    const currentTurnPlayer = isMaximizing ? player : oppPlayer;
-    const moves = getValidMovesTest(currentTurnPlayer, testPawns, testFences);
-
-    if (isMaximizing) {
-        let maxEval = -Infinity;
-        for (const move of moves) {
-            const newPawns = {
-                1: { ...testPawns[1] },
-                2: { ...testPawns[2] }
-            };
-            newPawns[currentTurnPlayer] = { x: move.x, y: move.y };
-            const evalScore = minimaxForPlayer(player, newPawns, testFences, testFencesCounts, depth - 1, alpha, beta, false);
-            maxEval = Math.max(maxEval, evalScore);
-            alpha = Math.max(alpha, evalScore);
-            if (beta <= alpha) break;
-        }
-        return maxEval;
-    } else {
-        let minEval = Infinity;
-        for (const move of moves) {
-            const newPawns = {
-                1: { ...testPawns[1] },
-                2: { ...testPawns[2] }
-            };
-            newPawns[currentTurnPlayer] = { x: move.x, y: move.y };
-            const evalScore = minimaxForPlayer(player, newPawns, testFences, testFencesCounts, depth - 1, alpha, beta, true);
-            minEval = Math.min(minEval, evalScore);
-            beta = Math.min(beta, evalScore);
-            if (beta <= alpha) break;
-        }
-        return minEval;
-    }
-}
-
-// Generate fence moves for a specific player
-function generateFenceMovesForPlayer(player, testFences, testPawns, testFencesCounts) {
-    const fenceMoves = [];
-    const oppPlayer = player === 1 ? 2 : 1;
-    const oppPath = getPathToGoal(oppPlayer, testPawns, testFences);
-
-    for (let x = 0; x < BOARD_SIZE - 1; x++) {
-        for (let y = 0; y < BOARD_SIZE - 1; y++) {
-            for (const orientation of ['h', 'v']) {
-                if (canPlaceFenceTest(x, y, orientation, testFences, testPawns)) {
-                    let isNearPath = false;
-                    if (oppPath) {
-                        for (const cell of oppPath) {
-                            if (Math.abs(cell.x - x) <= 1 && Math.abs(cell.y - y) <= 1) {
-                                isNearPath = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    const nearOpp = Math.abs(testPawns[oppPlayer].x - x) <= 2 &&
-                                   Math.abs(testPawns[oppPlayer].y - y) <= 2;
-
-                    if (isNearPath || nearOpp) {
-                        fenceMoves.push({ x, y, orientation });
-                    }
-                }
-            }
-        }
-    }
-
-    if (fenceMoves.length === 0) {
-        for (let x = 0; x < BOARD_SIZE - 1; x++) {
-            for (let y = 0; y < BOARD_SIZE - 1; y++) {
-                for (const orientation of ['h', 'v']) {
-                    if (canPlaceFenceTest(x, y, orientation, testFences, testPawns)) {
-                        fenceMoves.push({ x, y, orientation });
-                    }
-                }
-            }
-        }
-    }
-
-    return fenceMoves;
-}
-
-// Get path to goal for a player (for fence placement strategy)
-function getPathToGoal(player, testPawns, testFences) {
-    const goalY = player === 1 ? 8 : 0;
-    const start = { x: testPawns[player].x, y: testPawns[player].y };
-    const visited = new Set();
-    const queue = [{ ...start, path: [start] }];
-
-    while (queue.length > 0) {
-        const current = queue.shift();
-        const key = `${current.x},${current.y}`;
-
-        if (visited.has(key)) continue;
-        visited.add(key);
-
-        if (current.y === goalY) return current.path;
-
-        const directions = [
-            { dx: 0, dy: player === 1 ? 1 : -1 }, // Prefer forward
-            { dx: 1, dy: 0 },
-            { dx: -1, dy: 0 },
-            { dx: 0, dy: player === 1 ? -1 : 1 }
-        ];
-
-        for (const dir of directions) {
-            const newX = current.x + dir.dx;
-            const newY = current.y + dir.dy;
-
-            if (newX >= 0 && newX < BOARD_SIZE && newY >= 0 && newY < BOARD_SIZE &&
-                !isFenceBlockingTest(current.x, current.y, newX, newY, testFences)) {
-                queue.push({ x: newX, y: newY, path: [...current.path, { x: newX, y: newY }] });
-            }
-        }
-    }
-
-    return null;
-}

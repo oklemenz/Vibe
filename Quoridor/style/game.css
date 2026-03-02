@@ -467,7 +467,7 @@ body {
 .draggable-fence::before {
     content: '';
     position: absolute;
-    top: -15px;
+    top: -5px;
     left: -15px;
     right: -15px;
     bottom: -15px;
@@ -511,7 +511,7 @@ body {
 
 .fence-count {
     font-size: 12px;
-    color: #aaa;
+    color: white;
     margin: 8px 0;
     font-weight: bold;
 }
@@ -1134,6 +1134,7 @@ body.portrait-mode .fence-panel-separator {
 }
 
 /* AI thinking state for player name */
+#player1-name.ai-thinking,
 #player2-name.ai-thinking,
 #top-player2-name.ai-thinking {
     display: inline-block;
