@@ -2,7 +2,8 @@
 
 ## Quoridor
 
-- Play: [Click to Start](https://oklemenz.github.io/Vibe/Quoridor/index.html)
+- Play: [Click to Start](https://quoridor.oklemenz.de)
+- GitHub: [Click to Start](https://oklemenz.github.io/Vibe/Quoridor/index.html)
 - Source: [Directory](./Quoridor)
 
 ## The Red Devil

@@ -470,7 +470,7 @@ body {
     top: -5px;
     left: -15px;
     right: -15px;
-    bottom: -15px;
+    bottom: -5px;
 }
 
 .draggable-fence:hover {
@@ -1007,7 +1007,6 @@ body.portrait-mode .fence-panel-separator {
 
     body.mobile-landscape #player2-section {
         order: 0;
-        margin-bottom: 5px;
     }
 
     /* Only rotate player 2 in two-player mode (not AI) */
