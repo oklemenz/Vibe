@@ -613,8 +613,10 @@ function applyLoadedSettings() {
     if (aiEnabled) {
         aiBtn.textContent = '🤖 AI On';
         aiBtn.classList.add('active');
-        document.getElementById('player2-name').innerHTML = '🟢 AI';
-        document.getElementById('top-player2-name').innerHTML = '🟢 AI';
+        // Keep icon in span for pulsating animation
+        document.getElementById('player1-name').innerHTML = '<span class="player-icon">🔴</span> Player';
+        document.getElementById('player2-name').innerHTML = '<span class="player-icon">🟢</span> AI';
+        document.getElementById('top-player2-name').innerHTML = '<span class="player-icon">🟢</span> AI';
     }
 
     // Apply Train/Assist setting
@@ -1444,10 +1446,10 @@ function onPointerUpForHighlight(event) {
         event.stopPropagation();
         event.stopImmediatePropagation();
     }
-    // Re-enable controls and zoom
+    // Re-enable controls and zoom for 3D view
     if (viewMode !== 'top') {
         controls.enabled = true;
-        controls.enableZoom = false; // Keep zoom disabled as per earlier setting
+        controls.enableZoom = true; // Re-enable zoom for 3D view
     }
     pointerOnHighlight = false;
 }
@@ -1635,10 +1637,10 @@ function toggleAI() {
         btn.textContent = '🤖 AI On';
         btn.classList.add('active');
 
-        // Rename players in fence panel
-        if (player1Name) player1Name.textContent = '🔴 Player';
-        if (player2Name) player2Name.textContent = '🟢 AI';
-        if (topPlayer2Name) topPlayer2Name.textContent = '🟢 AI';
+        // Rename players in fence panel (keep icon in span)
+        if (player1Name) player1Name.innerHTML = '<span class="player-icon">🔴</span> Player';
+        if (player2Name) player2Name.innerHTML = '<span class="player-icon">🟢</span> AI';
+        if (topPlayer2Name) topPlayer2Name.innerHTML = '<span class="player-icon">🟢</span> AI';
 
         // Rename players in rules dialog
         if (rulesPlayer1) rulesPlayer1.innerHTML = '<strong>🔴 Player:</strong> Move from bottom to top';
@@ -1665,10 +1667,10 @@ function toggleAI() {
             cancelPendingCalculations();
         }
 
-        // Reset player names in fence panel
-        if (player1Name) player1Name.textContent = '🔴 Player 1';
-        if (player2Name) player2Name.textContent = '🟢 Player 2';
-        if (topPlayer2Name) topPlayer2Name.textContent = '🟢 Player 2';
+        // Reset player names in fence panel (keep icon in span)
+        if (player1Name) player1Name.innerHTML = '<span class="player-icon">🔴</span> Player 1';
+        if (player2Name) player2Name.innerHTML = '<span class="player-icon">🟢</span> Player 2';
+        if (topPlayer2Name) topPlayer2Name.innerHTML = '<span class="player-icon">🟢</span> Player 2';
 
         // Reset player names in rules dialog
         if (rulesPlayer1) rulesPlayer1.innerHTML = '<strong>🔴 Player 1:</strong> Move from bottom to top';
@@ -2452,8 +2454,9 @@ function setTopView() {
     camera.position.set(0, cameraDistance, 0);
     camera.lookAt(0, 0, 0);
 
-    // Lock OrbitControls
+    // Lock OrbitControls and disable zoom for top view
     controls.enabled = false;
+    controls.enableZoom = false;
     controls.target.set(0, 0, 0);
     controls.update();
 }
@@ -2466,8 +2469,9 @@ function set3DView() {
     camera.position.set(pos.x, pos.y, pos.z);
     camera.lookAt(0, 0, 0);
 
-    // Unlock OrbitControls
+    // Unlock OrbitControls and enable zoom for 3D view
     controls.enabled = true;
+    controls.enableZoom = true;
     controls.target.set(0, 0, 0);
     controls.update();
 }

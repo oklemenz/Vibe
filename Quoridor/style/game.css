@@ -114,7 +114,7 @@ body {
 
 #ui-overlay.open {
     transform: translateX(0);
-    padding-left: calc(10px + env(safe-area-inset-left, 10px))
+    padding-left: calc(10px + env(safe-area-inset-left, 10px) * 0.75)
 }
 
 /* Center left panel vertically on mobile portrait */
@@ -564,7 +564,7 @@ body {
     cursor: pointer;
     font-size: 16px;
     transition: background 0.3s;
-    width: 130px;
+    width: 136px;
     text-align: left;
 }
 
@@ -1138,7 +1138,7 @@ body.portrait-mode .fence-panel-separator {
         transform: scale(1);
     }
     50% {
-        transform: scale(1.15);
+        transform: scale(1.2);
     }
     100% {
         transform: scale(1);
@@ -1150,10 +1150,10 @@ body.portrait-mode .fence-panel-separator {
     animation: ai-thinking-pulse 0.8s ease-in-out infinite;
 }
 
-/* AI thinking state for player name */
-#player1-name.ai-thinking,
-#player2-name.ai-thinking,
-#top-player2-name.ai-thinking {
+/* AI thinking state - only animate the icon, not the player name */
+#player1-name.ai-thinking .player-icon,
+#player2-name.ai-thinking .player-icon,
+#top-player2-name.ai-thinking .player-icon {
     display: inline-block;
     animation: ai-thinking-pulse 0.8s ease-in-out infinite;
 }
