@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, maximum-scale=1.0, user-scalable=0.0, viewport-fit=cover">
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Quoridor" />
+    <meta name="viewport"
+          content="width=device-width, height=device-height, initial-scale=1.0, maximum-scale=1.0, user-scalable=0.0, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+    <meta name="apple-mobile-web-app-title" content="Quoridor"/>
     <link rel="icon" type="image/png" href="img/favicon.png"/>
     <link rel="shortcut icon" type="image/png" href="img/touch-icon-152.png"/>
     <link rel="apple-touch-icon" href="img/touch-icon-152.png"/>
@@ -20,124 +21,130 @@
         body.loading {
             background: #1a1a2e;
         }
+
         body.loading > *:not(#game-container) {
             visibility: hidden;
             opacity: 0;
         }
+
         body.loading #game-container {
             visibility: hidden;
         }
     </style>
 </head>
 <body class="loading">
-    <div id="game-container"></div>
+<div id="game-container"></div>
 
-    <!-- Left Panel Container -->
-    <div id="left-panel-container">
-        <div id="ui-overlay">
-            <button id="ui-panel-toggle"></button>
-            <div class="top-bar">
-                <button id="view-btn">👁️ View 3D</button>
-                <button id="ai-btn">🤖 AI</button>
-                <button id="train-btn">🎓 Assist</button>
-                <button id="restart-game-btn">🔄 Restart</button>
-                <button id="switch-btn">🔀 Switch</button>
-                <button id="rules-btn">📖 Rules</button>
+<!-- Left Panel Container -->
+<div id="left-panel-container">
+    <div id="ui-overlay">
+        <button id="ui-panel-toggle"></button>
+        <div class="top-bar">
+            <button id="view-btn">👁️ View 3D</button>
+            <button id="ai-btn">🤖 AI</button>
+            <button id="train-btn">🎓 Assist</button>
+            <button id="restart-game-btn">🔄 Restart</button>
+            <button id="switch-btn">🔀 Switch</button>
+            <button id="rules-btn">📖 Rules</button>
+        </div>
+    </div>
+</div>
+
+<!-- Cover for navigation bar background when bottom panel is closed (portrait mode) -->
+<div id="bottom-nav-cover"></div>
+
+<!-- Right Panel Container -->
+<div id="right-panel-container">
+    <!-- Fence Panel for Drag & Drop -->
+    <div id="fence-panel">
+        <button id="fence-panel-toggle"></button>
+        <div class="fence-section" id="player1-section">
+            <div style="color: #ff6b6b;" id="player1-name"><span class="player-icon">🔴</span> Player 1</div>
+            <div class="fence-container">
+                <div class="draggable-fence fence-horizontal player1-fence"
+                     data-player="1" data-orientation="h"></div>
+                <div class="draggable-fence fence-vertical player1-fence"
+                     data-player="1" data-orientation="v"></div>
+                <div class="fence-count" id="p1-fence-count">10 remaining</div>
+            </div>
+        </div>
+        <hr class="fence-panel-separator">
+        <div class="fence-section" id="player2-section">
+            <div style="color: #4ecdc4;" id="player2-name"><span class="player-icon">🟢</span> Player 2</div>
+            <div class="fence-container">
+                <div class="draggable-fence fence-horizontal player2-fence"
+                     data-player="2" data-orientation="h"></div>
+                <div class="draggable-fence fence-vertical player2-fence"
+                     data-player="2" data-orientation="v"></div>
+                <div class="fence-count" id="p2-fence-count">10 remaining</div>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- Right Panel Container -->
-    <div id="right-panel-container">
-        <!-- Fence Panel for Drag & Drop -->
-        <div id="fence-panel">
-            <button id="fence-panel-toggle"></button>
-            <div class="fence-section" id="player1-section">
-                <div style="color: #ff6b6b;" id="player1-name"><span class="player-icon">🔴</span> Player 1</div>
-                <div class="fence-container">
-                    <div class="draggable-fence fence-horizontal player1-fence"
-                         data-player="1" data-orientation="h"></div>
-                    <div class="draggable-fence fence-vertical player1-fence"
-                         data-player="1" data-orientation="v"></div>
-                    <div class="fence-count" id="p1-fence-count">10 remaining</div>
-                </div>
-            </div>
-            <hr class="fence-panel-separator">
-            <div class="fence-section" id="player2-section">
-                <div style="color: #4ecdc4;" id="player2-name"><span class="player-icon">🟢</span> Player 2</div>
-                <div class="fence-container">
-                    <div class="draggable-fence fence-horizontal player2-fence"
-                         data-player="2" data-orientation="h"></div>
-                    <div class="draggable-fence fence-vertical player2-fence"
-                         data-player="2" data-orientation="v"></div>
-                    <div class="fence-count" id="p2-fence-count">10 remaining</div>
-                </div>
+<!-- Cover for navigation bar background when top panel is closed (portrait mode) -->
+<div id="top-nav-cover"></div>
+
+<!-- Top Panel for Player 2 in Portrait Top View -->
+<div id="top-fence-panel-container">
+    <div id="top-fence-panel">
+        <div class="fence-section" id="top-player2-section">
+            <h4 style="color: #4ecdc4;" id="top-player2-name"><span class="player-icon">🟢</span> Player 2</h4>
+            <div class="fence-container">
+                <div class="draggable-fence fence-horizontal player2-fence"
+                     data-player="2" data-orientation="h"></div>
+                <div class="draggable-fence fence-vertical player2-fence"
+                     data-player="2" data-orientation="v"></div>
+                <div class="fence-count" id="top-p2-fence-count">10 remaining</div>
             </div>
         </div>
+        <button id="top-fence-panel-toggle"></button>
     </div>
+</div>
 
-    <!-- Top Panel for Player 2 in Portrait Top View -->
-    <div id="top-fence-panel-container">
-        <div id="top-fence-panel">
-            <div class="fence-section" id="top-player2-section">
-                <h4 style="color: #4ecdc4;" id="top-player2-name"><span class="player-icon">🟢</span> Player 2</h4>
-                <div class="fence-container">
-                    <div class="draggable-fence fence-horizontal player2-fence"
-                         data-player="2" data-orientation="h"></div>
-                    <div class="draggable-fence fence-vertical player2-fence"
-                         data-player="2" data-orientation="v"></div>
-                    <div class="fence-count" id="top-p2-fence-count">10 remaining</div>
-                </div>
-            </div>
-            <button id="top-fence-panel-toggle"></button>
+<!-- Drag Preview Element -->
+<div id="drag-preview"></div>
+
+<div id="winner-modal">
+    <div id="winner-content">
+        <button id="winner-close-btn" class="modal-close-btn">✕</button>
+        <h1 id="winner-text">🔴Player 1 Wins!</h1>
+        <button id="restart-btn">Play Again</button>
+    </div>
+</div>
+
+<!-- Confirm Restart Dialog -->
+<div id="confirm-restart-modal">
+    <div id="confirm-restart-content">
+        <h2>🔄 Restart Game?</h2>
+        <p>Are you sure you want to resign and restart the game?</p>
+        <div class="confirm-buttons">
+            <button id="confirm-restart-yes">Yes, Restart</button>
+            <button id="confirm-restart-no">Cancel</button>
         </div>
     </div>
+</div>
 
-    <!-- Drag Preview Element -->
-    <div id="drag-preview"></div>
-
-
-
-    <div id="winner-modal">
-        <div id="winner-content">
-            <button id="winner-close-btn" class="modal-close-btn">✕</button>
-            <h1 id="winner-text">🔴Player 1 Wins!</h1>
-            <button id="restart-btn">Play Again</button>
+<!-- Introduction Dialog - initially hidden, shown via JS if first time -->
+<div id="intro-modal" class="hidden">
+    <div id="intro-content">
+        <h1>Quoridor</h1>
+        <div class="intro-rules">
+            <p><strong>🎯 Goal:</strong> Reach the opposite side of the board first!</p>
+            <p id="rules-player1"><strong>🔴 Player 1:</strong> Move from bottom to top</p>
+            <p id="rules-player2"><strong>🟢 Player 2:</strong> Move from top to bottom</p>
+            <hr>
+            <p><strong>📍 Move:</strong> Tap a highlighted square to move your pawn</p>
+            <p><strong>🧱 Fence:</strong> Drag a fence from the right panel onto the board to block your opponent</p>
+            <p><strong>⚠️ Rule:</strong> You cannot completely block a player's path to the goal</p>
         </div>
+        <button id="intro-start-btn">Play</button>
     </div>
-
-    <!-- Confirm Restart Dialog -->
-    <div id="confirm-restart-modal">
-        <div id="confirm-restart-content">
-            <h2>🔄 Restart Game?</h2>
-            <p>Are you sure you want to resign and restart the game?</p>
-            <div class="confirm-buttons">
-                <button id="confirm-restart-yes">Yes, Restart</button>
-                <button id="confirm-restart-no">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Introduction Dialog - initially hidden, shown via JS if first time -->
-    <div id="intro-modal" class="hidden">
-        <div id="intro-content">
-            <h1>Quoridor</h1>
-            <div class="intro-rules">
-                <p><strong>🎯 Goal:</strong> Reach the opposite side of the board first!</p>
-                <p id="rules-player1"><strong>🔴 Player 1:</strong> Move from bottom to top</p>
-                <p id="rules-player2"><strong>🟢 Player 2:</strong> Move from top to bottom</p>
-                <hr>
-                <p><strong>📍 Move:</strong> Tap a highlighted square to move your pawn</p>
-                <p><strong>🧱 Fence:</strong> Drag a fence from the right panel onto the board to block your opponent</p>
-                <p><strong>⚠️ Rule:</strong> You cannot completely block a player's path to the goal</p>
-            </div>
-            <button id="intro-start-btn">Play</button>
-        </div>
-    </div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="game.js"></script>
-    <script>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="game.js"></script>
+<script>
 
     // Helper function to get panel state from storage
     function getPanelState(key, defaultValue) {
@@ -159,7 +166,7 @@
         fencePanel.classList.remove('open');
     }
 
-    fencePanelToggle.addEventListener('click', function() {
+    fencePanelToggle.addEventListener('click', function () {
         // Enable transition for user interaction
         fencePanel.classList.add('enable-transition');
         fencePanel.classList.toggle('open');
@@ -178,7 +185,7 @@
         topFencePanel.classList.remove('open');
     }
 
-    topFencePanelToggle.addEventListener('click', function() {
+    topFencePanelToggle.addEventListener('click', function () {
         // Enable transition for user interaction
         topFencePanel.classList.add('enable-transition');
         topFencePanel.classList.toggle('open');
@@ -197,7 +204,7 @@
         uiOverlay.classList.remove('open');
     }
 
-    uiPanelToggle.addEventListener('click', function() {
+    uiPanelToggle.addEventListener('click', function () {
         // Enable transition for user interaction
         uiOverlay.classList.add('enable-transition');
         uiOverlay.classList.toggle('open');
@@ -211,7 +218,7 @@
     const confirmRestartYes = document.getElementById('confirm-restart-yes');
     const confirmRestartNo = document.getElementById('confirm-restart-no');
 
-    restartGameBtn.addEventListener('click', function() {
+    restartGameBtn.addEventListener('click', function () {
         // If game is already over, restart directly without confirmation
         if (typeof gameOver !== 'undefined' && gameOver) {
             if (typeof restartGame === 'function') {
@@ -223,19 +230,19 @@
         }
     });
 
-    confirmRestartYes.addEventListener('click', function() {
+    confirmRestartYes.addEventListener('click', function () {
         confirmRestartModal.classList.remove('visible');
         if (typeof restartGame === 'function') {
             restartGame();
         }
     });
 
-    confirmRestartNo.addEventListener('click', function() {
+    confirmRestartNo.addEventListener('click', function () {
         confirmRestartModal.classList.remove('visible');
     });
 
     // Close modal when clicking outside
-    confirmRestartModal.addEventListener('click', function(e) {
+    confirmRestartModal.addEventListener('click', function (e) {
         if (e.target === confirmRestartModal) {
             confirmRestartModal.classList.remove('visible');
         }
@@ -250,7 +257,7 @@
         introModal.classList.remove('hidden');
     }
 
-    introStartBtn.addEventListener('click', function(e) {
+    introStartBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         e.preventDefault();
         introModal.classList.add('hidden');
@@ -262,13 +269,13 @@
     });
 
     // Prevent clicks on the intro modal from reaching the game
-    introModal.addEventListener('click', function(e) {
+    introModal.addEventListener('click', function (e) {
         e.stopPropagation();
     });
 
     // Rules Button - Show intro dialog again
     const rulesBtn = document.getElementById('rules-btn');
-    rulesBtn.addEventListener('click', function(e) {
+    rulesBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         // Zeige Intro-Modal
         introModal.classList.remove('hidden');
@@ -276,14 +283,14 @@
 
     // Remove loading class to show UI after everything is initialized and rendered
     // Use double requestAnimationFrame + small delay to ensure all layouts are complete
-    requestAnimationFrame(function() {
-        requestAnimationFrame(function() {
-            setTimeout(function() {
+    requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+            setTimeout(function () {
                 document.body.classList.remove('loading');
             }, 50);
         });
     });
-    </script>
+</script>
 </body>
 </html>
 

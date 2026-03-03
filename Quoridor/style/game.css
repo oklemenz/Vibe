@@ -876,16 +876,39 @@ body.portrait-mode #right-panel-container {
 }
 
 /* Cover for navigation bar background when bottom panel is closed */
-body.portrait-mode #right-panel-container::before {
-    content: '';
+#bottom-nav-cover {
+    display: none;
+}
+
+body.portrait-mode #bottom-nav-cover {
+    display: block;
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
-    height: calc(env(safe-area-inset-bottom, 0px) + 10px);
+    height: calc(env(safe-area-inset-bottom, 0px) + 20px);
     background: #1a1a2e;
-    z-index: -1;
+    z-index: 1;
     pointer-events: none;
+    width: 100%
+}
+
+/* Cover for navigation bar background when top panel is closed */
+#top-nav-cover {
+    display: none;
+}
+
+body.portrait-mode #top-nav-cover {
+    display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: calc(env(safe-area-inset-top, 0px) + 20px);
+    background: #1a1a2e;
+    z-index: 1;
+    pointer-events: none;
+    width: 100%;
 }
 
 body.portrait-mode #fence-panel {
