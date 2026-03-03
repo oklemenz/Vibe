@@ -292,6 +292,8 @@ function hideAIThinkingIndicator() {
     if (topPlayer2Name) {
         topPlayer2Name.classList.remove('ai-thinking');
     }
+    // Hide pulsating ring for AI player (Player 2)
+    hideThinkingRing(aiPlayer);
 }
 
 // Show Player 1 thinking indicator (for Assist mode)
@@ -350,7 +352,7 @@ function hideCurrentPlayerThinkingIndicator() {
     hidePlayer1ThinkingIndicator();
     hidePlayer2ThinkingIndicator();
     // Hide pulsating ring
-    hideThinkingRing();
+    hideThinkingRing(currentPlayer);
 }
 
 // Show pulsating ring around pawn while calculating
@@ -358,8 +360,8 @@ function showThinkingRing(player) {
     // Safety check - ensure scene and pawns exist
     if (!scene || !pawn1Mesh || !pawn2Mesh) return;
 
-    // Remove any existing ring first
-    hideThinkingRing();
+    // Remove existing ring for this player only
+    hideThinkingRing(player);
 
     const pawnMesh = player === 1 ? pawn1Mesh : pawn2Mesh;
 
@@ -371,52 +373,79 @@ function showThinkingRing(player) {
         opacity: 0.8
     });
 
-    thinkingRing = new THREE.Mesh(ringGeometry, ringMaterial);
-    thinkingRing.rotation.x = Math.PI / 2; // Lay flat
-    thinkingRing.position.set(
+    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+    ring.rotation.x = Math.PI / 2; // Lay flat
+    ring.position.set(
         pawnMesh.position.x,
         0.08,  // Just above board at pawn base
         pawnMesh.position.z
     );
-    thinkingRing.renderOrder = 10;
+    ring.renderOrder = 10;
 
-    thinkingRingPlayer = player;
-    thinkingRingAnimationStart = Date.now();
+    // Store in player-specific variable
+    if (player === 1) {
+        thinkingRing1 = ring;
+        thinkingRingAnimationStart1 = Date.now();
+    } else {
+        thinkingRing2 = ring;
+        thinkingRingAnimationStart2 = Date.now();
+    }
 
-    scene.add(thinkingRing);
+    scene.add(ring);
 }
 
-// Hide pulsating ring
-function hideThinkingRing() {
-    if (thinkingRing && scene) {
-        scene.remove(thinkingRing);
-        if (thinkingRing.geometry) thinkingRing.geometry.dispose();
-        if (thinkingRing.material) thinkingRing.material.dispose();
-        thinkingRing = null;
+// Hide pulsating ring for a specific player (or both if no player specified)
+function hideThinkingRing(player) {
+    if (player === undefined || player === 1) {
+        if (thinkingRing1 && scene) {
+            scene.remove(thinkingRing1);
+            if (thinkingRing1.geometry) thinkingRing1.geometry.dispose();
+            if (thinkingRing1.material) thinkingRing1.material.dispose();
+            thinkingRing1 = null;
+        }
     }
-    thinkingRingPlayer = null;
+    if (player === undefined || player === 2) {
+        if (thinkingRing2 && scene) {
+            scene.remove(thinkingRing2);
+            if (thinkingRing2.geometry) thinkingRing2.geometry.dispose();
+            if (thinkingRing2.material) thinkingRing2.material.dispose();
+            thinkingRing2 = null;
+        }
+    }
 }
 
 // Update thinking ring animation (called in animate loop)
 function updateThinkingRingAnimation() {
-    if (!thinkingRing || !thinkingRing.material) return;
-
-    const elapsed = Date.now() - thinkingRingAnimationStart;
     const pulseDuration = 800; // Same as CSS animation
-    const progress = (elapsed % pulseDuration) / pulseDuration;
 
-    // Pulsating scale (1.0 to 1.3) - only expand outward
-    const scale = 1.0 + Math.sin(progress * Math.PI * 2) * 0.10 + 0.10;
-    thinkingRing.scale.set(scale, scale, scale);
+    // Update Player 1 ring
+    if (thinkingRing1 && thinkingRing1.material) {
+        const elapsed1 = Date.now() - thinkingRingAnimationStart1;
+        const progress1 = (elapsed1 % pulseDuration) / pulseDuration;
+        const scale1 = 1.0 + Math.sin(progress1 * Math.PI * 2) * 0.10 + 0.10;
+        thinkingRing1.scale.set(scale1, scale1, scale1);
+        thinkingRing1.material.opacity = 0.5 + Math.sin(progress1 * Math.PI * 2) * 0.2 + 0.2;
 
-    // Pulsating opacity (0.5 to 0.9)
-    thinkingRing.material.opacity = 0.5 + Math.sin(progress * Math.PI * 2) * 0.2 + 0.2;
+        // Update position to follow pawn
+        if (pawn1Mesh) {
+            thinkingRing1.position.x = pawn1Mesh.position.x;
+            thinkingRing1.position.z = pawn1Mesh.position.z;
+        }
+    }
 
-    // Update position to follow pawn
-    const pawnMesh = thinkingRingPlayer === 1 ? pawn1Mesh : pawn2Mesh;
-    if (pawnMesh && thinkingRing) {
-        thinkingRing.position.x = pawnMesh.position.x;
-        thinkingRing.position.z = pawnMesh.position.z;
+    // Update Player 2 ring
+    if (thinkingRing2 && thinkingRing2.material) {
+        const elapsed2 = Date.now() - thinkingRingAnimationStart2;
+        const progress2 = (elapsed2 % pulseDuration) / pulseDuration;
+        const scale2 = 1.0 + Math.sin(progress2 * Math.PI * 2) * 0.10 + 0.10;
+        thinkingRing2.scale.set(scale2, scale2, scale2);
+        thinkingRing2.material.opacity = 0.5 + Math.sin(progress2 * Math.PI * 2) * 0.2 + 0.2;
+
+        // Update position to follow pawn
+        if (pawn2Mesh) {
+            thinkingRing2.position.x = pawn2Mesh.position.x;
+            thinkingRing2.position.z = pawn2Mesh.position.z;
+        }
     }
 }
 
@@ -427,10 +456,11 @@ let trainProposalGroup = null;
 // Assist calculation tracking
 let assistCalculationPlayer = null; // Track which player the assist is calculating for
 
-// Pulsating ring state for thinking indicator
-let thinkingRing = null;
-let thinkingRingPlayer = null;
-let thinkingRingAnimationStart = 0;
+// Pulsating ring state for thinking indicator - separate for each player
+let thinkingRing1 = null; // Ring for Player 1
+let thinkingRing2 = null; // Ring for Player 2
+let thinkingRingAnimationStart1 = 0;
+let thinkingRingAnimationStart2 = 0;
 
 // View mode state
 let viewMode = '3d'; // '3d' or 'top'
@@ -959,12 +989,16 @@ function endGame(winner) {
     } else {
         winnerName = `Player ${winner}`;
     }
-    document.getElementById('winner-text').textContent = `${winnerName} Wins!`;
-    document.getElementById('winner-modal').style.display = 'flex';
 
-    // Hide all move highlights and disable all fences
+    // Hide all move highlights and disable all fences immediately
     updateValidMoves();
     updateFencePanelState();
+
+    // Delay showing the winner modal so the last move can be seen
+    setTimeout(() => {
+        document.getElementById('winner-text').textContent = `${winnerName} Wins!`;
+        document.getElementById('winner-modal').style.display = 'flex';
+    }, 500);
 }
 
 function closeWinnerModal() {
@@ -2187,7 +2221,7 @@ function toggleTrain() {
         clearTrainProposal();
         hidePlayer1ThinkingIndicator();
         hidePlayer2ThinkingIndicator();
-        hideThinkingRing();
+        hideThinkingRing(); // Hide both rings
     }
 }
 
