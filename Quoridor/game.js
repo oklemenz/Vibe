@@ -62,6 +62,12 @@ let pawns = {
 let placedFences = []; // { x, y, orientation: 'h' | 'v' }
 let gameOver = false;
 
+// Position history to prevent back-and-forth movement
+let positionHistory = {
+    1: [{x: 4, y: 0}],  // Player 1 starts at y=0
+    2: [{x: 4, y: 8}]   // Player 2 starts at y=8
+};
+
 // AI state
 let aiEnabled = false;
 let aiPlayer = 2; // AI plays as Player 2
@@ -83,9 +89,9 @@ const BOARD_SIZE = 9;
 self.onmessage = function(e) {
     const { type, data } = e.data;
     if (type === 'calculate') {
-        const { player, pawns, placedFences, fences, calculationId } = data;
+        const { player, pawns, placedFences, fences, positionHistory, calculationId } = data;
         try {
-            const bestMove = findBestMoveForPlayer(player, pawns, placedFences, fences);
+            const bestMove = findBestMoveForPlayer(player, pawns, placedFences, fences, positionHistory);
             self.postMessage({ type: 'result', bestMove, data: { calculationId } });
         } catch (error) {
             self.postMessage({ type: 'error', error: error.message, data: { calculationId } });
@@ -217,13 +223,17 @@ function startAICalculation() {
                 player: aiPlayer,
                 pawns: {1: {...pawns[1]}, 2: {...pawns[2]}},
                 placedFences: [...placedFences],
-                fences: {...fences}
+                fences: {...fences},
+                positionHistory: {
+                    1: [...positionHistory[1]],
+                    2: [...positionHistory[2]]
+                }
             }
         });
     } else {
         // Synchronous fallback - use setTimeout to allow UI to update
         setTimeout(() => {
-            const bestMove = findBestMoveForPlayer(aiPlayer);
+            const bestMove = findBestMoveForPlayer(aiPlayer, null, null, null, positionHistory);
             aiThinking = false;
             hideAIThinkingIndicator();
             if (bestMove) {
@@ -247,7 +257,11 @@ function startAssistCalculation() {
                 player: currentPlayer,
                 pawns: {1: {...pawns[1]}, 2: {...pawns[2]}},
                 placedFences: [...placedFences],
-                fences: {...fences}
+                fences: {...fences},
+                positionHistory: {
+                    1: [...positionHistory[1]],
+                    2: [...positionHistory[2]]
+                }
             }
         });
     } else {
@@ -256,7 +270,7 @@ function startAssistCalculation() {
             // Check if this calculation is still valid
             if (assistCalculationPlayer !== currentPlayer) return;
 
-            const bestMove = findBestMoveForPlayer(currentPlayer);
+            const bestMove = findBestMoveForPlayer(currentPlayer, null, null, null, positionHistory);
             hideCurrentPlayerThinkingIndicator();
             assistCalculationPlayer = null;
             if (bestMove) {
@@ -966,6 +980,12 @@ function movePawn(x, y) {
     if (!isValid) return false;
 
     pawns[currentPlayer] = {x, y};
+    // Update position history
+    positionHistory[currentPlayer].push({x, y});
+    // Keep only last 6 positions to save memory
+    if (positionHistory[currentPlayer].length > 6) {
+        positionHistory[currentPlayer].shift();
+    }
     updatePawnPositions();
 
     return true;
@@ -1579,6 +1599,11 @@ function restartGame() {
     isDragging = false;
     gameOver = false;
     aiThinking = false;
+    // Reset position history
+    positionHistory = {
+        1: [{x: 4, y: 0}],
+        2: [{x: 4, y: 8}]
+    };
     hideAIThinkingIndicator();
 
 
@@ -1916,13 +1941,25 @@ function evaluateStateForPlayer(player, testPawns, testFences, testFencesCounts)
     const oppCenterDist = Math.abs(testPawns[oppPlayer].x - 4);
     score += (oppCenterDist - playerCenterDist) * 5;
 
-    // Progressive position bonus - reward advancement
+    // Progressive position bonus - reward advancement more strongly
+    // This creates a strong incentive to always move forward
     if (player === 1) {
-        score += testPawns[1].y * 8;
-        score -= (8 - testPawns[2].y) * 8;
+        // Player 1 wants to reach y=8, so higher y is better
+        score += testPawns[1].y * 15;  // Increased from 8 to 15
+        score -= (8 - testPawns[2].y) * 12;
     } else {
-        score += (8 - testPawns[2].y) * 8;
-        score -= testPawns[1].y * 8;
+        // Player 2 wants to reach y=0, so lower y is better
+        score += (8 - testPawns[2].y) * 15;  // Increased from 8 to 15
+        score -= testPawns[1].y * 12;
+    }
+
+    // Strong bonus for being on a direct path to goal
+    // This prevents sideways movement when forward is possible
+    const playerGoalY = player === 1 ? 8 : 0;
+    const distToGoalY = Math.abs(testPawns[player].y - playerGoalY);
+    if (distToGoalY <= playerDist) {
+        // Player is on a relatively direct path
+        score += 20;
     }
 
     // Fence advantage (but don't over-value)
@@ -1937,6 +1974,17 @@ function evaluateStateForPlayer(player, testPawns, testFences, testFencesCounts)
     // Penalty for having no fences when opponent has lots
     if (testFencesCounts[player] === 0 && testFencesCounts[oppPlayer] > 3) {
         score -= 20;
+    }
+
+    // Tie-breaker: Consistent side preference to prevent oscillation
+    // Once committed to a side, stay on that side
+    const currentX = testPawns[player].x;
+    if (currentX < 4) {
+        // On left side - bonus for staying left, scaled by how far left
+        score += (4 - currentX) * 2;
+    } else if (currentX > 4) {
+        // On right side - bonus for staying right, scaled by how far right
+        score += (currentX - 4) * 2;
     }
 
     return score;
@@ -2157,6 +2205,12 @@ function executeAIMove(bestMove) {
     if (bestMove.type === 'move') {
         // Make the pawn move
         pawns[aiPlayer] = {x: bestMove.x, y: bestMove.y};
+        // Update position history
+        positionHistory[aiPlayer].push({x: bestMove.x, y: bestMove.y});
+        // Keep only last 6 positions to save memory
+        if (positionHistory[aiPlayer].length > 6) {
+            positionHistory[aiPlayer].shift();
+        }
         updatePawnPositions();
 
         if (!checkWin()) {
@@ -2174,6 +2228,11 @@ function executeAIMove(bestMove) {
             if (moves.length > 0) {
                 const move = moves[0];
                 pawns[aiPlayer] = {x: move.x, y: move.y};
+                // Update position history
+                positionHistory[aiPlayer].push({x: move.x, y: move.y});
+                if (positionHistory[aiPlayer].length > 6) {
+                    positionHistory[aiPlayer].shift();
+                }
                 updatePawnPositions();
                 if (!checkWin()) {
                     switchPlayer();
@@ -2561,7 +2620,7 @@ function clearTrainProposal() {
 // Find best move for a specific player (used for training mode)
 // Uses the same improved logic as the AI player
 // Parameters are optional - if not provided, uses global game state
-function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts) {
+function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts, inputPositionHistory) {
     // Use provided data or fall back to global state
     const testPawns = inputPawns ? {
         1: {...inputPawns[1]}, 2: {...inputPawns[2]}
@@ -2570,6 +2629,10 @@ function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts
     };
     const testFences = inputFences ? [...inputFences] : [...placedFences];
     const testFencesCounts = inputFenceCounts ? {...inputFenceCounts} : {...fences};
+
+    // Get position history for anti-oscillation
+    const playerHistory = inputPositionHistory ? inputPositionHistory[player] :
+        (typeof positionHistory !== 'undefined' ? positionHistory[player] : []);
 
     let bestMove = null;
     let bestScore = -Infinity;
@@ -2580,15 +2643,47 @@ function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts
     const oppPlayer = player === 1 ? 2 : 1;
     const oppDist = getShortestPathDistance(oppPlayer, testPawns, testFences);
 
+    // Get the shortest path to use for tie-breaking
+    const shortestPath = getShortestPath(player, testPawns, testFences);
+    const nextPathCell = shortestPath && shortestPath.length > 1 ? shortestPath[1] : null;
+
     // Evaluate pawn moves
     const moveMoves = getValidMovesTest(player, testPawns, testFences);
 
-    // Sort moves by distance to goal (prefer moves toward goal)
+    // Calculate current Y position for forward/backward detection
+    const currentY = testPawns[player].y;
+    const goalY = player === 1 ? 8 : 0;
+
+    // Sort moves by priority:
+    // 1. Moves along the shortest path (highest priority)
+    // 2. Moves toward goal
+    // 3. Tie-break by consistent direction (prefer left side when equal)
     moveMoves.sort((a, b) => {
+        // Check if move is on shortest path
+        const aOnPath = nextPathCell && a.x === nextPathCell.x && a.y === nextPathCell.y;
+        const bOnPath = nextPathCell && b.x === nextPathCell.x && b.y === nextPathCell.y;
+        if (aOnPath && !bOnPath) return -1;
+        if (bOnPath && !aOnPath) return 1;
+
+        // Distance to goal
         const distA = player === 1 ? (8 - a.y) : a.y;
         const distB = player === 1 ? (8 - b.y) : b.y;
-        return distA - distB;
+        if (distA !== distB) return distA - distB;
+
+        // Tie-break: prefer moves that continue in the same horizontal direction
+        // or prefer left side for consistency
+        const currentX = testPawns[player].x;
+
+        // If currently on left side, prefer continuing left; if right, prefer continuing right
+        if (currentX <= 4) {
+            return a.x - b.x; // Prefer smaller x (left)
+        } else {
+            return b.x - a.x; // Prefer larger x (right)
+        }
     });
+
+    // Track moves with their scores for tie-breaking
+    const scoredMoves = [];
 
     for (const move of moveMoves) {
         const newPawns = {
@@ -2597,16 +2692,93 @@ function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts
         newPawns[player] = {x: move.x, y: move.y};
 
         // Check for immediate win
-        const goalY = player === 1 ? 8 : 0;
         if (move.y === goalY) {
             return {type: 'move', x: move.x, y: move.y};
         }
 
-        const score = minimaxForPlayer(player, newPawns, testFences, testFencesCounts, depth - 1, -Infinity, Infinity, false);
+        let score = minimaxForPlayer(player, newPawns, testFences, testFencesCounts, depth - 1, -Infinity, Infinity, false);
+
+        // Anti-oscillation: Check if this move returns to a recent position
+        const isRecentPosition = playerHistory.some((pos, idx) => {
+            // Check last 4 positions (excluding current)
+            return idx >= playerHistory.length - 4 && pos.x === move.x && pos.y === move.y;
+        });
+
+        // Heavy penalty for returning to recent positions
+        if (isRecentPosition) {
+            score -= 150;
+        }
+
+        // Penalty for backward moves (away from goal) unless path is blocked
+        const isBackward = player === 1 ? (move.y < currentY) : (move.y > currentY);
+        if (isBackward) {
+            // Check if forward moves exist and are not blocked
+            const forwardMoves = moveMoves.filter(m =>
+                player === 1 ? m.y > currentY : m.y < currentY
+            );
+            if (forwardMoves.length > 0) {
+                // Only penalize if forward moves are available
+                score -= 80;
+            }
+        }
+
+        // Bonus for progress toward goal
+        const progress = player === 1 ? (move.y - currentY) : (currentY - move.y);
+        if (progress > 0) {
+            score += progress * 20;
+        }
+
+        // Check if this move is on the shortest path (for tie-breaking)
+        const isOnPath = nextPathCell && move.x === nextPathCell.x && move.y === nextPathCell.y;
+
+        // Strong bonus for moves on the shortest path
+        if (isOnPath) {
+            score += 30;
+        }
+
+        scoredMoves.push({
+            move: {type: 'move', x: move.x, y: move.y},
+            score: score,
+            isOnPath: isOnPath,
+            distToGoal: player === 1 ? (8 - move.y) : move.y,
+            isRecentPosition: isRecentPosition,
+            isBackward: isBackward
+        });
 
         if (score > bestScore) {
             bestScore = score;
             bestMove = {type: 'move', x: move.x, y: move.y};
+        }
+    }
+
+    // Find all moves with the best score and apply tie-breaking
+    const bestMoves = scoredMoves.filter(m => m.score === bestScore);
+    if (bestMoves.length > 1) {
+        // First filter out moves to recent positions if we have other options
+        const nonRecentMoves = bestMoves.filter(m => !m.isRecentPosition);
+        const candidateMoves = nonRecentMoves.length > 0 ? nonRecentMoves : bestMoves;
+
+        // Then filter out backward moves if we have forward options
+        const nonBackwardMoves = candidateMoves.filter(m => !m.isBackward);
+        const finalCandidates = nonBackwardMoves.length > 0 ? nonBackwardMoves : candidateMoves;
+
+        // Prefer moves on the shortest path
+        const pathMoves = finalCandidates.filter(m => m.isOnPath);
+        if (pathMoves.length > 0) {
+            bestMove = pathMoves[0].move;
+        } else {
+            // Sort by distance to goal, then by consistent direction
+            finalCandidates.sort((a, b) => {
+                if (a.distToGoal !== b.distToGoal) return a.distToGoal - b.distToGoal;
+                // Consistent direction preference based on current position
+                const currentX = testPawns[player].x;
+                if (currentX <= 4) {
+                    return a.move.x - b.move.x; // Prefer left
+                } else {
+                    return b.move.x - a.move.x; // Prefer right
+                }
+            });
+            bestMove = finalCandidates[0].move;
         }
     }
 
