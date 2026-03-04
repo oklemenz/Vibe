@@ -216,6 +216,20 @@ function cancelPendingCalculations() {
 
 // Start AI calculation - uses worker if available, otherwise sync fallback
 function startAICalculation() {
+    // Check if we should use MCTS AI
+    if (useMCTSAI) {
+        // Use MCTS AI (synchronous but more powerful)
+        setTimeout(() => {
+            const bestMove = findBestMoveMCTS(aiPlayer);
+            aiThinking = false;
+            hideAIThinkingIndicator();
+            if (bestMove) {
+                executeAIMove(bestMove);
+            }
+        }, 50);
+        return;
+    }
+
     if (aiWorker && workersAvailable) {
         // Use Web Worker (non-blocking)
         aiWorker.postMessage({
@@ -2846,3 +2860,1284 @@ function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts
 
     return bestMove;
 }
+
+// Direction constants for MCTS
+const MOVE_UP = [-1, 0];
+const MOVE_DOWN = [1, 0];
+const MOVE_LEFT = [0, -1];
+const MOVE_RIGHT = [0, 1];
+
+// Helper function to create 2D array initialized to a value
+function create2DArrayInitializedTo(rows, cols, value) {
+    const arr = [];
+    for (let i = 0; i < rows; i++) {
+        arr.push([]);
+        for (let j = 0; j < cols; j++) {
+            arr[i].push(value);
+        }
+    }
+    return arr;
+}
+
+// Helper function to clone a 2D array
+function create2DArrayClonedFrom(arr2D) {
+    const clone = [];
+    for (let i = 0; i < arr2D.length; i++) {
+        clone.push([...arr2D[i]]);
+    }
+    return clone;
+}
+
+// Helper function to perform logical AND between 2D arrays
+function logicalAndBetween2DArray(arr1, arr2) {
+    const result = [];
+    for (let i = 0; i < arr1.length; i++) {
+        result.push([]);
+        for (let j = 0; j < arr1[i].length; j++) {
+            result[i].push(arr1[i][j] && arr2[i][j]);
+        }
+    }
+    return result;
+}
+
+// Helper function to get indices of a value in 2D array
+function indicesOfValueIn2DArray(arr2D, value) {
+    let t = [];
+    for (let i = 0; i < arr2D.length; i++) {
+        for (let j = 0; j < arr2D[0].length; j++) {
+            if (arr2D[i][j] === value) {
+                t.push([i, j]);
+            }
+        }
+    }
+    return t;
+}
+
+// Helper function to get indices of minimum values in array
+function indicesOfMin(arr) {
+    let min = Infinity;
+    let indices = [];
+    for (let i = 0; i < arr.length; i++) {
+        if (arr[i] < min) {
+            indices = [i];
+            min = arr[i];
+        } else if (arr[i] === min) {
+            indices.push(i);
+        }
+    }
+    return indices;
+}
+
+// Helper function to get indices of maximum values in array
+function indicesOfMax(arr) {
+    let max = -Infinity;
+    let indices = [];
+    for (let i = 0; i < arr.length; i++) {
+        if (arr[i] > max) {
+            indices = [i];
+            max = arr[i];
+        } else if (arr[i] === max) {
+            indices.push(i);
+        }
+    }
+    return indices;
+}
+
+// Random index helper
+function randomIndex(arr) {
+    return Math.floor(Math.random() * arr.length);
+}
+
+// Random choice helper
+function randomChoice(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// Shuffle array in place (Fisher-Yates)
+function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const x = arr[i];
+        arr[i] = arr[j];
+        arr[j] = x;
+    }
+    return arr;
+}
+
+// Simple Priority Queue implementation
+class PriorityQueue {
+    constructor(comparator) {
+        this.data = [];
+        this.comparator = comparator || ((a, b) => a < b);
+    }
+
+    push(item) {
+        this.data.push(item);
+        this.data.sort((a, b) => this.comparator(a, b) ? -1 : 1);
+    }
+
+    pop() {
+        return this.data.shift();
+    }
+
+    isEmpty() {
+        return this.data.length === 0;
+    }
+}
+
+// PawnPosition class for MCTS
+class PawnPosition {
+    constructor(row, col) {
+        this.row = row;
+        this.col = col;
+    }
+
+    equals(other) {
+        return this.row === other.row && this.col === other.col;
+    }
+
+    newAddMove(moveTuple) {
+        return new PawnPosition(this.row + moveTuple[0], this.col + moveTuple[1]);
+    }
+
+    getDisplacementPawnMoveTupleFrom(position) {
+        return [this.row - position.row, this.col - position.col];
+    }
+
+    static clone(pawnPosition) {
+        return new PawnPosition(pawnPosition.row, pawnPosition.col);
+    }
+}
+
+// Pawn class for MCTS
+class MCTSPawn {
+    constructor(index, isHumanPlayer, skipInit = false) {
+        this.index = index;
+        this.isHumanPlayer = isHumanPlayer;
+        if (!skipInit) {
+            // Player 1 (index 0) starts at row 8 (y=0 in original), goal row 0 (y=8)
+            // Player 2 (index 1) starts at row 0 (y=8 in original), goal row 8 (y=0)
+            if (index === 0) {
+                this.position = new PawnPosition(8, 4);
+                this.goalRow = 0;
+            } else {
+                this.position = new PawnPosition(0, 4);
+                this.goalRow = 8;
+            }
+            this.numberOfLeftWalls = 10;
+        }
+    }
+
+    static clone(pawn) {
+        const _clone = new MCTSPawn(pawn.index, pawn.isHumanPlayer, true);
+        _clone.index = pawn.index;
+        _clone.isHumanPlayer = pawn.isHumanPlayer;
+        _clone.position = PawnPosition.clone(pawn.position);
+        _clone.goalRow = pawn.goalRow;
+        _clone.numberOfLeftWalls = pawn.numberOfLeftWalls;
+        return _clone;
+    }
+}
+
+// Board class for MCTS
+class MCTSBoard {
+    constructor(skipInit = false) {
+        if (!skipInit) {
+            this.pawns = [new MCTSPawn(0, true), new MCTSPawn(1, false)];
+            this.walls = {
+                horizontal: create2DArrayInitializedTo(8, 8, false),
+                vertical: create2DArrayInitializedTo(8, 8, false)
+            };
+        }
+    }
+
+    static clone(board) {
+        const _clone = new MCTSBoard(true);
+        _clone.pawns = [MCTSPawn.clone(board.pawns[0]), MCTSPawn.clone(board.pawns[1])];
+        _clone.walls = {
+            horizontal: create2DArrayClonedFrom(board.walls.horizontal),
+            vertical: create2DArrayClonedFrom(board.walls.vertical)
+        };
+        return _clone;
+    }
+}
+
+// MCTSGame class for MCTS
+class MCTSGame {
+    constructor(skipInit = false) {
+        if (!skipInit) {
+            this.board = new MCTSBoard();
+            this.winner = null;
+            this._turn = 0;
+            this.validNextWalls = {
+                horizontal: create2DArrayInitializedTo(8, 8, true),
+                vertical: create2DArrayInitializedTo(8, 8, true)
+            };
+            this._probableNextWalls = {
+                horizontal: create2DArrayInitializedTo(8, 8, false),
+                vertical: create2DArrayInitializedTo(8, 8, false)
+            };
+            this._probableValidNextWalls = null;
+            this._probableValidNextWallsUpdated = false;
+            this.openWays = {
+                upDown: create2DArrayInitializedTo(10, 9, true),
+                leftRight: create2DArrayInitializedTo(9, 10, true)
+            };
+            // Set boundaries as blocked
+            for (let i = 0; i < 9; i++) {
+                this.openWays.upDown[0][i] = false;
+                this.openWays.upDown[9][i] = false;
+                this.openWays.leftRight[i][0] = false;
+                this.openWays.leftRight[i][9] = false;
+            }
+            this._validNextPositions = create2DArrayInitializedTo(9, 9, false);
+            this._validNextPositionsUpdated = false;
+        }
+    }
+
+    get turn() {
+        return this._turn;
+    }
+
+    get pawnIndexOfTurn() {
+        return this._turn % 2;
+    }
+
+    get pawnIndexOfNotTurn() {
+        return (this._turn + 1) % 2;
+    }
+
+    get pawnOfTurn() {
+        return this.board.pawns[this.pawnIndexOfTurn];
+    }
+
+    get pawnOfNotTurn() {
+        return this.board.pawns[this.pawnIndexOfNotTurn];
+    }
+
+    get pawn0() {
+        return this.board.pawns[0];
+    }
+
+    get pawn1() {
+        return this.board.pawns[1];
+    }
+
+    get validNextPositions() {
+        if (!this._validNextPositionsUpdated) {
+            this._updateValidNextPositions();
+        }
+        return this._validNextPositions;
+    }
+
+    get probableValidNextWalls() {
+        if (!this._probableValidNextWallsUpdated) {
+            this._probableValidNextWalls = {
+                horizontal: logicalAndBetween2DArray(this._probableNextWalls.horizontal, this.validNextWalls.horizontal),
+                vertical: logicalAndBetween2DArray(this._probableNextWalls.vertical, this.validNextWalls.vertical)
+            };
+            this._probableValidNextWallsUpdated = true;
+        }
+        return this._probableValidNextWalls;
+    }
+
+    _updateValidNextPositions() {
+        const pawn = this.pawnOfTurn;
+        const opponent = this.pawnOfNotTurn;
+        this._validNextPositions = create2DArrayInitializedTo(9, 9, false);
+
+        const moveTuples = [MOVE_UP, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT];
+        for (const moveTuple of moveTuples) {
+            if (this.isOpenWay(pawn.position.row, pawn.position.col, moveTuple)) {
+                const newPos = pawn.position.newAddMove(moveTuple);
+                if (newPos.row === opponent.position.row && newPos.col === opponent.position.col) {
+                    // Face to face - try to jump
+                    if (this.isOpenWay(newPos.row, newPos.col, moveTuple)) {
+                        const jumpPos = newPos.newAddMove(moveTuple);
+                        if (jumpPos.row >= 0 && jumpPos.row < 9 && jumpPos.col >= 0 && jumpPos.col < 9) {
+                            this._validNextPositions[jumpPos.row][jumpPos.col] = true;
+                        }
+                    } else {
+                        // Try diagonal
+                        const sideTuples = moveTuple[0] === 0 ? [MOVE_UP, MOVE_DOWN] : [MOVE_LEFT, MOVE_RIGHT];
+                        for (const sideTuple of sideTuples) {
+                            if (this.isOpenWay(newPos.row, newPos.col, sideTuple)) {
+                                const sidePos = newPos.newAddMove(sideTuple);
+                                if (sidePos.row >= 0 && sidePos.row < 9 && sidePos.col >= 0 && sidePos.col < 9) {
+                                    this._validNextPositions[sidePos.row][sidePos.col] = true;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    this._validNextPositions[newPos.row][newPos.col] = true;
+                }
+            }
+        }
+        this._validNextPositionsUpdated = true;
+    }
+
+    isOpenWay(row, col, moveTuple) {
+        if (moveTuple[0] === -1) { // UP
+            return this.openWays.upDown[row][col];
+        } else if (moveTuple[0] === 1) { // DOWN
+            return this.openWays.upDown[row + 1][col];
+        } else if (moveTuple[1] === -1) { // LEFT
+            return this.openWays.leftRight[row][col];
+        } else if (moveTuple[1] === 1) { // RIGHT
+            return this.openWays.leftRight[row][col + 1];
+        }
+        return false;
+    }
+
+    movePawn(row, col) {
+        this.pawnOfTurn.position = new PawnPosition(row, col);
+        if (row === this.pawnOfTurn.goalRow) {
+            this.winner = this.pawnOfTurn;
+        }
+        this._updateProbableNextWalls();
+        this._turn++;
+        this._validNextPositionsUpdated = false;
+        this._probableValidNextWallsUpdated = false;
+    }
+
+    placeHorizontalWall(row, col) {
+        this.board.walls.horizontal[row][col] = true;
+        this.pawnOfTurn.numberOfLeftWalls--;
+        // Block open ways
+        this.openWays.upDown[row + 1][col] = false;
+        this.openWays.upDown[row + 1][col + 1] = false;
+        // Update valid walls
+        this._updateValidNextWallsAfterPlaceHorizontalWall(row, col);
+        this._updateProbableNextWalls();
+        this._turn++;
+        this._validNextPositionsUpdated = false;
+        this._probableValidNextWallsUpdated = false;
+    }
+
+    placeVerticalWall(row, col) {
+        this.board.walls.vertical[row][col] = true;
+        this.pawnOfTurn.numberOfLeftWalls--;
+        // Block open ways
+        this.openWays.leftRight[row][col + 1] = false;
+        this.openWays.leftRight[row + 1][col + 1] = false;
+        // Update valid walls
+        this._updateValidNextWallsAfterPlaceVerticalWall(row, col);
+        this._updateProbableNextWalls();
+        this._turn++;
+        this._validNextPositionsUpdated = false;
+        this._probableValidNextWallsUpdated = false;
+    }
+
+    _updateValidNextWallsAfterPlaceHorizontalWall(row, col) {
+        this.validNextWalls.horizontal[row][col] = false;
+        this.validNextWalls.vertical[row][col] = false;
+        if (col > 0) this.validNextWalls.horizontal[row][col - 1] = false;
+        if (col < 7) this.validNextWalls.horizontal[row][col + 1] = false;
+    }
+
+    _updateValidNextWallsAfterPlaceVerticalWall(row, col) {
+        this.validNextWalls.vertical[row][col] = false;
+        this.validNextWalls.horizontal[row][col] = false;
+        if (row > 0) this.validNextWalls.vertical[row - 1][col] = false;
+        if (row < 7) this.validNextWalls.vertical[row + 1][col] = false;
+    }
+
+    _updateProbableNextWalls() {
+        this._probableNextWalls = {
+            horizontal: create2DArrayInitializedTo(8, 8, false),
+            vertical: create2DArrayInitializedTo(8, 8, false)
+        };
+        // Mark walls near pawns as probable
+        for (const pawn of this.board.pawns) {
+            MCTSGame.setWallsBesidePawn(this._probableNextWalls, pawn);
+        }
+    }
+
+    static setWallsBesidePawn(wall2DArrays, pawn) {
+        const row = pawn.position.row;
+        const col = pawn.position.col;
+        // Set walls around pawn position
+        for (let dr = -1; dr <= 0; dr++) {
+            for (let dc = -1; dc <= 0; dc++) {
+                const r = row + dr;
+                const c = col + dc;
+                if (r >= 0 && r < 8 && c >= 0 && c < 8) {
+                    wall2DArrays.horizontal[r][c] = true;
+                    wall2DArrays.vertical[r][c] = true;
+                }
+            }
+        }
+    }
+
+    testIfExistPathsToGoalLinesAfterPlaceHorizontalWall(row, col) {
+        // Temporarily place wall
+        this.openWays.upDown[row + 1][col] = false;
+        this.openWays.upDown[row + 1][col + 1] = false;
+        const result = this._existPathsToGoalForBothPawns();
+        // Restore
+        this.openWays.upDown[row + 1][col] = true;
+        this.openWays.upDown[row + 1][col + 1] = true;
+        return result;
+    }
+
+    testIfExistPathsToGoalLinesAfterPlaceVerticalWall(row, col) {
+        // Temporarily place wall
+        this.openWays.leftRight[row][col + 1] = false;
+        this.openWays.leftRight[row + 1][col + 1] = false;
+        const result = this._existPathsToGoalForBothPawns();
+        // Restore
+        this.openWays.leftRight[row][col + 1] = true;
+        this.openWays.leftRight[row + 1][col + 1] = true;
+        return result;
+    }
+
+    _existPathsToGoalForBothPawns() {
+        return this._existPathToGoal(this.pawn0) && this._existPathToGoal(this.pawn1);
+    }
+
+    _existPathToGoal(pawn) {
+        const visited = create2DArrayInitializedTo(9, 9, false);
+        const queue = [pawn.position];
+        visited[pawn.position.row][pawn.position.col] = true;
+
+        while (queue.length > 0) {
+            const pos = queue.shift();
+            if (pos.row === pawn.goalRow) return true;
+
+            const moveTuples = [MOVE_UP, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT];
+            for (const moveTuple of moveTuples) {
+                if (this.isOpenWay(pos.row, pos.col, moveTuple)) {
+                    const newPos = pos.newAddMove(moveTuple);
+                    if (newPos.row >= 0 && newPos.row < 9 && newPos.col >= 0 && newPos.col < 9 &&
+                        !visited[newPos.row][newPos.col]) {
+                        visited[newPos.row][newPos.col] = true;
+                        queue.push(newPos);
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    doMove(move) {
+        if (move[0] !== null) {
+            this.movePawn(move[0][0], move[0][1]);
+        } else if (move[1] !== null) {
+            this.placeHorizontalWall(move[1][0], move[1][1]);
+        } else if (move[2] !== null) {
+            this.placeVerticalWall(move[2][0], move[2][1]);
+        }
+    }
+
+    isPossibleNextMove(move) {
+        if (move[0] !== null) {
+            return this.validNextPositions[move[0][0]][move[0][1]];
+        } else if (move[1] !== null) {
+            return this.validNextWalls.horizontal[move[1][0]][move[1][1]] &&
+                   this.testIfExistPathsToGoalLinesAfterPlaceHorizontalWall(move[1][0], move[1][1]);
+        } else if (move[2] !== null) {
+            return this.validNextWalls.vertical[move[2][0]][move[2][1]] &&
+                   this.testIfExistPathsToGoalLinesAfterPlaceVerticalWall(move[2][0], move[2][1]);
+        }
+        return false;
+    }
+
+    getArrOfValidNextPositionTuples() {
+        return indicesOfValueIn2DArray(this.validNextPositions, true);
+    }
+
+    getArrOfProbableValidNoBlockNextHorizontalWallPositions() {
+        const nextHorizontals = indicesOfValueIn2DArray(this.probableValidNextWalls.horizontal, true);
+        const noBlockNextHorizontals = [];
+        for (let i = 0; i < nextHorizontals.length; i++) {
+            if (this.testIfExistPathsToGoalLinesAfterPlaceHorizontalWall(nextHorizontals[i][0], nextHorizontals[i][1])) {
+                noBlockNextHorizontals.push(nextHorizontals[i]);
+            }
+        }
+        return noBlockNextHorizontals;
+    }
+
+    getArrOfProbableValidNoBlockNextVerticalWallPositions() {
+        const nextVerticals = indicesOfValueIn2DArray(this.probableValidNextWalls.vertical, true);
+        const noBlockNextVerticals = [];
+        for (let i = 0; i < nextVerticals.length; i++) {
+            if (this.testIfExistPathsToGoalLinesAfterPlaceVerticalWall(nextVerticals[i][0], nextVerticals[i][1])) {
+                noBlockNextVerticals.push(nextVerticals[i]);
+            }
+        }
+        return noBlockNextVerticals;
+    }
+
+    getArrOfValidNoBlockNextWallsDisturbPathOf(pawn) {
+        const validNextWallsInterrupt = MCTSAIHelper.getValidNextWallsDisturbPathOf(pawn, this);
+        const nextHorizontals = indicesOfValueIn2DArray(validNextWallsInterrupt.horizontal, true);
+        const noBlockNextHorizontals = [];
+        for (let i = 0; i < nextHorizontals.length; i++) {
+            if (this.testIfExistPathsToGoalLinesAfterPlaceHorizontalWall(nextHorizontals[i][0], nextHorizontals[i][1])) {
+                noBlockNextHorizontals.push(nextHorizontals[i]);
+            }
+        }
+        const nextVerticals = indicesOfValueIn2DArray(validNextWallsInterrupt.vertical, true);
+        const noBlockNextVerticals = [];
+        for (let i = 0; i < nextVerticals.length; i++) {
+            if (this.testIfExistPathsToGoalLinesAfterPlaceVerticalWall(nextVerticals[i][0], nextVerticals[i][1])) {
+                noBlockNextVerticals.push(nextVerticals[i]);
+            }
+        }
+        return {arrOfHorizontal: noBlockNextHorizontals, arrOfVertical: noBlockNextVerticals};
+    }
+
+    static clone(game) {
+        const _clone = new MCTSGame(true);
+        _clone.board = MCTSBoard.clone(game.board);
+        if (game.winner === null) {
+            _clone.winner = null;
+        } else {
+            _clone.winner = _clone.board.pawns[game.winner.index];
+        }
+        _clone._turn = game._turn;
+        _clone.validNextWalls = {
+            horizontal: create2DArrayClonedFrom(game.validNextWalls.horizontal),
+            vertical: create2DArrayClonedFrom(game.validNextWalls.vertical)
+        };
+        _clone._probableNextWalls = {
+            horizontal: create2DArrayClonedFrom(game._probableNextWalls.horizontal),
+            vertical: create2DArrayClonedFrom(game._probableNextWalls.vertical)
+        };
+        _clone._probableValidNextWalls = null;
+        _clone._probableValidNextWallsUpdated = false;
+        _clone.openWays = {
+            upDown: create2DArrayClonedFrom(game.openWays.upDown),
+            leftRight: create2DArrayClonedFrom(game.openWays.leftRight)
+        };
+        _clone._validNextPositions = create2DArrayClonedFrom(game._validNextPositions);
+        _clone._validNextPositionsUpdated = game._validNextPositionsUpdated;
+        return _clone;
+    }
+}
+
+// MNode class for Monte Carlo Tree Search
+class MNode {
+    constructor(move, parent, uctConst) {
+        this.move = move;
+        this.parent = parent;
+        this.uctConst = uctConst;
+        this.numWins = 0;
+        this.numSims = 0;
+        this.children = [];
+        this.isTerminal = false;
+    }
+
+    get isLeaf() {
+        return this.children.length === 0;
+    }
+
+    get isNew() {
+        return this.numSims === 0;
+    }
+
+    get uct() {
+        if (this.parent === null || this.parent.numSims === 0) {
+            throw "UCT_ERROR";
+        }
+        if (this.numSims === 0) {
+            return Infinity;
+        }
+        return (this.numWins / this.numSims) + Math.sqrt((this.uctConst * Math.log(this.parent.numSims)) / this.numSims);
+    }
+
+    get winRate() {
+        return this.numWins / this.numSims;
+    }
+
+    get maxUCTChild() {
+        let maxUCTIndices;
+        let maxUCT = -Infinity;
+        for (let i = 0; i < this.children.length; i++) {
+            const uct = this.children[i].uct;
+            if (uct > maxUCT) {
+                maxUCT = uct;
+                maxUCTIndices = [i];
+            } else if (uct === maxUCT) {
+                maxUCTIndices.push(i);
+            }
+        }
+        const maxUCTIndex = randomChoice(maxUCTIndices);
+        return this.children[maxUCTIndex];
+    }
+
+    get maxWinRateChild() {
+        let maxWinRateIndex;
+        let maxWinRate = -Infinity;
+        for (let i = 0; i < this.children.length; i++) {
+            if (this.children[i].winRate > maxWinRate) {
+                maxWinRate = this.children[i].winRate;
+                maxWinRateIndex = i;
+            }
+        }
+        return this.children[maxWinRateIndex];
+    }
+
+    get maxSimsChild() {
+        let maxSimsIndex;
+        let maxSims = -Infinity;
+        for (let i = 0; i < this.children.length; i++) {
+            if (this.children[i].numSims > maxSims) {
+                maxSims = this.children[i].numSims;
+                maxSimsIndex = i;
+            }
+        }
+        return this.children[maxSimsIndex];
+    }
+
+    addChild(childNode) {
+        this.children.push(childNode);
+    }
+}
+
+// Monte Carlo Tree Search implementation
+class MonteCarloTreeSearch {
+    constructor(game, uctConst) {
+        this.game = game;
+        this.uctConst = uctConst;
+        this.root = new MNode(null, null, this.uctConst);
+        this.totalNumOfSimulations = 0;
+    }
+
+    static maxDepth(node) {
+        let max = 0;
+        for (let i = 0; i < node.children.length; i++) {
+            const d = this.maxDepth(node.children[i]) + 1;
+            if (d > max) {
+                max = d;
+            }
+        }
+        return max;
+    }
+
+    search(numOfSimulations) {
+        const uctConst = this.uctConst;
+        let currentNode = this.root;
+        const limitOfTotalNumOfSimulations = this.totalNumOfSimulations + numOfSimulations;
+
+        while (this.totalNumOfSimulations < limitOfTotalNumOfSimulations) {
+            // Selection
+            if (currentNode.isTerminal) {
+                this.rollout(currentNode);
+                currentNode = this.root;
+            } else if (currentNode.isLeaf) {
+                if (currentNode.isNew) {
+                    this.rollout(currentNode);
+                    currentNode = this.root;
+                } else {
+                    // Expansion
+                    const simulationGame = this.getSimulationGameAtNode(currentNode);
+                    let move, childNode;
+                    if (simulationGame.pawnOfNotTurn.numberOfLeftWalls > 0) {
+                        const nextPositionTuples = simulationGame.getArrOfValidNextPositionTuples();
+                        for (let i = 0; i < nextPositionTuples.length; i++) {
+                            move = [nextPositionTuples[i], null, null];
+                            childNode = new MNode(move, currentNode, uctConst);
+                            currentNode.addChild(childNode);
+                        }
+                        if (simulationGame.pawnOfTurn.numberOfLeftWalls > 0) {
+                            const noBlockNextHorizontals = simulationGame.getArrOfProbableValidNoBlockNextHorizontalWallPositions();
+                            for (let i = 0; i < noBlockNextHorizontals.length; i++) {
+                                move = [null, noBlockNextHorizontals[i], null];
+                                childNode = new MNode(move, currentNode, uctConst);
+                                currentNode.addChild(childNode);
+                            }
+                            const noBlockNextVerticals = simulationGame.getArrOfProbableValidNoBlockNextVerticalWallPositions();
+                            for (let i = 0; i < noBlockNextVerticals.length; i++) {
+                                move = [null, null, noBlockNextVerticals[i]];
+                                childNode = new MNode(move, currentNode, uctConst);
+                                currentNode.addChild(childNode);
+                            }
+                        }
+                    } else {
+                        const nextPositions = MCTSAIHelper.chooseShortestPathNextPawnPositionsThoroughly(simulationGame);
+                        for (let i = 0; i < nextPositions.length; i++) {
+                            const nextPosition = nextPositions[i];
+                            move = [[nextPosition.row, nextPosition.col], null, null];
+                            childNode = new MNode(move, currentNode, uctConst);
+                            currentNode.addChild(childNode);
+                        }
+                        if (simulationGame.pawnOfTurn.numberOfLeftWalls > 0) {
+                            const noBlockNextWallsInterrupt = simulationGame.getArrOfValidNoBlockNextWallsDisturbPathOf(simulationGame.pawnOfNotTurn);
+                            const noBlockNextHorizontalsInterrupt = noBlockNextWallsInterrupt.arrOfHorizontal;
+                            for (let i = 0; i < noBlockNextHorizontalsInterrupt.length; i++) {
+                                move = [null, noBlockNextHorizontalsInterrupt[i], null];
+                                childNode = new MNode(move, currentNode, uctConst);
+                                currentNode.addChild(childNode);
+                            }
+                            const noBlockNextVerticalsInterrupt = noBlockNextWallsInterrupt.arrOfVertical;
+                            for (let i = 0; i < noBlockNextVerticalsInterrupt.length; i++) {
+                                move = [null, null, noBlockNextVerticalsInterrupt[i]];
+                                childNode = new MNode(move, currentNode, uctConst);
+                                currentNode.addChild(childNode);
+                            }
+                        }
+                    }
+                    if (currentNode.children.length > 0) {
+                        this.rollout(randomChoice(currentNode.children));
+                    }
+                    currentNode = this.root;
+                }
+            } else {
+                currentNode = currentNode.maxUCTChild;
+            }
+        }
+    }
+
+    selectBestMove() {
+        const best = this.root.maxSimsChild;
+        return {move: best.move, winRate: best.winRate};
+    }
+
+    getSimulationGameAtNode(node) {
+        const simulationGame = MCTSGame.clone(this.game);
+        const stack = [];
+
+        let ancestor = node;
+        while (ancestor.parent !== null) {
+            stack.push(ancestor.move);
+            ancestor = ancestor.parent;
+        }
+
+        while (stack.length > 0) {
+            const move = stack.pop();
+            simulationGame.doMove(move);
+        }
+        return simulationGame;
+    }
+
+    rollout(node) {
+        this.totalNumOfSimulations++;
+        const simulationGame = this.getSimulationGameAtNode(node);
+        const nodePawnIndex = simulationGame.pawnIndexOfNotTurn;
+
+        if (simulationGame.winner !== null) {
+            node.isTerminal = true;
+        }
+
+        const cacheForPawns = [
+            {updated: false, prev: null, next: null, distanceToGoal: null},
+            {updated: false, prev: null, next: null, distanceToGoal: null}
+        ];
+        let pawnMoveFlag = false;
+
+        while (simulationGame.winner === null) {
+            if (!cacheForPawns[0].updated) {
+                const t = MCTSAIHelper.get2DArrayPrevAndNextAndDistanceToGoalFor(simulationGame.pawn0, simulationGame);
+                cacheForPawns[0].prev = t[0];
+                cacheForPawns[0].next = t[1];
+                cacheForPawns[0].distanceToGoal = t[2];
+                cacheForPawns[0].updated = true;
+            }
+            if (!cacheForPawns[1].updated) {
+                const t = MCTSAIHelper.get2DArrayPrevAndNextAndDistanceToGoalFor(simulationGame.pawn1, simulationGame);
+                cacheForPawns[1].prev = t[0];
+                cacheForPawns[1].next = t[1];
+                cacheForPawns[1].distanceToGoal = t[2];
+                cacheForPawns[1].updated = true;
+            }
+
+            const pawnOfTurn = simulationGame.pawnOfTurn;
+            const pawnIndexOfTurn = simulationGame.pawnIndexOfTurn;
+
+            if (Math.random() < 0.7) {
+                pawnMoveFlag = false;
+                const next = cacheForPawns[pawnIndexOfTurn].next;
+                const currentPosition = pawnOfTurn.position;
+                let nextPosition = next[currentPosition.row][currentPosition.col];
+
+                if (nextPosition === null) {
+                    throw "already in goal Position....";
+                }
+
+                if (MCTSAIHelper.arePawnsAdjacent(simulationGame)) {
+                    const nextNextPosition = next[nextPosition.row][nextPosition.col];
+                    if (nextNextPosition !== null &&
+                        simulationGame.validNextPositions[nextNextPosition.row][nextNextPosition.col] === true) {
+                        nextPosition = nextNextPosition;
+                        cacheForPawns[pawnIndexOfTurn].distanceToGoal -= 2;
+                    } else {
+                        const nextPositions = MCTSAIHelper.chooseShortestPathNextPawnPositionsThoroughly(simulationGame);
+                        const _nextPosition = randomChoice(nextPositions);
+                        if (_nextPosition.equals(nextPosition)) {
+                            cacheForPawns[pawnIndexOfTurn].distanceToGoal -= 1;
+                        } else {
+                            nextPosition = _nextPosition;
+                            cacheForPawns[pawnIndexOfTurn].updated = false;
+                        }
+                    }
+                } else {
+                    cacheForPawns[pawnIndexOfTurn].distanceToGoal -= 1;
+                }
+                simulationGame.movePawn(nextPosition.row, nextPosition.col);
+            } else if (!pawnMoveFlag && pawnOfTurn.numberOfLeftWalls > 0) {
+                const nextMove = MCTSAIHelper.chooseProbableNextWall(simulationGame);
+                if (nextMove !== null) {
+                    simulationGame.doMove(nextMove);
+                    cacheForPawns[0].updated = false;
+                    cacheForPawns[1].updated = false;
+                } else {
+                    pawnMoveFlag = true;
+                }
+            } else {
+                pawnMoveFlag = false;
+                const prev = cacheForPawns[pawnIndexOfTurn].prev;
+                const currentPosition = pawnOfTurn.position;
+                let prevPosition = prev[currentPosition.row][currentPosition.col];
+                if (prevPosition === null || !simulationGame.validNextPositions[prevPosition.row][prevPosition.col]) {
+                    const prevPositions = MCTSAIHelper.chooseLongestPathNextPawnPositionsThoroughly(simulationGame);
+                    prevPosition = randomChoice(prevPositions);
+                    cacheForPawns[pawnIndexOfTurn].updated = false;
+                } else {
+                    cacheForPawns[pawnIndexOfTurn].distanceToGoal += 1;
+                }
+                simulationGame.movePawn(prevPosition.row, prevPosition.col);
+            }
+        }
+
+        // Backpropagation
+        let ancestor = node;
+        let ancestorPawnIndex = nodePawnIndex;
+        while (ancestor !== null) {
+            ancestor.numSims++;
+            if (simulationGame.winner.index === ancestorPawnIndex) {
+                ancestor.numWins += 1;
+            }
+            ancestor = ancestor.parent;
+            ancestorPawnIndex = (ancestorPawnIndex + 1) % 2;
+        }
+    }
+}
+
+// MCTS AI Helper class
+class MCTSAIHelper {
+    static chooseShortestPathNextPawnPositionsThoroughly(game) {
+        const valids = indicesOfValueIn2DArray(game.validNextPositions, true);
+        const distances = [];
+        for (let i = 0; i < valids.length; i++) {
+            const clonedGame = MCTSGame.clone(game);
+            clonedGame.movePawn(valids[i][0], valids[i][1]);
+            const distance = MCTSAIHelper.getShortestDistanceToGoalFor(clonedGame.pawnOfNotTurn, clonedGame);
+            distances.push(distance);
+        }
+        const nextPositions = [];
+        for (const index of indicesOfMin(distances)) {
+            nextPositions.push(new PawnPosition(valids[index][0], valids[index][1]));
+        }
+        return nextPositions;
+    }
+
+    static chooseLongestPathNextPawnPositionsThoroughly(game) {
+        const valids = indicesOfValueIn2DArray(game.validNextPositions, true);
+        const distances = [];
+        for (let i = 0; i < valids.length; i++) {
+            const clonedGame = MCTSGame.clone(game);
+            clonedGame.movePawn(valids[i][0], valids[i][1]);
+            const distance = MCTSAIHelper.getShortestDistanceToGoalFor(clonedGame.pawnOfNotTurn, clonedGame);
+            distances.push(distance);
+        }
+        const nextPositions = [];
+        for (const index of indicesOfMax(distances)) {
+            nextPositions.push(new PawnPosition(valids[index][0], valids[index][1]));
+        }
+        return nextPositions;
+    }
+
+    static get2DArrayPrevAndNextAndDistanceToGoalFor(pawn, game) {
+        const t = this.getRandomShortestPathToGoal(pawn, game);
+        const dist = t[0];
+        const prev = t[1];
+        const goalPosition = t[2];
+        const distanceToGoal = dist[goalPosition.row][goalPosition.col];
+        const next = MCTSAIHelper.getNextByReversingPrev(prev, goalPosition);
+        return [prev, next, distanceToGoal];
+    }
+
+    static chooseShortestPathNextPawnPosition(game) {
+        let nextPosition = null;
+        if (MCTSAIHelper.arePawnsAdjacent(game)) {
+            const nextPositions = this.chooseShortestPathNextPawnPositionsThoroughly(game);
+            nextPosition = randomChoice(nextPositions);
+        } else {
+            const next = MCTSAIHelper.get2DArrayPrevAndNextAndDistanceToGoalFor(game.pawnOfTurn, game)[1];
+            const currentPosition = game.pawnOfTurn.position;
+            nextPosition = next[currentPosition.row][currentPosition.col];
+        }
+        return nextPosition;
+    }
+
+    static chooseProbableNextWall(game) {
+        const nextMoves = [];
+        const nextHorizontals = indicesOfValueIn2DArray(game.probableValidNextWalls.horizontal, true);
+        for (let i = 0; i < nextHorizontals.length; i++) {
+            nextMoves.push([null, nextHorizontals[i], null]);
+        }
+        const nextVerticals = indicesOfValueIn2DArray(game.probableValidNextWalls.vertical, true);
+        for (let i = 0; i < nextVerticals.length; i++) {
+            nextMoves.push([null, null, nextVerticals[i]]);
+        }
+        if (nextMoves.length === 0) {
+            return null;
+        }
+        let nextMoveIndex = randomIndex(nextMoves);
+        while (!game.isPossibleNextMove(nextMoves[nextMoveIndex])) {
+            nextMoves.splice(nextMoveIndex, 1);
+            if (nextMoves.length === 0) {
+                return null;
+            }
+            nextMoveIndex = randomIndex(nextMoves);
+        }
+        return nextMoves[nextMoveIndex];
+    }
+
+    static arePawnsAdjacent(game) {
+        return ((game.pawnOfNotTurn.position.row === game.pawnOfTurn.position.row &&
+                 Math.abs(game.pawnOfNotTurn.position.col - game.pawnOfTurn.position.col) === 1) ||
+                (game.pawnOfNotTurn.position.col === game.pawnOfTurn.position.col &&
+                 Math.abs(game.pawnOfNotTurn.position.row - game.pawnOfTurn.position.row) === 1));
+    }
+
+    static getRandomShortestPathToGoal(pawn, game) {
+        const visited = create2DArrayInitializedTo(9, 9, false);
+        const dist = create2DArrayInitializedTo(9, 9, Infinity);
+        const prev = create2DArrayInitializedTo(9, 9, null);
+
+        const pawnMoveTuples = shuffle([MOVE_UP, MOVE_RIGHT, MOVE_DOWN, MOVE_LEFT]);
+        const queue = [];
+
+        visited[pawn.position.row][pawn.position.col] = true;
+        dist[pawn.position.row][pawn.position.col] = 0;
+        queue.push(pawn.position);
+
+        while (queue.length > 0) {
+            let position = queue.shift();
+            if (position.row === pawn.goalRow) {
+                const goalPosition = position;
+                return [dist, prev, goalPosition];
+            }
+            for (let i = 0; i < pawnMoveTuples.length; i++) {
+                if (game.isOpenWay(position.row, position.col, pawnMoveTuples[i])) {
+                    const nextPosition = position.newAddMove(pawnMoveTuples[i]);
+                    if (nextPosition.row >= 0 && nextPosition.row < 9 &&
+                        nextPosition.col >= 0 && nextPosition.col < 9 &&
+                        !visited[nextPosition.row][nextPosition.col]) {
+                        const alt = dist[position.row][position.col] + 1;
+                        dist[nextPosition.row][nextPosition.col] = alt;
+                        prev[nextPosition.row][nextPosition.col] = position;
+                        visited[nextPosition.row][nextPosition.col] = true;
+                        queue.push(nextPosition);
+                    }
+                }
+            }
+        }
+        return [dist, prev, null];
+    }
+
+    static getShortestDistanceToGoalFor(pawn, game) {
+        const t = MCTSAIHelper.getRandomShortestPathToGoal(pawn, game);
+        const dist = t[0];
+        const goalPosition = t[2];
+        if (goalPosition === null) {
+            return Infinity;
+        }
+        return dist[goalPosition.row][goalPosition.col];
+    }
+
+    static getAllShortestPathsToEveryPosition(pawn, game) {
+        const searched = create2DArrayInitializedTo(9, 9, false);
+        const visited = create2DArrayInitializedTo(9, 9, false);
+        const dist = create2DArrayInitializedTo(9, 9, Infinity);
+        const multiPrev = create2DArrayInitializedTo(9, 9, null);
+
+        const pawnMoveTuples = [MOVE_UP, MOVE_RIGHT, MOVE_DOWN, MOVE_LEFT];
+        const queue = [];
+        visited[pawn.position.row][pawn.position.col] = true;
+        dist[pawn.position.row][pawn.position.col] = 0;
+        queue.push(pawn.position);
+
+        while (queue.length > 0) {
+            let position = queue.shift();
+            for (let i = 0; i < pawnMoveTuples.length; i++) {
+                if (game.isOpenWay(position.row, position.col, pawnMoveTuples[i])) {
+                    const nextPosition = position.newAddMove(pawnMoveTuples[i]);
+                    if (nextPosition.row >= 0 && nextPosition.row < 9 &&
+                        nextPosition.col >= 0 && nextPosition.col < 9 &&
+                        !searched[nextPosition.row][nextPosition.col]) {
+                        const alt = dist[position.row][position.col] + 1;
+                        if (alt < dist[nextPosition.row][nextPosition.col]) {
+                            dist[nextPosition.row][nextPosition.col] = alt;
+                            multiPrev[nextPosition.row][nextPosition.col] = [position];
+                        } else if (alt === dist[nextPosition.row][nextPosition.col]) {
+                            multiPrev[nextPosition.row][nextPosition.col].push(position);
+                        }
+                        if (!visited[nextPosition.row][nextPosition.col]) {
+                            visited[nextPosition.row][nextPosition.col] = true;
+                            queue.push(nextPosition);
+                        }
+                    }
+                }
+            }
+            searched[position.row][position.col] = true;
+        }
+        return [dist, multiPrev];
+    }
+
+    static getNextByReversingPrev(prev, goalPosition) {
+        const next = create2DArrayInitializedTo(9, 9, null);
+        let prevPosition;
+        let position = goalPosition;
+        while ((prevPosition = prev[position.row][position.col])) {
+            next[prevPosition.row][prevPosition.col] = position;
+            position = prevPosition;
+        }
+        return next;
+    }
+
+    static getValidNextWallsDisturbPathOf(pawn, game) {
+        const validNextWallsInterrupt = create2DArrayInitializedTo(8, 8, false);
+        const validNextWallsDisturb = create2DArrayInitializedTo(8, 8, false);
+
+        const visited = create2DArrayInitializedTo(9, 9, false);
+        const t = MCTSAIHelper.getAllShortestPathsToEveryPosition(pawn, game);
+        const dist = t[0];
+        const prev = t[1];
+        const goalRow = pawn.goalRow;
+        const goalCols = indicesOfMin(dist[goalRow]);
+
+        const queue = [];
+        for (let i = 0; i < goalCols.length; i++) {
+            const goalPosition = new PawnPosition(goalRow, goalCols[i]);
+            queue.push(goalPosition);
+        }
+
+        while (queue.length > 0) {
+            let position = queue.shift();
+            let prevs = prev[position.row][position.col];
+            if (prevs === null) {
+                continue;
+            }
+            for (let i = 0; i < prevs.length; i++) {
+                let prevPosition = prevs[i];
+                const pawnMoveTuple = position.getDisplacementPawnMoveTupleFrom(prevPosition);
+
+                if (pawnMoveTuple[0] === -1 && pawnMoveTuple[1] === 0) { // up
+                    if (prevPosition.col < 8) {
+                        validNextWallsInterrupt[prevPosition.row - 1][prevPosition.col] = true;
+                    }
+                    if (prevPosition.col > 0) {
+                        validNextWallsInterrupt[prevPosition.row - 1][prevPosition.col - 1] = true;
+                    }
+                } else if (pawnMoveTuple[0] === 1 && pawnMoveTuple[1] === 0) { // down
+                    if (prevPosition.col < 8) {
+                        validNextWallsInterrupt[prevPosition.row][prevPosition.col] = true;
+                    }
+                    if (prevPosition.col > 0) {
+                        validNextWallsInterrupt[prevPosition.row][prevPosition.col - 1] = true;
+                    }
+                } else if (pawnMoveTuple[0] === 0 && pawnMoveTuple[1] === -1) { // left
+                    if (prevPosition.row < 8) {
+                        validNextWallsInterrupt[prevPosition.row][prevPosition.col - 1] = true;
+                    }
+                    if (prevPosition.row > 0) {
+                        validNextWallsInterrupt[prevPosition.row - 1][prevPosition.col - 1] = true;
+                    }
+                } else if (pawnMoveTuple[0] === 0 && pawnMoveTuple[1] === 1) { // right
+                    if (prevPosition.row < 8) {
+                        validNextWallsInterrupt[prevPosition.row][prevPosition.col] = true;
+                    }
+                    if (prevPosition.row > 0) {
+                        validNextWallsInterrupt[prevPosition.row - 1][prevPosition.col] = true;
+                    }
+                }
+
+                if (!visited[prevPosition.row][prevPosition.col]) {
+                    visited[prevPosition.row][prevPosition.col] = true;
+                    queue.push(prevPosition);
+                }
+            }
+        }
+
+        const wall2DArrays = {horizontal: validNextWallsInterrupt, vertical: validNextWallsDisturb};
+        MCTSGame.setWallsBesidePawn(wall2DArrays, pawn);
+
+        wall2DArrays.horizontal = logicalAndBetween2DArray(wall2DArrays.horizontal, game.validNextWalls.horizontal);
+        wall2DArrays.vertical = logicalAndBetween2DArray(wall2DArrays.vertical, game.validNextWalls.vertical);
+
+        return wall2DArrays;
+    }
+}
+
+// MCTS AI class - represents the AI player using Monte Carlo Tree Search
+class MCTSAI {
+    constructor(numOfMCTSSimulations = 1000, uctConst = 1.41, aiDevelopMode = false) {
+        this.numOfMCTSSimulations = numOfMCTSSimulations;
+        this.uctConst = uctConst;
+        this.aiDevelopMode = aiDevelopMode;
+    }
+
+    // Convert current game state to MCTSGame format
+    static createMCTSGameFromState(pawnsState, placedFencesState, fencesCount) {
+        const mctsGame = new MCTSGame();
+
+        // Convert pawn positions (note: coordinate system conversion)
+        // Original: pawns = {1: {x, y}, 2: {x, y}} where y=0 is player 1 start
+        // MCTS: row/col where row=0 is top (player 2 start)
+        mctsGame.board.pawns[0].position = new PawnPosition(8 - pawnsState[1].y, pawnsState[1].x);
+        mctsGame.board.pawns[1].position = new PawnPosition(8 - pawnsState[2].y, pawnsState[2].x);
+        mctsGame.board.pawns[0].numberOfLeftWalls = fencesCount[1];
+        mctsGame.board.pawns[1].numberOfLeftWalls = fencesCount[2];
+
+        // Reset walls and openWays
+        mctsGame.board.walls = {
+            horizontal: create2DArrayInitializedTo(8, 8, false),
+            vertical: create2DArrayInitializedTo(8, 8, false)
+        };
+        mctsGame.validNextWalls = {
+            horizontal: create2DArrayInitializedTo(8, 8, true),
+            vertical: create2DArrayInitializedTo(8, 8, true)
+        };
+        mctsGame.openWays = {
+            upDown: create2DArrayInitializedTo(10, 9, true),
+            leftRight: create2DArrayInitializedTo(9, 10, true)
+        };
+        // Set boundaries as blocked
+        for (let i = 0; i < 9; i++) {
+            mctsGame.openWays.upDown[0][i] = false;
+            mctsGame.openWays.upDown[9][i] = false;
+            mctsGame.openWays.leftRight[i][0] = false;
+            mctsGame.openWays.leftRight[i][9] = false;
+        }
+
+        // Convert fences
+        for (const fence of placedFencesState) {
+            // Original fence: {x, y, orientation} where x,y are board coordinates
+            // MCTS uses row/col
+            const mctsRow = 7 - fence.y;
+            const mctsCol = fence.x;
+
+            if (fence.orientation === 'h') {
+                mctsGame.board.walls.horizontal[mctsRow][mctsCol] = true;
+                // Block open ways
+                mctsGame.openWays.upDown[mctsRow + 1][mctsCol] = false;
+                mctsGame.openWays.upDown[mctsRow + 1][mctsCol + 1] = false;
+                // Update valid walls
+                mctsGame.validNextWalls.horizontal[mctsRow][mctsCol] = false;
+                mctsGame.validNextWalls.vertical[mctsRow][mctsCol] = false;
+                if (mctsCol > 0) mctsGame.validNextWalls.horizontal[mctsRow][mctsCol - 1] = false;
+                if (mctsCol < 7) mctsGame.validNextWalls.horizontal[mctsRow][mctsCol + 1] = false;
+            } else {
+                mctsGame.board.walls.vertical[mctsRow][mctsCol] = true;
+                // Block open ways
+                mctsGame.openWays.leftRight[mctsRow][mctsCol + 1] = false;
+                mctsGame.openWays.leftRight[mctsRow + 1][mctsCol + 1] = false;
+                // Update valid walls
+                mctsGame.validNextWalls.vertical[mctsRow][mctsCol] = false;
+                mctsGame.validNextWalls.horizontal[mctsRow][mctsCol] = false;
+                if (mctsRow > 0) mctsGame.validNextWalls.vertical[mctsRow - 1][mctsCol] = false;
+                if (mctsRow < 7) mctsGame.validNextWalls.vertical[mctsRow + 1][mctsCol] = false;
+            }
+        }
+
+        mctsGame._updateProbableNextWalls();
+        mctsGame._validNextPositionsUpdated = false;
+        mctsGame._probableValidNextWallsUpdated = false;
+
+        return mctsGame;
+    }
+
+    // Convert MCTS move to original game format
+    static convertMCTSMoveToOriginal(mctsMove) {
+        if (mctsMove[0] !== null) {
+            // Pawn move
+            const mctsRow = mctsMove[0][0];
+            const mctsCol = mctsMove[0][1];
+            return {
+                type: 'move',
+                x: mctsCol,
+                y: 8 - mctsRow
+            };
+        } else if (mctsMove[1] !== null) {
+            // Horizontal wall
+            const mctsRow = mctsMove[1][0];
+            const mctsCol = mctsMove[1][1];
+            return {
+                type: 'fence',
+                x: mctsCol,
+                y: 7 - mctsRow,
+                orientation: 'h'
+            };
+        } else if (mctsMove[2] !== null) {
+            // Vertical wall
+            const mctsRow = mctsMove[2][0];
+            const mctsCol = mctsMove[2][1];
+            return {
+                type: 'fence',
+                x: mctsCol,
+                y: 7 - mctsRow,
+                orientation: 'v'
+            };
+        }
+        return null;
+    }
+
+    chooseNextMove(pawnsState, placedFencesState, fencesCount, playerIndex) {
+        const d0 = new Date();
+
+        // Convert current game state to MCTSGame
+        const mctsGame = MCTSAI.createMCTSGameFromState(pawnsState, placedFencesState, fencesCount);
+
+        // Set correct turn (playerIndex is 1 or 2, MCTS uses 0 or 1)
+        // Player 1 (index=1) corresponds to MCTS pawn index 0
+        // Player 2 (index=2) corresponds to MCTS pawn index 1
+        mctsGame._turn = playerIndex === 1 ? 0 : 1;
+
+        // Run MCTS
+        const mcts = new MonteCarloTreeSearch(mctsGame, this.uctConst);
+        mcts.search(this.numOfMCTSSimulations);
+
+        const best = mcts.selectBestMove();
+        const mctsMove = best.move;
+        const winRate = best.winRate;
+
+        // Convert move back to original format
+        const originalMove = MCTSAI.convertMCTSMoveToOriginal(mctsMove);
+
+        const d1 = new Date();
+        console.log(`MCTS AI time for ${this.numOfMCTSSimulations} simulations: ${(d1.getTime() - d0.getTime()) / 1000} sec`);
+        console.log(`MCTS estimated win rate: ${winRate}`);
+
+        return originalMove;
+    }
+}
+
+// Global MCTS AI instance
+let mctsAI = null;
+let useMCTSAI = false; // Flag to switch between Minimax and MCTS AI
+
+// Initialize MCTS AI
+function initMCTSAI(numSimulations = 1000, uctConst = 1.41) {
+    mctsAI = new MCTSAI(numSimulations, uctConst);
+}
+
+// Find best move using MCTS AI
+function findBestMoveMCTS(player) {
+    if (!mctsAI) {
+        initMCTSAI();
+    }
+    return mctsAI.chooseNextMove(pawns, placedFences, fences, player);
+}
+
+// Toggle between Minimax and MCTS AI
+function setAIType(useMCTS) {
+    useMCTSAI = useMCTS;
+    if (useMCTS && !mctsAI) {
+        initMCTSAI();
+    }
+}
+
