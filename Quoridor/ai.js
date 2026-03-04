@@ -129,7 +129,7 @@ function handleAssistWorkerMessage(e) {
     assistCalculationPlayer = null;
 
     if (type === 'result' && bestMove) {
-        displayTrainProposal(bestMove);
+        displayAssistProposal(bestMove);
     } else if (type === 'error') {
         console.error('Assist Worker calculation error:', error);
     }
@@ -150,7 +150,7 @@ function cancelPendingCalculations() {
     assistCalculationPlayer = null;
     hideAIThinkingIndicator();
     hideCurrentPlayerThinkingIndicator();
-    clearTrainProposal();
+    clearAssistProposal();
 }
 
 // Start AI calculation - uses worker if available, otherwise sync fallback
@@ -227,7 +227,7 @@ function startAssistCalculation() {
             hideCurrentPlayerThinkingIndicator();
             assistCalculationPlayer = null;
             if (bestMove) {
-                displayTrainProposal(bestMove);
+                displayAssistProposal(bestMove);
             }
         }, 50);
     }
@@ -739,7 +739,7 @@ function makeAIMove() {
 
 // ==================== FIND BEST MOVE ====================
 
-// Find best move for a specific player (used for training mode)
+// Find best move for a specific player (used for assist mode)
 // Uses the same improved logic as the AI player
 // Parameters are optional - if not provided, uses global game state
 function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts, inputPositionHistory) {

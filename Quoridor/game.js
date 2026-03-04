@@ -13,7 +13,7 @@ const PAWN_HEIGHT = 0.6;
 const STORAGE_KEYS = {
     VIEW_MODE: 'quoridor_viewMode',
     AI_ENABLED: 'quoridor_aiEnabled',
-    TRAIN_ENABLED: 'quoridor_trainEnabled',
+    ASSIST_ENABLED: 'quoridor_assistEnabled',
     INTRO_SHOWN: 'quoridor_introShown',
     PANEL_LEFT_OPEN: 'quoridor_panelLeftOpen',
     PANEL_RIGHT_OPEN: 'quoridor_panelRightOpen',
@@ -32,9 +32,9 @@ function loadSettings() {
         aiEnabled = savedAiEnabled === 'true';
     }
 
-    const savedTrainEnabled = localStorage.getItem(STORAGE_KEYS.TRAIN_ENABLED);
-    if (savedTrainEnabled !== null) {
-        trainEnabled = savedTrainEnabled === 'true';
+    const savedAssistEnabled = localStorage.getItem(STORAGE_KEYS.ASSIST_ENABLED);
+    if (savedAssistEnabled !== null) {
+        assistEnabled = savedAssistEnabled === 'true';
     }
 }
 
@@ -260,37 +260,37 @@ function updateThinkingRingAnimation() {
     }
 }
 
-// Training mode state
-let trainEnabled = false;
-let trainProposalGroup = null;
+// Assist mode state
+let assistEnabled = false;
+let assistProposalGroup = null;
 
 // Assist calculation tracking
 let assistCalculationPlayer = null; // Track which player the assist is calculating for
 
-// Show training proposal (triggers calculation)
-function showTrainProposal() {
+// Show assist proposal (triggers calculation)
+function showAssistProposal() {
     // Check if we should show proposal
-    // For Player 1: always when train is enabled
-    // For Player 2: only when train is enabled AND AI is off
-    const shouldShow = trainEnabled && !gameOver && (currentPlayer === 1 || (currentPlayer === 2 && !aiEnabled));
+    // For Player 1: always when assist is enabled
+    // For Player 2: only when assist is enabled AND AI is off
+    const shouldShow = assistEnabled && !gameOver && (currentPlayer === 1 || (currentPlayer === 2 && !aiEnabled));
 
     if (!shouldShow) {
-        clearTrainProposal();
+        clearAssistProposal();
         hideCurrentPlayerThinkingIndicator();
         return;
     }
 
     // Clear previous proposal and start async calculation
-    clearTrainProposal();
+    clearAssistProposal();
     startAssistCalculation();
 }
 
-// Display the training proposal visualization (called from worker callback)
-function displayTrainProposal(bestMove) {
-    if (!bestMove || !trainEnabled || gameOver) return;
+// Display the assist proposal visualization (called from worker callback)
+function displayAssistProposal(bestMove) {
+    if (!bestMove || !assistEnabled || gameOver) return;
 
     // Clear previous proposal
-    clearTrainProposal();
+    clearAssistProposal();
 
     const boardOffset = -(BOARD_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
 
@@ -303,7 +303,7 @@ function displayTrainProposal(bestMove) {
         const ring = new THREE.Mesh(geometry, material);
         ring.rotation.x = -Math.PI / 2;
         ring.position.set(boardOffset + bestMove.x * CELL_SIZE, 0.15, boardOffset + bestMove.y * CELL_SIZE);
-        trainProposalGroup.add(ring);
+        assistProposalGroup.add(ring);
 
         // Add pulsing animation indicator (a second ring)
         const outerGeometry = new THREE.RingGeometry(0.25, 0.32, 32);
@@ -313,7 +313,7 @@ function displayTrainProposal(bestMove) {
         const outerRing = new THREE.Mesh(outerGeometry, outerMaterial);
         outerRing.rotation.x = -Math.PI / 2;
         outerRing.position.set(boardOffset + bestMove.x * CELL_SIZE, 0.14, boardOffset + bestMove.y * CELL_SIZE);
-        trainProposalGroup.add(outerRing);
+        assistProposalGroup.add(outerRing);
 
     } else if (bestMove.type === 'fence') {
         // Show transparent fence preview
@@ -331,7 +331,7 @@ function displayTrainProposal(bestMove) {
         const fenceMesh = new THREE.Mesh(fenceGeometry, fenceMaterial);
         fenceMesh.position.set(boardOffset + bestMove.x * CELL_SIZE + CELL_SIZE / 2, FENCE_HEIGHT / 2, boardOffset + bestMove.y * CELL_SIZE + CELL_SIZE / 2);
         fenceMesh.castShadow = true;
-        trainProposalGroup.add(fenceMesh);
+        assistProposalGroup.add(fenceMesh);
 
         // Add wireframe outline
         const wireGeometry = new THREE.EdgesGeometry(fenceGeometry);
@@ -340,15 +340,15 @@ function displayTrainProposal(bestMove) {
         });
         const wireframe = new THREE.LineSegments(wireGeometry, wireMaterial);
         wireframe.position.copy(fenceMesh.position);
-        trainProposalGroup.add(wireframe);
+        assistProposalGroup.add(wireframe);
     }
 }
 
-// Clear training proposal visualization
-function clearTrainProposal() {
-    if (trainProposalGroup) {
-        while (trainProposalGroup.children.length > 0) {
-            trainProposalGroup.remove(trainProposalGroup.children[0]);
+// Clear assist proposal visualization
+function clearAssistProposal() {
+    if (assistProposalGroup) {
+        while (assistProposalGroup.children.length > 0) {
+            assistProposalGroup.remove(assistProposalGroup.children[0]);
         }
     }
 }
@@ -434,13 +434,13 @@ function init() {
     fencesGroup = new THREE.Group();
     highlightsGroup = new THREE.Group();
     previewGroup = new THREE.Group();
-    trainProposalGroup = new THREE.Group();
+    assistProposalGroup = new THREE.Group();
     scene.add(boardGroup);
     scene.add(pawnsGroup);
     scene.add(fencesGroup);
     scene.add(highlightsGroup);
     scene.add(previewGroup);
-    scene.add(trainProposalGroup);
+    scene.add(assistProposalGroup);
 
     // Lighting
     setupLighting();
@@ -479,8 +479,8 @@ function init() {
     // Switch button - switches starting player
     document.getElementById('switch-btn').addEventListener('click', toggleP2First);
 
-    // Train toggle button
-    document.getElementById('train-btn').addEventListener('click', toggleTrain);
+    // Assist toggle button
+    document.getElementById('assist-btn').addEventListener('click', toggleAssist);
 
     // View toggle button
     document.getElementById('view-btn').addEventListener('click', toggleView);
@@ -518,15 +518,15 @@ function applyLoadedSettings() {
         document.getElementById('top-player2-name').innerHTML = '<span class="player-icon">🟢</span> AI';
     }
 
-    // Apply Train/Assist setting
-    const trainBtn = document.getElementById('train-btn');
-    if (trainEnabled) {
-        trainBtn.textContent = '🎓 Assist On';
-        trainBtn.classList.add('active');
-        // Show train proposal if it's Player 1's turn
+    // Apply Assist setting
+    const assistBtn = document.getElementById('assist-btn');
+    if (assistEnabled) {
+        assistBtn.textContent = '🎓 Assist On';
+        assistBtn.classList.add('active');
+        // Show assist proposal if it's Player 1's turn
         if (currentPlayer === 1 && !gameOver) {
             setTimeout(() => {
-                showTrainProposal();
+                showAssistProposal();
             }, 100);
         }
     }
@@ -919,8 +919,8 @@ function closeWinnerModal() {
 function switchPlayer() {
     currentPlayer = currentPlayer === 1 ? 2 : 1;
 
-    // Clear training proposal when player changes
-    clearTrainProposal();
+    // Clear assist proposal when player changes
+    clearAssistProposal();
 
     updateUI();
     updateValidMoves();
@@ -934,8 +934,8 @@ function switchPlayer() {
         showAIThinkingIndicator();
         // Start AI calculation in Web Worker
         startAICalculation();
-    } else if (trainEnabled && !gameOver) {
-        // Show training proposal for current player (both players when AI is off)
+    } else if (assistEnabled && !gameOver) {
+        // Show assist proposal for current player (both players when AI is off)
         // Only show for Player 2 if AI is not enabled
         if (currentPlayer === 1 || (currentPlayer === 2 && !aiEnabled)) {
             startAssistCalculation();
@@ -1515,8 +1515,8 @@ function restartGame() {
         fencesGroup.remove(fencesGroup.children[0]);
     }
 
-    // Clear training proposal
-    clearTrainProposal();
+    // Clear assist proposal
+    clearAssistProposal();
 
     // Reset pawn positions
     updatePawnPositions();
@@ -1528,10 +1528,10 @@ function restartGame() {
     // Hide winner modal
     document.getElementById('winner-modal').style.display = 'none';
 
-    // Show training proposal if train mode is active and it's Player 1's turn
-    if (trainEnabled && currentPlayer === 1) {
+    // Show assist proposal if assist mode is active and it's Player 1's turn
+    if (assistEnabled && currentPlayer === 1) {
         setTimeout(() => {
-            showTrainProposal();
+            showAssistProposal();
         }, 100);
     }
 }
@@ -1576,7 +1576,7 @@ function toggleAI() {
 
         // Clear any existing assist proposal for Player 2 (AI doesn't need it)
         if (currentPlayer === aiPlayer) {
-            clearTrainProposal();
+            clearAssistProposal();
             hideCurrentPlayerThinkingIndicator();
         }
 
@@ -1604,8 +1604,8 @@ function toggleAI() {
         if (rulesPlayer1) rulesPlayer1.innerHTML = '<strong>🔴 Player 1:</strong> Move from bottom to top';
         if (rulesPlayer2) rulesPlayer2.innerHTML = '<strong>🟢 Player 2:</strong> Move from top to bottom';
 
-        // Show assist proposal for Player 2 if train mode is enabled
-        if (trainEnabled && currentPlayer === 2 && !gameOver) {
+        // Show assist proposal for Player 2 if assist mode is enabled
+        if (assistEnabled && currentPlayer === 2 && !gameOver) {
             startAssistCalculation();
         }
     }
@@ -1618,17 +1618,17 @@ function toggleAI() {
     updateMobileLayoutClass();
 }
 
-// ==================== TRAINING MODE ====================
+// ==================== ASSIST MODE ====================
 
-function toggleTrain() {
-    trainEnabled = !trainEnabled;
+function toggleAssist() {
+    assistEnabled = !assistEnabled;
 
     // Save setting to Local Storage
-    saveSetting(STORAGE_KEYS.TRAIN_ENABLED, trainEnabled);
+    saveSetting(STORAGE_KEYS.ASSIST_ENABLED, assistEnabled);
 
-    const btn = document.getElementById('train-btn');
+    const btn = document.getElementById('assist-btn');
 
-    if (trainEnabled) {
+    if (assistEnabled) {
         btn.textContent = '🎓 Assist On';
         btn.classList.add('active');
         // Show proposal for current player
@@ -1647,7 +1647,7 @@ function toggleTrain() {
             initAssistWorker();
         }
         assistCalculationPlayer = null;
-        clearTrainProposal();
+        clearAssistProposal();
         hidePlayer1ThinkingIndicator();
         hidePlayer2ThinkingIndicator();
         hideThinkingRing(); // Hide both rings
@@ -1667,7 +1667,7 @@ function toggleP2First() {
     // Simply switch the current player
     if (currentPlayer === 1) {
         currentPlayer = 2;
-        clearTrainProposal();
+        clearAssistProposal();
     } else {
         currentPlayer = 1;
     }
@@ -1680,8 +1680,8 @@ function toggleP2First() {
         aiThinking = true;
         showAIThinkingIndicator();
         startAICalculation();
-    } else if (trainEnabled && !gameOver) {
-        // Show training proposal for current player
+    } else if (assistEnabled && !gameOver) {
+        // Show assist proposal for current player
         if (currentPlayer === 1 || (currentPlayer === 2 && !aiEnabled)) {
             startAssistCalculation();
         }
