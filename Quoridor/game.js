@@ -538,6 +538,8 @@ function init() {
     gameContainer.addEventListener('pointerdown', onPointerDownForHighlight, true);
     gameContainer.addEventListener('pointerup', onPointerUpForHighlight, true);
     gameContainer.addEventListener('pointermove', onPointerMoveForHighlight, true);
+    gameContainer.addEventListener('pointercancel', onPointerCancelForHighlight, true);
+    gameContainer.addEventListener('pointerleave', onPointerCancelForHighlight, true);
 
     // Raycaster for mouse interaction
     raycaster = new THREE.Raycaster();
@@ -1418,14 +1420,21 @@ function onClick(event) {
 // Pointer event handlers to intercept before OrbitControls
 // These use the capture phase to run before OrbitControls handlers
 let pointerOnHighlight = false;
+let activePointers = new Set(); // Track active pointers for multi-touch detection
 
 function onPointerDownForHighlight(event) {
     pointerOnHighlight = false;
+    activePointers.add(event.pointerId);
 
-    // Temporarily disable OrbitControls zoom at pointer start
-    // This prevents accidental zoom when trying to click on game elements
+    // Temporarily disable OrbitControls zoom at pointer start for single touch
+    // But allow zoom (pinch gesture) when multiple pointers are active
     if (viewMode !== 'top') {
-        controls.enableZoom = false;
+        if (activePointers.size === 1) {
+            controls.enableZoom = false;
+        } else {
+            // Multi-touch detected (pinch gesture), re-enable zoom
+            controls.enableZoom = true;
+        }
     }
 
     if (gameOver || isDragging) return;
@@ -1461,15 +1470,28 @@ function onPointerMoveForHighlight(event) {
 }
 
 function onPointerUpForHighlight(event) {
+    activePointers.delete(event.pointerId);
+
     if (pointerOnHighlight) {
         // Stop event from reaching OrbitControls
         event.stopPropagation();
         event.stopImmediatePropagation();
     }
-    // Re-enable controls and zoom for 3D view
-    if (viewMode !== 'top') {
+    // Re-enable controls and zoom for 3D view when all pointers are released
+    if (viewMode !== 'top' && activePointers.size === 0) {
         controls.enabled = true;
         controls.enableZoom = true; // Re-enable zoom for 3D view
+    }
+    pointerOnHighlight = false;
+}
+
+function onPointerCancelForHighlight(event) {
+    activePointers.delete(event.pointerId);
+
+    // Re-enable controls and zoom for 3D view when all pointers are released
+    if (viewMode !== 'top' && activePointers.size === 0) {
+        controls.enabled = true;
+        controls.enableZoom = true;
     }
     pointerOnHighlight = false;
 }
