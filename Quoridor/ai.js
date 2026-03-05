@@ -15,7 +15,103 @@ let workerBlobURL = null; // Cached blob URL for workers
 
 // MCTS AI state
 let mctsAI = null;
-let useMCTSAI = false; // Flag to switch between Minimax and MCTS AI
+let mctsAssist = null;
+let useMCTSAI = false;    // AI opponent: Minimax or MCTS
+let useMCTSAssist = false; // Assist: Minimax or MCTS (independent choice)
+
+// Default base values for all evaluation weights
+const DEFAULT_WEIGHTS = Object.freeze({
+    pathAdvantage:       100,
+    criticalAdvantage:    50,
+    defensivePenalty:     60,
+    tempoBonus:           25,
+    centerControl:         5,
+    progressivePosition:  15,
+    progressivePenalty:   12,
+    directPath:           20,
+    fenceAdvantage:        3,
+    fenceDefense:          5,
+    noFencePenalty:       20,
+    sidePreference:        2,
+    antiOscillation:     150,
+    backwardPenalty:      80,
+    forwardBonus:         20,
+    shortestPathBonus:    30,
+    oddSidesBonus:        35,  // Prefer goal columns with odd open approaches (harder to fence)
+    clearPathForward:    200,  // Heavy penalty for backward/sideways when clear path exists
+});
+
+// Active calculation weights — multipliers applied to DEFAULT_WEIGHTS.
+// Referenced by evaluateStateForPlayer and findBestMoveForPlayer.
+// Workers have their own copies (sent via setWeights messages);
+// on the main thread we swap these before each sync-fallback call.
+let aiWeightVariance = {};
+let aiScoreNoise = 0;
+
+// Stored per-game personalities (separate for AI opponent and Assist)
+let aiPersonality  = { weights: {}, noise: 0 };
+let assistPersonality = { weights: {}, noise: 0 };
+
+// Generate a random variance factor between (1 - range) and (1 + range)
+function randomVariance(range) {
+    return 1.0 + (Math.random() * 2 - 1) * range;
+}
+
+// Create a full set of randomised weight multipliers (one per DEFAULT_WEIGHTS key)
+function createRandomWeights(varianceRange) {
+    const weights = {};
+    for (const key of Object.keys(DEFAULT_WEIGHTS)) {
+        weights[key] = randomVariance(varianceRange);
+    }
+    return weights;
+}
+
+// Swap the active weights to the AI opponent personality
+function activateAIWeights() {
+    aiWeightVariance = aiPersonality.weights;
+    aiScoreNoise     = aiPersonality.noise;
+}
+
+// Swap the active weights to the Assist personality
+function activateAssistWeights() {
+    aiWeightVariance = assistPersonality.weights;
+    aiScoreNoise     = assistPersonality.noise;
+}
+
+// Called at every game start / restart — rolls new personalities for both
+function randomizeAIForNewGame() {
+    // --- AI opponent ---
+    useMCTSAI = Math.random() < 0.5;
+    if (useMCTSAI && !mctsAI) initMCTSAI();
+    aiPersonality = { weights: createRandomWeights(0.10), noise: 5 };
+
+    // --- Assist (independent) ---
+    useMCTSAssist = Math.random() < 0.5;
+    if (useMCTSAssist && !mctsAssist) initMCTSAssist();
+    assistPersonality = { weights: createRandomWeights(0.10), noise: 3 };
+
+    // Default active set to AI
+    activateAIWeights();
+    syncWeightsToWorkers();
+}
+
+// Send the correct personality to each worker
+function syncWeightsToWorkers() {
+    if (aiWorker && workersAvailable) {
+        aiWorker.postMessage({ type: 'setWeights',
+            data: { aiWeightVariance: aiPersonality.weights, aiScoreNoise: aiPersonality.noise }});
+    }
+    if (assistWorker) {
+        assistWorker.postMessage({ type: 'setWeights',
+            data: { aiWeightVariance: assistPersonality.weights, aiScoreNoise: assistPersonality.noise }});
+    }
+}
+
+// Noise helper — used by evaluateStateForPlayer / findBestMoveForPlayer
+function getScoreNoise() {
+    if (aiScoreNoise <= 0) return 0;
+    return (Math.random() * 2 - 1) * aiScoreNoise;
+}
 
 // Create worker from serialized functions (avoids code duplication)
 function createWorkerBlobURL() {
@@ -26,8 +122,24 @@ function createWorkerBlobURL() {
 "use strict";
 const BOARD_SIZE = 9;
 
+// Default weight base values (mirrored from main thread)
+const DEFAULT_WEIGHTS = ${JSON.stringify(DEFAULT_WEIGHTS)};
+
+// Per-game weight variance and noise (set via messages from main thread)
+let aiWeightVariance = {};
+let aiScoreNoise = 0;
+function getScoreNoise() {
+    if (aiScoreNoise <= 0) return 0;
+    return (Math.random() * 2 - 1) * aiScoreNoise;
+}
+
 self.onmessage = function(e) {
     const { type, data } = e.data;
+    if (type === 'setWeights') {
+        aiWeightVariance = data.aiWeightVariance || {};
+        aiScoreNoise = data.aiScoreNoise || 0;
+        return;
+    }
     if (type === 'calculate') {
         const { player, pawns, placedFences, fences, positionHistory, calculationId } = data;
         try {
@@ -50,6 +162,8 @@ ${isFenceBlockingTest.toString()}
 ${hasPathToGoalTest.toString()}
 ${canPlaceFenceTest.toString()}
 ${getValidMovesTest.toString()}
+${countOpenSidesToGoal.toString()}
+${isPathClear.toString()}
 `;
 
     const blob = new Blob([workerCode], {type: 'application/javascript'});
@@ -146,6 +260,7 @@ function cancelPendingCalculations() {
         assistWorker.terminate();
         initAssistWorker();
     }
+    syncWeightsToWorkers();
     aiThinking = false;
     assistCalculationPlayer = null;
     hideAIThinkingIndicator();
@@ -155,22 +270,20 @@ function cancelPendingCalculations() {
 
 // Start AI calculation - uses worker if available, otherwise sync fallback
 function startAICalculation() {
-    // Check if we should use MCTS AI
+    // Use MCTS AI for this game?
     if (useMCTSAI) {
-        // Use MCTS AI (synchronous but more powerful)
         setTimeout(() => {
+            activateAIWeights();
             const bestMove = findBestMoveMCTS(aiPlayer);
             aiThinking = false;
             hideAIThinkingIndicator();
-            if (bestMove) {
-                executeAIMove(bestMove);
-            }
+            if (bestMove) executeAIMove(bestMove);
         }, 50);
         return;
     }
 
     if (aiWorker && workersAvailable) {
-        // Use Web Worker (non-blocking)
+        // Worker already has AI personality weights via setWeights
         aiWorker.postMessage({
             type: 'calculate', data: {
                 player: aiPlayer,
@@ -184,8 +297,9 @@ function startAICalculation() {
             }
         });
     } else {
-        // Synchronous fallback - use setTimeout to allow UI to update
+        // Synchronous fallback — activate AI personality weights
         setTimeout(() => {
+            activateAIWeights();
             const bestMove = findBestMoveForPlayer(aiPlayer, null, null, null, positionHistory);
             aiThinking = false;
             hideAIThinkingIndicator();
@@ -203,8 +317,21 @@ function startAssistCalculation() {
 
     showCurrentPlayerThinkingIndicator();
 
+    // Use MCTS Assist for this game?
+    if (useMCTSAssist) {
+        setTimeout(() => {
+            if (assistCalculationPlayer !== currentPlayer) return;
+            activateAssistWeights();
+            const bestMove = findBestMoveMCTSAssist(currentPlayer);
+            hideCurrentPlayerThinkingIndicator();
+            assistCalculationPlayer = null;
+            if (bestMove) displayAssistProposal(bestMove);
+        }, 50);
+        return;
+    }
+
     if (assistWorker && workersAvailable) {
-        // Use Web Worker (non-blocking)
+        // Worker already has Assist personality weights via setWeights
         assistWorker.postMessage({
             type: 'calculate', data: {
                 player: currentPlayer,
@@ -218,11 +345,10 @@ function startAssistCalculation() {
             }
         });
     } else {
-        // Synchronous fallback - use setTimeout to allow UI to update
+        // Synchronous fallback — activate Assist personality weights
         setTimeout(() => {
-            // Check if this calculation is still valid
             if (assistCalculationPlayer !== currentPlayer) return;
-
+            activateAssistWeights();
             const bestMove = findBestMoveForPlayer(currentPlayer, null, null, null, positionHistory);
             hideCurrentPlayerThinkingIndicator();
             assistCalculationPlayer = null;
@@ -389,11 +515,49 @@ function getValidMovesTest(player, testPawns, testFences) {
     return moves;
 }
 
+// Count how many open (unfenced) approaches a position has toward the goal row.
+// An odd number is harder for the opponent to fully block with 2-cell fences.
+// Checks left, right, and forward directions from the given position.
+function countOpenSidesToGoal(x, y, player, testFences) {
+    const dy = player === 1 ? 1 : -1;
+    let openSides = 0;
+
+    // Forward (toward goal)
+    const nextY = y + dy;
+    if (nextY >= 0 && nextY < BOARD_SIZE && !isFenceBlockingTest(x, y, x, nextY, testFences)) {
+        openSides++;
+    }
+    // Left
+    if (x - 1 >= 0 && !isFenceBlockingTest(x, y, x - 1, y, testFences)) {
+        openSides++;
+    }
+    // Right
+    if (x + 1 < BOARD_SIZE && !isFenceBlockingTest(x, y, x + 1, y, testFences)) {
+        openSides++;
+    }
+
+    return openSides;
+}
+
+// Check if the player has a clear, straight-line path to the goal
+// (path distance equals vertical distance — no detour needed)
+function isPathClear(player, testPawns, testFences) {
+    const playerDist = getShortestPathDistance(player, testPawns, testFences);
+    const goalY = player === 1 ? 8 : 0;
+    const verticalDist = Math.abs(testPawns[player].y - goalY);
+    return playerDist === verticalDist && verticalDist > 0;
+}
+
 // Evaluate board state for a specific player (positive = good for player, negative = good for opponent)
 function evaluateStateForPlayer(player, testPawns, testFences, testFencesCounts) {
     const playerDist = getShortestPathDistance(player, testPawns, testFences);
     const oppPlayer = player === 1 ? 2 : 1;
     const oppDist = getShortestPathDistance(oppPlayer, testPawns, testFences);
+
+    // Weight helper: base from DEFAULT_WEIGHTS, multiplied by per-game variance
+    const w = (typeof aiWeightVariance !== 'undefined') ? aiWeightVariance : {};
+    const dw = (typeof DEFAULT_WEIGHTS !== 'undefined') ? DEFAULT_WEIGHTS : {};
+    const wv = (key) => (dw[key] || 0) * (w[key] || 1.0);
 
     // Check for immediate wins
     if (player === 1 && testPawns[1].y === 8) return 10000;
@@ -403,75 +567,67 @@ function evaluateStateForPlayer(player, testPawns, testFences, testFencesCounts)
 
     let score = 0;
 
-    // Primary factor: Path distance difference (heavily weighted)
-    // Positive when we're closer to goal than opponent
     const pathAdvantage = oppDist - playerDist;
-    score += pathAdvantage * 100;
+    score += pathAdvantage * wv('pathAdvantage');
 
-    // Critical advantage: When player is about to win
     if (playerDist <= 2) {
-        score += (3 - playerDist) * 50;
+        score += (3 - playerDist) * wv('criticalAdvantage');
     }
-
-    // Defensive: Penalize when opponent is about to win
     if (oppDist <= 2) {
-        score -= (3 - oppDist) * 60;
+        score -= (3 - oppDist) * wv('defensivePenalty');
     }
-
-    // Tempo advantage: Who is closer to winning the race?
     if (playerDist <= oppDist) {
-        score += 25;
+        score += wv('tempoBonus');
     }
 
-    // Center control bonus: Being in the center provides more options
     const playerCenterDist = Math.abs(testPawns[player].x - 4);
     const oppCenterDist = Math.abs(testPawns[oppPlayer].x - 4);
-    score += (oppCenterDist - playerCenterDist) * 5;
+    score += (oppCenterDist - playerCenterDist) * wv('centerControl');
 
-    // Progressive position bonus - reward advancement more strongly
-    // This creates a strong incentive to always move forward
     if (player === 1) {
-        // Player 1 wants to reach y=8, so higher y is better
-        score += testPawns[1].y * 15;  // Increased from 8 to 15
-        score -= (8 - testPawns[2].y) * 12;
+        score += testPawns[1].y * wv('progressivePosition');
+        score -= (8 - testPawns[2].y) * wv('progressivePenalty');
     } else {
-        // Player 2 wants to reach y=0, so lower y is better
-        score += (8 - testPawns[2].y) * 15;  // Increased from 8 to 15
-        score -= testPawns[1].y * 12;
+        score += (8 - testPawns[2].y) * wv('progressivePosition');
+        score -= testPawns[1].y * wv('progressivePenalty');
     }
 
-    // Strong bonus for being on a direct path to goal
-    // This prevents sideways movement when forward is possible
     const playerGoalY = player === 1 ? 8 : 0;
     const distToGoalY = Math.abs(testPawns[player].y - playerGoalY);
     if (distToGoalY <= playerDist) {
-        // Player is on a relatively direct path
-        score += 20;
+        score += wv('directPath');
     }
 
-    // Fence advantage (but don't over-value)
     const fenceAdvantage = testFencesCounts[player] - testFencesCounts[oppPlayer];
-    score += fenceAdvantage * 3;
+    score += fenceAdvantage * wv('fenceAdvantage');
 
-    // Having fences when opponent is close to winning is valuable
     if (oppDist <= 3 && testFencesCounts[player] > 0) {
-        score += testFencesCounts[player] * 5;
+        score += testFencesCounts[player] * wv('fenceDefense');
     }
-
-    // Penalty for having no fences when opponent has lots
     if (testFencesCounts[player] === 0 && testFencesCounts[oppPlayer] > 3) {
-        score -= 20;
+        score -= wv('noFencePenalty');
     }
 
-    // Tie-breaker: Consistent side preference to prevent oscillation
-    // Once committed to a side, stay on that side
     const currentX = testPawns[player].x;
     if (currentX < 4) {
-        // On left side - bonus for staying left, scaled by how far left
-        score += (4 - currentX) * 2;
+        score += (4 - currentX) * wv('sidePreference');
     } else if (currentX > 4) {
-        // On right side - bonus for staying right, scaled by how far right
-        score += (currentX - 4) * 2;
+        score += (currentX - 4) * wv('sidePreference');
+    }
+
+    // Near-goal: prefer positions with an odd number of open sides
+    // (odd is harder for the opponent to fully block with 2-cell fences)
+    if (playerDist <= 3) {
+        const openSides = countOpenSidesToGoal(currentX, testPawns[player].y, player, testFences);
+        if (openSides % 2 === 1) {
+            score += wv('oddSidesBonus');
+        }
+    }
+
+    // Clear-path bonus: when the shortest path equals vertical distance,
+    // there is a straight unblocked corridor — strongly reward this state
+    if (isPathClear(player, testPawns, testFences)) {
+        score += wv('clearPathForward');
     }
 
     return score;
@@ -807,6 +963,9 @@ function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts
     // Track moves with their scores for tie-breaking
     const scoredMoves = [];
 
+    // Pre-compute: does the player currently have a clear straight path to goal?
+    const hasClearPath = isPathClear(player, testPawns, testFences);
+
     for (const move of moveMoves) {
         const newPawns = {
             1: {...testPawns[1]}, 2: {...testPawns[2]}
@@ -822,41 +981,62 @@ function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts
 
         // Anti-oscillation: Check if this move returns to a recent position
         const isRecentPosition = playerHistory.some((pos, idx) => {
-            // Check last 4 positions (excluding current)
             return idx >= playerHistory.length - 4 && pos.x === move.x && pos.y === move.y;
         });
 
-        // Heavy penalty for returning to recent positions
+        // Weight helper: base from DEFAULT_WEIGHTS, multiplied by per-game variance
+        const w = (typeof aiWeightVariance !== 'undefined') ? aiWeightVariance : {};
+        const dw = (typeof DEFAULT_WEIGHTS !== 'undefined') ? DEFAULT_WEIGHTS : {};
+        const wv = (key) => (dw[key] || 0) * (w[key] || 1.0);
+        const noise = (typeof getScoreNoise === 'function') ? getScoreNoise() : 0;
+
         if (isRecentPosition) {
-            score -= 150;
+            score -= wv('antiOscillation');
         }
 
-        // Penalty for backward moves (away from goal) unless path is blocked
         const isBackward = player === 1 ? (move.y < currentY) : (move.y > currentY);
+        const isSideways = (move.y === currentY);
+
         if (isBackward) {
-            // Check if forward moves exist and are not blocked
             const forwardMoves = moveMoves.filter(m =>
                 player === 1 ? m.y > currentY : m.y < currentY
             );
             if (forwardMoves.length > 0) {
-                // Only penalize if forward moves are available
-                score -= 80;
+                score -= wv('backwardPenalty');
             }
         }
 
-        // Bonus for progress toward goal
+        // When a clear straight path exists, heavily penalise backward AND sideways
+        // moves to prevent oscillation and unnecessary detours
+        if (hasClearPath) {
+            if (isBackward) {
+                score -= wv('clearPathForward');
+            } else if (isSideways) {
+                // Sideways is less bad than backward, but still discouraged
+                score -= wv('clearPathForward') * 0.5;
+            }
+        }
+
         const progress = player === 1 ? (move.y - currentY) : (currentY - move.y);
         if (progress > 0) {
-            score += progress * 20;
+            score += progress * wv('forwardBonus');
         }
 
-        // Check if this move is on the shortest path (for tie-breaking)
         const isOnPath = nextPathCell && move.x === nextPathCell.x && move.y === nextPathCell.y;
-
-        // Strong bonus for moves on the shortest path
         if (isOnPath) {
-            score += 30;
+            score += wv('shortestPathBonus');
         }
+
+        // Near goal: prefer the side with an odd number of open approaches
+        if (playerDist <= 3) {
+            const openSides = countOpenSidesToGoal(move.x, move.y, player, testFences);
+            if (openSides % 2 === 1) {
+                score += wv('oddSidesBonus');
+            }
+        }
+
+        // Small random noise for less deterministic play
+        score += noise;
 
         scoredMoves.push({
             move: {type: 'move', x: move.x, y: move.y},
@@ -935,7 +1115,8 @@ function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts
             const newCounts = {...testFencesCounts};
             newCounts[player]--;
 
-            const score = minimaxForPlayer(player, testPawns, newFences, newCounts, depth - 1, -Infinity, Infinity, false);
+            const score = minimaxForPlayer(player, testPawns, newFences, newCounts, depth - 1, -Infinity, Infinity, false)
+                + ((typeof getScoreNoise === 'function') ? getScoreNoise() : 0);
 
             if (score > bestScore) {
                 bestScore = score;
@@ -2195,32 +2376,34 @@ class MCTSAI {
 
         // Convert move back to original format
         const originalMove = MCTSAI.convertMCTSMoveToOriginal(mctsMove);
-
-        const d1 = new Date();
-        console.log(`MCTS AI time for ${this.numOfMCTSSimulations} simulations: ${(d1.getTime() - d0.getTime()) / 1000} sec`);
-        console.log(`MCTS estimated win rate: ${winRate}`);
-
         return originalMove;
     }
 }
 
-// Initialize MCTS AI
+// Initialize MCTS AI (opponent)
 function initMCTSAI(numSimulations = 1000, uctConst = 1.41) {
     mctsAI = new MCTSAI(numSimulations, uctConst);
 }
 
-// Find best move using MCTS AI
+// Initialize MCTS Assist (separate instance)
+function initMCTSAssist(numSimulations = 1000, uctConst = 1.41) {
+    mctsAssist = new MCTSAI(numSimulations, uctConst);
+}
+
+// Find best move using MCTS AI (opponent)
 function findBestMoveMCTS(player) {
-    if (!mctsAI) {
-        initMCTSAI();
-    }
+    if (!mctsAI) initMCTSAI();
     return mctsAI.chooseNextMove(pawns, placedFences, fences, player);
 }
 
-// Toggle between Minimax and MCTS AI
+// Find best move using MCTS Assist (separate instance)
+function findBestMoveMCTSAssist(player) {
+    if (!mctsAssist) initMCTSAssist();
+    return mctsAssist.chooseNextMove(pawns, placedFences, fences, player);
+}
+
+// Toggle between Minimax and MCTS AI (manual override)
 function setAIType(useMCTS) {
     useMCTSAI = useMCTS;
-    if (useMCTS && !mctsAI) {
-        initMCTSAI();
-    }
+    if (useMCTS && !mctsAI) initMCTSAI();
 }

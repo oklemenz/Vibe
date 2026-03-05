@@ -388,6 +388,9 @@ function init() {
     initAIWorker();
     initAssistWorker();
 
+    // Randomize AI algorithm and weights for the first game
+    randomizeAIForNewGame();
+
     // Scene setup
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1a1a2e);
@@ -1509,6 +1512,8 @@ function restartGame() {
     };
     hideAIThinkingIndicator();
 
+    // Randomize AI algorithm and weights for this new game
+    randomizeAIForNewGame();
 
     // Clear fences
     while (fencesGroup.children.length > 0) {
@@ -1645,6 +1650,7 @@ function toggleAssist() {
         if (assistWorker) {
             assistWorker.terminate();
             initAssistWorker();
+            syncWeightsToWorkers();
         }
         assistCalculationPlayer = null;
         clearAssistProposal();
