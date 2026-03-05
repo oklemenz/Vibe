@@ -65,7 +65,7 @@
                      data-player="1" data-orientation="h"></div>
                 <div class="draggable-fence fence-vertical player1-fence"
                      data-player="1" data-orientation="v"></div>
-                <div class="fence-count" id="p1-fence-count">10 remaining</div>
+                <div class="fence-count" id="p1-fence-count">10 / 10</div>
             </div>
         </div>
         <hr class="fence-panel-separator">
@@ -76,7 +76,7 @@
                      data-player="2" data-orientation="h"></div>
                 <div class="draggable-fence fence-vertical player2-fence"
                      data-player="2" data-orientation="v"></div>
-                <div class="fence-count" id="p2-fence-count">10 remaining</div>
+                <div class="fence-count" id="p2-fence-count">10 / 10</div>
             </div>
         </div>
     </div>
@@ -198,8 +198,8 @@
     const uiOverlay = document.getElementById('ui-overlay');
     const uiPanelToggle = document.getElementById('ui-panel-toggle');
 
-    // Load saved state (default: closed)
-    if (getPanelState(STORAGE_KEYS.PANEL_LEFT_OPEN, false)) {
+    // Load saved state (default: open)
+    if (getPanelState(STORAGE_KEYS.PANEL_LEFT_OPEN, true)) {
         uiOverlay.classList.add('open');
     } else {
         uiOverlay.classList.remove('open');
