@@ -180,17 +180,13 @@ function showThinkingRing(player) {
     const ringGeometry = new THREE.TorusGeometry(PAWN_RADIUS * 0.9, 0.03, 8, 32);
     const ringMaterial = new THREE.MeshBasicMaterial({
         color: 0x00ff00,  // Green color
-        transparent: true,
-        opacity: 0.8
+        transparent: true, opacity: 0.8
     });
 
     const ring = new THREE.Mesh(ringGeometry, ringMaterial);
     ring.rotation.x = Math.PI / 2; // Lay flat
-    ring.position.set(
-        pawnMesh.position.x,
-        0.08,  // Just above board at pawn base
-        pawnMesh.position.z
-    );
+    ring.position.set(pawnMesh.position.x, 0.08,  // Just above board at pawn base
+        pawnMesh.position.z);
     ring.renderOrder = 10;
 
     // Store in player-specific variable
@@ -949,15 +945,14 @@ function switchPlayer() {
 function updateUI() {
 
     // Update fence panel counts
-    document.getElementById('p1-fence-count').textContent = `${fences[1]} remaining`;
-    document.getElementById('p2-fence-count').textContent = `${fences[2]} remaining`;
+    document.getElementById('p1-fence-count').textContent = `${fences[1]} / 10`;
+    document.getElementById('p2-fence-count').textContent = `${fences[2]} / 10`;
 
     // Update top fence panel count (for portrait top view)
     const topP2FenceCount = document.getElementById('top-p2-fence-count');
     if (topP2FenceCount) {
-        topP2FenceCount.textContent = `${fences[2]} remaining`;
+        topP2FenceCount.textContent = `${fences[2]} / 10`;
     }
-
 
     // Enable/disable fence elements based on current player and fence count
     updateFencePanelState();
@@ -1507,8 +1502,7 @@ function restartGame() {
     aiThinking = false;
     // Reset position history
     positionHistory = {
-        1: [{x: 4, y: 0}],
-        2: [{x: 4, y: 8}]
+        1: [{x: 4, y: 0}], 2: [{x: 4, y: 8}]
     };
     hideAIThinkingIndicator();
 

@@ -19,26 +19,30 @@ let mctsAssist = null;
 let useMCTSAI = false;    // AI opponent: Minimax or MCTS
 let useMCTSAssist = false; // Assist: Minimax or MCTS (independent choice)
 
+const AI_TYPE_RATIO = 0.75;
+const AI_VARIANCE_RANGE = 0.10;
+const AI_VARIANCE_NOISE = 5;
+
 // Default base values for all evaluation weights
 const DEFAULT_WEIGHTS = Object.freeze({
-    pathAdvantage:       100,
-    criticalAdvantage:    50,
-    defensivePenalty:     60,
-    tempoBonus:           25,
-    centerControl:         5,
-    progressivePosition:  15,
-    progressivePenalty:   12,
-    directPath:           20,
-    fenceAdvantage:        3,
-    fenceDefense:          5,
-    noFencePenalty:       20,
-    sidePreference:        2,
-    antiOscillation:     150,
-    backwardPenalty:      80,
-    forwardBonus:         20,
-    shortestPathBonus:    30,
-    oddSidesBonus:        35,  // Prefer goal columns with odd open approaches (harder to fence)
-    clearPathForward:    200,  // Heavy penalty for backward/sideways when clear path exists
+    pathAdvantage: 100,
+    criticalAdvantage: 50,
+    defensivePenalty: 60,
+    tempoBonus: 25,
+    centerControl: 5,
+    progressivePosition: 15,
+    progressivePenalty: 12,
+    directPath: 20,
+    fenceAdvantage: 3,
+    fenceDefense: 5,
+    noFencePenalty: 20,
+    sidePreference: 2,
+    antiOscillation: 150,
+    backwardPenalty: 80,
+    forwardBonus: 20,
+    shortestPathBonus: 30,
+    oddSidesBonus: 35,  // Prefer goal columns with odd open approaches (harder to fence)
+    clearPathForward: 200,  // Heavy penalty for backward/sideways when clear path exists
 });
 
 // Active calculation weights — multipliers applied to DEFAULT_WEIGHTS.
@@ -49,8 +53,8 @@ let aiWeightVariance = {};
 let aiScoreNoise = 0;
 
 // Stored per-game personalities (separate for AI opponent and Assist)
-let aiPersonality  = { weights: {}, noise: 0 };
-let assistPersonality = { weights: {}, noise: 0 };
+let aiPersonality = {weights: {}, noise: 0};
+let assistPersonality = {weights: {}, noise: 0};
 
 // Generate a random variance factor between (1 - range) and (1 + range)
 function randomVariance(range) {
@@ -69,26 +73,26 @@ function createRandomWeights(varianceRange) {
 // Swap the active weights to the AI opponent personality
 function activateAIWeights() {
     aiWeightVariance = aiPersonality.weights;
-    aiScoreNoise     = aiPersonality.noise;
+    aiScoreNoise = aiPersonality.noise;
 }
 
 // Swap the active weights to the Assist personality
 function activateAssistWeights() {
     aiWeightVariance = assistPersonality.weights;
-    aiScoreNoise     = assistPersonality.noise;
+    aiScoreNoise = assistPersonality.noise;
 }
 
 // Called at every game start / restart — rolls new personalities for both
 function randomizeAIForNewGame() {
     // --- AI opponent ---
-    useMCTSAI = Math.random() < 0.5;
+    useMCTSAI = Math.random() < AI_TYPE_RATIO;
     if (useMCTSAI && !mctsAI) initMCTSAI();
-    aiPersonality = { weights: createRandomWeights(0.10), noise: 5 };
+    aiPersonality = {weights: createRandomWeights(AI_VARIANCE_RANGE), noise: AI_VARIANCE_NOISE};
 
     // --- Assist (independent) ---
-    useMCTSAssist = Math.random() < 0.5;
+    useMCTSAssist = Math.random() < AI_TYPE_RATIO;
     if (useMCTSAssist && !mctsAssist) initMCTSAssist();
-    assistPersonality = { weights: createRandomWeights(0.10), noise: 3 };
+    assistPersonality = {weights: createRandomWeights(AI_VARIANCE_RANGE), noise: AI_VARIANCE_NOISE};
 
     // Default active set to AI
     activateAIWeights();
@@ -98,12 +102,15 @@ function randomizeAIForNewGame() {
 // Send the correct personality to each worker
 function syncWeightsToWorkers() {
     if (aiWorker && workersAvailable) {
-        aiWorker.postMessage({ type: 'setWeights',
-            data: { aiWeightVariance: aiPersonality.weights, aiScoreNoise: aiPersonality.noise }});
+        aiWorker.postMessage({
+            type: 'setWeights', data: {aiWeightVariance: aiPersonality.weights, aiScoreNoise: aiPersonality.noise}
+        });
     }
     if (assistWorker) {
-        assistWorker.postMessage({ type: 'setWeights',
-            data: { aiWeightVariance: assistPersonality.weights, aiScoreNoise: assistPersonality.noise }});
+        assistWorker.postMessage({
+            type: 'setWeights',
+            data: {aiWeightVariance: assistPersonality.weights, aiScoreNoise: assistPersonality.noise}
+        });
     }
 }
 
@@ -291,8 +298,7 @@ function startAICalculation() {
                 placedFences: [...placedFences],
                 fences: {...fences},
                 positionHistory: {
-                    1: [...positionHistory[1]],
-                    2: [...positionHistory[2]]
+                    1: [...positionHistory[1]], 2: [...positionHistory[2]]
                 }
             }
         });
@@ -339,8 +345,7 @@ function startAssistCalculation() {
                 placedFences: [...placedFences],
                 fences: {...fences},
                 positionHistory: {
-                    1: [...positionHistory[1]],
-                    2: [...positionHistory[2]]
+                    1: [...positionHistory[1]], 2: [...positionHistory[2]]
                 }
             }
         });
@@ -909,8 +914,7 @@ function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts
     const testFencesCounts = inputFenceCounts ? {...inputFenceCounts} : {...fences};
 
     // Get position history for anti-oscillation
-    const playerHistory = inputPositionHistory ? inputPositionHistory[player] :
-        (typeof positionHistory !== 'undefined' ? positionHistory[player] : []);
+    const playerHistory = inputPositionHistory ? inputPositionHistory[player] : (typeof positionHistory !== 'undefined' ? positionHistory[player] : []);
 
     let bestMove = null;
     let bestScore = -Infinity;
@@ -998,9 +1002,7 @@ function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts
         const isSideways = (move.y === currentY);
 
         if (isBackward) {
-            const forwardMoves = moveMoves.filter(m =>
-                player === 1 ? m.y > currentY : m.y < currentY
-            );
+            const forwardMoves = moveMoves.filter(m => player === 1 ? m.y > currentY : m.y < currentY);
             if (forwardMoves.length > 0) {
                 score -= wv('backwardPenalty');
             }
@@ -1115,8 +1117,7 @@ function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts
             const newCounts = {...testFencesCounts};
             newCounts[player]--;
 
-            const score = minimaxForPlayer(player, testPawns, newFences, newCounts, depth - 1, -Infinity, Infinity, false)
-                + ((typeof getScoreNoise === 'function') ? getScoreNoise() : 0);
+            const score = minimaxForPlayer(player, testPawns, newFences, newCounts, depth - 1, -Infinity, Infinity, false) + ((typeof getScoreNoise === 'function') ? getScoreNoise() : 0);
 
             if (score > bestScore) {
                 bestScore = score;
@@ -1314,8 +1315,7 @@ class MCTSBoard {
         if (!skipInit) {
             this.pawns = [new MCTSPawn(0, true), new MCTSPawn(1, false)];
             this.walls = {
-                horizontal: create2DArrayInitializedTo(8, 8, false),
-                vertical: create2DArrayInitializedTo(8, 8, false)
+                horizontal: create2DArrayInitializedTo(8, 8, false), vertical: create2DArrayInitializedTo(8, 8, false)
             };
         }
     }
@@ -1339,18 +1339,15 @@ class MCTSGame {
             this.winner = null;
             this._turn = 0;
             this.validNextWalls = {
-                horizontal: create2DArrayInitializedTo(8, 8, true),
-                vertical: create2DArrayInitializedTo(8, 8, true)
+                horizontal: create2DArrayInitializedTo(8, 8, true), vertical: create2DArrayInitializedTo(8, 8, true)
             };
             this._probableNextWalls = {
-                horizontal: create2DArrayInitializedTo(8, 8, false),
-                vertical: create2DArrayInitializedTo(8, 8, false)
+                horizontal: create2DArrayInitializedTo(8, 8, false), vertical: create2DArrayInitializedTo(8, 8, false)
             };
             this._probableValidNextWalls = null;
             this._probableValidNextWallsUpdated = false;
             this.openWays = {
-                upDown: create2DArrayInitializedTo(10, 9, true),
-                leftRight: create2DArrayInitializedTo(9, 10, true)
+                upDown: create2DArrayInitializedTo(10, 9, true), leftRight: create2DArrayInitializedTo(9, 10, true)
             };
             // Set boundaries as blocked
             for (let i = 0; i < 9; i++) {
@@ -1514,8 +1511,7 @@ class MCTSGame {
 
     _updateProbableNextWalls() {
         this._probableNextWalls = {
-            horizontal: create2DArrayInitializedTo(8, 8, false),
-            vertical: create2DArrayInitializedTo(8, 8, false)
+            horizontal: create2DArrayInitializedTo(8, 8, false), vertical: create2DArrayInitializedTo(8, 8, false)
         };
         // Mark walls near pawns as probable
         for (const pawn of this.board.pawns) {
@@ -1578,8 +1574,7 @@ class MCTSGame {
             for (const moveTuple of moveTuples) {
                 if (this.isOpenWay(pos.row, pos.col, moveTuple)) {
                     const newPos = pos.newAddMove(moveTuple);
-                    if (newPos.row >= 0 && newPos.row < 9 && newPos.col >= 0 && newPos.col < 9 &&
-                        !visited[newPos.row][newPos.col]) {
+                    if (newPos.row >= 0 && newPos.row < 9 && newPos.col >= 0 && newPos.col < 9 && !visited[newPos.row][newPos.col]) {
                         visited[newPos.row][newPos.col] = true;
                         queue.push(newPos);
                     }
@@ -1603,11 +1598,9 @@ class MCTSGame {
         if (move[0] !== null) {
             return this.validNextPositions[move[0][0]][move[0][1]];
         } else if (move[1] !== null) {
-            return this.validNextWalls.horizontal[move[1][0]][move[1][1]] &&
-                this.testIfExistPathsToGoalLinesAfterPlaceHorizontalWall(move[1][0], move[1][1]);
+            return this.validNextWalls.horizontal[move[1][0]][move[1][1]] && this.testIfExistPathsToGoalLinesAfterPlaceHorizontalWall(move[1][0], move[1][1]);
         } else if (move[2] !== null) {
-            return this.validNextWalls.vertical[move[2][0]][move[2][1]] &&
-                this.testIfExistPathsToGoalLinesAfterPlaceVerticalWall(move[2][0], move[2][1]);
+            return this.validNextWalls.vertical[move[2][0]][move[2][1]] && this.testIfExistPathsToGoalLinesAfterPlaceVerticalWall(move[2][0], move[2][1]);
         }
         return false;
     }
@@ -1890,10 +1883,12 @@ class MonteCarloTreeSearch {
             node.isTerminal = true;
         }
 
-        const cacheForPawns = [
-            {updated: false, prev: null, next: null, distanceToGoal: null},
-            {updated: false, prev: null, next: null, distanceToGoal: null}
-        ];
+        const cacheForPawns = [{updated: false, prev: null, next: null, distanceToGoal: null}, {
+            updated: false,
+            prev: null,
+            next: null,
+            distanceToGoal: null
+        }];
         let pawnMoveFlag = false;
 
         while (simulationGame.winner === null) {
@@ -1927,8 +1922,7 @@ class MonteCarloTreeSearch {
 
                 if (MCTSAIHelper.arePawnsAdjacent(simulationGame)) {
                     const nextNextPosition = next[nextPosition.row][nextPosition.col];
-                    if (nextNextPosition !== null &&
-                        simulationGame.validNextPositions[nextNextPosition.row][nextNextPosition.col] === true) {
+                    if (nextNextPosition !== null && simulationGame.validNextPositions[nextNextPosition.row][nextNextPosition.col] === true) {
                         nextPosition = nextNextPosition;
                         cacheForPawns[pawnIndexOfTurn].distanceToGoal -= 2;
                     } else {
@@ -2066,10 +2060,7 @@ class MCTSAIHelper {
     }
 
     static arePawnsAdjacent(game) {
-        return ((game.pawnOfNotTurn.position.row === game.pawnOfTurn.position.row &&
-                Math.abs(game.pawnOfNotTurn.position.col - game.pawnOfTurn.position.col) === 1) ||
-            (game.pawnOfNotTurn.position.col === game.pawnOfTurn.position.col &&
-                Math.abs(game.pawnOfNotTurn.position.row - game.pawnOfTurn.position.row) === 1));
+        return ((game.pawnOfNotTurn.position.row === game.pawnOfTurn.position.row && Math.abs(game.pawnOfNotTurn.position.col - game.pawnOfTurn.position.col) === 1) || (game.pawnOfNotTurn.position.col === game.pawnOfTurn.position.col && Math.abs(game.pawnOfNotTurn.position.row - game.pawnOfTurn.position.row) === 1));
     }
 
     static getRandomShortestPathToGoal(pawn, game) {
@@ -2093,9 +2084,7 @@ class MCTSAIHelper {
             for (let i = 0; i < pawnMoveTuples.length; i++) {
                 if (game.isOpenWay(position.row, position.col, pawnMoveTuples[i])) {
                     const nextPosition = position.newAddMove(pawnMoveTuples[i]);
-                    if (nextPosition.row >= 0 && nextPosition.row < 9 &&
-                        nextPosition.col >= 0 && nextPosition.col < 9 &&
-                        !visited[nextPosition.row][nextPosition.col]) {
+                    if (nextPosition.row >= 0 && nextPosition.row < 9 && nextPosition.col >= 0 && nextPosition.col < 9 && !visited[nextPosition.row][nextPosition.col]) {
                         const alt = dist[position.row][position.col] + 1;
                         dist[nextPosition.row][nextPosition.col] = alt;
                         prev[nextPosition.row][nextPosition.col] = position;
@@ -2135,9 +2124,7 @@ class MCTSAIHelper {
             for (let i = 0; i < pawnMoveTuples.length; i++) {
                 if (game.isOpenWay(position.row, position.col, pawnMoveTuples[i])) {
                     const nextPosition = position.newAddMove(pawnMoveTuples[i]);
-                    if (nextPosition.row >= 0 && nextPosition.row < 9 &&
-                        nextPosition.col >= 0 && nextPosition.col < 9 &&
-                        !searched[nextPosition.row][nextPosition.col]) {
+                    if (nextPosition.row >= 0 && nextPosition.row < 9 && nextPosition.col >= 0 && nextPosition.col < 9 && !searched[nextPosition.row][nextPosition.col]) {
                         const alt = dist[position.row][position.col] + 1;
                         if (alt < dist[nextPosition.row][nextPosition.col]) {
                             dist[nextPosition.row][nextPosition.col] = alt;
@@ -2264,16 +2251,13 @@ class MCTSAI {
 
         // Reset walls and openWays
         mctsGame.board.walls = {
-            horizontal: create2DArrayInitializedTo(8, 8, false),
-            vertical: create2DArrayInitializedTo(8, 8, false)
+            horizontal: create2DArrayInitializedTo(8, 8, false), vertical: create2DArrayInitializedTo(8, 8, false)
         };
         mctsGame.validNextWalls = {
-            horizontal: create2DArrayInitializedTo(8, 8, true),
-            vertical: create2DArrayInitializedTo(8, 8, true)
+            horizontal: create2DArrayInitializedTo(8, 8, true), vertical: create2DArrayInitializedTo(8, 8, true)
         };
         mctsGame.openWays = {
-            upDown: create2DArrayInitializedTo(10, 9, true),
-            leftRight: create2DArrayInitializedTo(9, 10, true)
+            upDown: create2DArrayInitializedTo(10, 9, true), leftRight: create2DArrayInitializedTo(9, 10, true)
         };
         // Set boundaries as blocked
         for (let i = 0; i < 9; i++) {
@@ -2327,29 +2311,21 @@ class MCTSAI {
             const mctsRow = mctsMove[0][0];
             const mctsCol = mctsMove[0][1];
             return {
-                type: 'move',
-                x: mctsCol,
-                y: 8 - mctsRow
+                type: 'move', x: mctsCol, y: 8 - mctsRow
             };
         } else if (mctsMove[1] !== null) {
             // Horizontal wall
             const mctsRow = mctsMove[1][0];
             const mctsCol = mctsMove[1][1];
             return {
-                type: 'fence',
-                x: mctsCol,
-                y: 7 - mctsRow,
-                orientation: 'h'
+                type: 'fence', x: mctsCol, y: 7 - mctsRow, orientation: 'h'
             };
         } else if (mctsMove[2] !== null) {
             // Vertical wall
             const mctsRow = mctsMove[2][0];
             const mctsCol = mctsMove[2][1];
             return {
-                type: 'fence',
-                x: mctsCol,
-                y: 7 - mctsRow,
-                orientation: 'v'
+                type: 'fence', x: mctsCol, y: 7 - mctsRow, orientation: 'v'
             };
         }
         return null;
@@ -2375,8 +2351,7 @@ class MCTSAI {
         const winRate = best.winRate;
 
         // Convert move back to original format
-        const originalMove = MCTSAI.convertMCTSMoveToOriginal(mctsMove);
-        return originalMove;
+        return MCTSAI.convertMCTSMoveToOriginal(mctsMove);
     }
 }
 
@@ -2400,10 +2375,4 @@ function findBestMoveMCTS(player) {
 function findBestMoveMCTSAssist(player) {
     if (!mctsAssist) initMCTSAssist();
     return mctsAssist.chooseNextMove(pawns, placedFences, fences, player);
-}
-
-// Toggle between Minimax and MCTS AI (manual override)
-function setAIType(useMCTS) {
-    useMCTSAI = useMCTS;
-    if (useMCTS && !mctsAI) initMCTSAI();
 }

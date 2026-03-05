@@ -514,6 +514,9 @@ body {
     color: white;
     margin: 8px 0;
     font-weight: bold;
+    display: inline-block;
+    min-width: 40px;
+    text-align: center;
 }
 
 /* Drag Preview */
