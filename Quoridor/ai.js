@@ -3,23 +3,29 @@
 // ==================== AI MODULE ====================
 // This module contains all AI-related logic including:
 // - Web Worker management for AI calculations
-// - Minimax algorithm with alpha-beta pruning
-// - Monte Carlo Tree Search (MCTS) AI
+// - Three difficulty levels:
+//     easy  → Monte Carlo Tree Search (MCTS)
+//     good  → Minimax with alpha-beta pruning
+//     hard  → Iterative-deepening alpha-beta with PVS, transposition table,
+//             killer/history move ordering (AI2 engine)
 // - Board evaluation and pathfinding for AI
 
 // AI state variables (shared with game.js)
-let aiWorker = null; // Web Worker for AI calculations
-let assistWorker = null; // Web Worker for Assist calculations
-let workersAvailable = false; // Flag for worker availability
-let workerBlobURL = null; // Cached blob URL for workers
+let aiWorker = null;      // Web Worker for Minimax AI calculations
+let assistWorker = null;   // Web Worker for Assist calculations
+let ai2Worker = null;      // Web Worker for AI2 (hard) calculations
+let ai2AssistWorker = null; // Web Worker for AI2 Assist calculations
+let workersAvailable = false;  // Flag for worker availability
+let workerBlobURL = null;      // Cached blob URL for minimax workers
+let ai2WorkerBlobURL = null;   // Cached blob URL for AI2 workers
 
 // MCTS AI state
 let mctsAI = null;
 let mctsAssist = null;
-let useMCTSAI = false;    // AI opponent: Minimax or MCTS
-let useMCTSAssist = false; // Assist: Minimax or MCTS (independent choice)
 
-const AI_TYPE_RATIO = 0.5;
+// AI difficulty: 'easy' | 'good' | 'hard'
+let aiDifficulty = 'hard'; // Default difficulty
+
 const AI_VARIANCE_RANGE = 0.05;
 const AI_VARIANCE_NOISE = 5;
 
@@ -84,14 +90,12 @@ function activateAssistWeights() {
 
 // Called at every game start / restart — rolls new personalities for both
 function randomizeAIForNewGame() {
-    // --- AI opponent ---
-    useMCTSAI = Math.random() < AI_TYPE_RATIO;
-    if (useMCTSAI && !mctsAI) initMCTSAI();
-    aiPersonality = {weights: createRandomWeights(AI_VARIANCE_RANGE), noise: AI_VARIANCE_NOISE};
+    // Initialize MCTS if needed for 'easy' mode
+    if (!mctsAI) initMCTSAI();
+    if (!mctsAssist) initMCTSAssist();
 
-    // --- Assist (independent) ---
-    useMCTSAssist = Math.random() < AI_TYPE_RATIO;
-    if (useMCTSAssist && !mctsAssist) initMCTSAssist();
+    // Personalities for minimax ('good' mode)
+    aiPersonality = {weights: createRandomWeights(AI_VARIANCE_RANGE), noise: AI_VARIANCE_NOISE};
     assistPersonality = {weights: createRandomWeights(AI_VARIANCE_RANGE), noise: AI_VARIANCE_NOISE};
 
     // Default active set to AI
@@ -221,11 +225,164 @@ function initAssistWorker() {
     }
 }
 
+// ==================== AI2 WEB WORKER (HARD MODE) ====================
+
+// Create blob URL for AI2 worker — serializes all ai2_* functions
+function createAI2WorkerBlobURL() {
+    if (ai2WorkerBlobURL) return ai2WorkerBlobURL;
+
+    const workerCode = `
+"use strict";
+const AI2_BOARD_SIZE = 9;
+const AI2_INF = 999999;
+const AI2_WIN_SCORE = 100000;
+const AI2_MAX_DEPTH = 6;
+const AI2_TIME_LIMIT_MS = 2500;
+const AI2_TT_SIZE = 1 << 18;
+const AI2_TT_MASK = AI2_TT_SIZE - 1;
+const AI2_EXACT = 0;
+const AI2_LOWER = 1;
+const AI2_UPPER = 2;
+
+${ai2_fenceIndex.toString()}
+${ai2_computeHash.toString()}
+${ai2_ttClear.toString()}
+${ai2_ttProbe.toString()}
+${ai2_ttStore.toString()}
+${ai2_shortestDist.toString()}
+${ai2_shortestDistWithOpp.toString()}
+${ai2_shortestPath.toString()}
+${ai2_shortestPathAllNext.toString()}
+${ai2_isFenceBlocking.toString()}
+${ai2_hasPathToGoal.toString()}
+${ai2_canPlaceFence.toString()}
+${ai2_getValidMoves.toString()}
+${ai2_evaluate.toString()}
+${ai2_estimatePathWidth.toString()}
+${ai2_genPawnMoves.toString()}
+${ai2_genFenceMoves.toString()}
+${ai2_resetTables.toString()}
+${ai2_moveKey.toString()}
+${ai2_updateKiller.toString()}
+${ai2_updateHistory.toString()}
+${ai2_orderMoves.toString()}
+${ai2_alphabeta.toString()}
+${ai2_iterativeDeepening.toString()}
+${ai2FindBestMove.toString()}
+
+// Zobrist tables (regenerated in worker)
+const ai2_zobristPawn = [];
+const ai2_zobristFence = [];
+const ai2_zobristTurn = [];
+(function initZobrist() {
+    function rand64() { return Math.floor(Math.random() * 9007199254740992); }
+    for (let p = 0; p < 2; p++) {
+        ai2_zobristPawn[p] = [];
+        for (let x = 0; x < AI2_BOARD_SIZE; x++) {
+            ai2_zobristPawn[p][x] = [];
+            for (let y = 0; y < AI2_BOARD_SIZE; y++) {
+                ai2_zobristPawn[p][x][y] = rand64();
+            }
+        }
+    }
+    for (let i = 0; i < 128; i++) ai2_zobristFence[i] = rand64();
+    ai2_zobristTurn[0] = rand64();
+    ai2_zobristTurn[1] = rand64();
+})();
+
+let ai2_tt = new Array(AI2_TT_SIZE);
+let ai2_killerMoves = [];
+let ai2_historyTable = {};
+let ai2_nodesSearched = 0;
+let ai2_searchStartTime = 0;
+let ai2_searchAborted = false;
+
+self.onmessage = function(e) {
+    const { type, data } = e.data;
+    if (type === 'calculate') {
+        const { player, pawns, placedFences, fences, positionHistory, calculationId } = data;
+        try {
+            const bestMove = ai2FindBestMove(player, pawns, placedFences, fences, positionHistory);
+            self.postMessage({ type: 'result', bestMove, data: { calculationId } });
+        } catch (error) {
+            self.postMessage({ type: 'error', error: error.message, data: { calculationId } });
+        }
+    }
+};
+`;
+
+    const blob = new Blob([workerCode], {type: 'application/javascript'});
+    ai2WorkerBlobURL = URL.createObjectURL(blob);
+    return ai2WorkerBlobURL;
+}
+
+// Handle AI2 Worker response
+function handleAI2WorkerMessage(e) {
+    const {type, bestMove, error} = e.data;
+
+    if (type === 'result' && bestMove && aiThinking && aiEnabled) {
+        executeAIMove(bestMove);
+    } else if (type === 'error') {
+        console.error('AI2 Worker calculation error:', error);
+    }
+
+    aiThinking = false;
+    hideAIThinkingIndicator();
+}
+
+// Handle AI2 Assist Worker response
+function handleAI2AssistWorkerMessage(e) {
+    const {type, bestMove, error} = e.data;
+
+    if (assistCalculationPlayer !== currentPlayer) return;
+
+    hideCurrentPlayerThinkingIndicator();
+    assistCalculationPlayer = null;
+
+    if (type === 'result' && bestMove) {
+        displayAssistProposal(bestMove);
+    } else if (type === 'error') {
+        console.error('AI2 Assist Worker calculation error:', error);
+    }
+}
+
+// Initialize AI2 Worker
+function initAI2Worker() {
+    if (typeof Worker === 'undefined' || !workersAvailable) return;
+    try {
+        const blobURL = createAI2WorkerBlobURL();
+        ai2Worker = new Worker(blobURL);
+        ai2Worker.onmessage = handleAI2WorkerMessage;
+        ai2Worker.onerror = () => {
+            console.warn('AI2 Worker failed, using synchronous fallback');
+            ai2Worker = null;
+        };
+    } catch (e) {
+        ai2Worker = null;
+    }
+}
+
+// Initialize AI2 Assist Worker
+function initAI2AssistWorker() {
+    if (typeof Worker === 'undefined' || !workersAvailable) return;
+    try {
+        const blobURL = createAI2WorkerBlobURL();
+        ai2AssistWorker = new Worker(blobURL);
+        ai2AssistWorker.onmessage = handleAI2AssistWorkerMessage;
+        ai2AssistWorker.onerror = () => {
+            console.warn('AI2 Assist Worker failed, using synchronous fallback');
+            ai2AssistWorker = null;
+        };
+    } catch (e) {
+        ai2AssistWorker = null;
+    }
+}
+
 // Handle AI Worker response
 function handleAIWorkerMessage(e) {
     const {type, bestMove, error} = e.data;
 
-    if (type === 'result' && bestMove && aiThinking) {
+    if (type === 'result' && bestMove && aiThinking && aiEnabled) {
         executeAIMove(bestMove);
     } else if (type === 'error') {
         console.error('AI Worker calculation error:', error);
@@ -267,6 +424,14 @@ function cancelPendingCalculations() {
         assistWorker.terminate();
         initAssistWorker();
     }
+    if (ai2Worker && workersAvailable) {
+        ai2Worker.terminate();
+        initAI2Worker();
+    }
+    if (ai2AssistWorker && workersAvailable) {
+        ai2AssistWorker.terminate();
+        initAI2AssistWorker();
+    }
     syncWeightsToWorkers();
     aiThinking = false;
     assistCalculationPlayer = null;
@@ -275,12 +440,13 @@ function cancelPendingCalculations() {
     clearAssistProposal();
 }
 
-// Start AI calculation - uses worker if available, otherwise sync fallback
+// Start AI calculation - dispatches to the correct engine based on aiDifficulty
 function startAICalculation() {
     // Shortcut: if AI has no fences, just follow shortest path (skip expensive search)
     const shortcut = noFencesShortestPathMove(aiPlayer);
     if (shortcut) {
         setTimeout(() => {
+            if (!aiEnabled) { aiThinking = false; hideAIThinkingIndicator(); return; }
             aiThinking = false;
             hideAIThinkingIndicator();
             executeAIMove(shortcut);
@@ -288,68 +454,87 @@ function startAICalculation() {
         return;
     }
 
-    // Use MCTS AI for this game?
-    if (useMCTSAI) {
+    if (aiDifficulty === 'hard') {
+        // AI2 engine — use Web Worker if available, else sync fallback
+        if (ai2Worker && workersAvailable) {
+            ai2Worker.postMessage({
+                type: 'calculate', data: {
+                    player: aiPlayer,
+                    pawns: {1: {...pawns[1]}, 2: {...pawns[2]}},
+                    placedFences: [...placedFences],
+                    fences: {...fences},
+                    positionHistory: {
+                        1: [...positionHistory[1]], 2: [...positionHistory[2]]
+                    }
+                }
+            });
+        } else {
+            setTimeout(() => {
+                if (!aiEnabled) { aiThinking = false; hideAIThinkingIndicator(); return; }
+                try {
+                    const bestMove = ai2FindBestMove(
+                        aiPlayer,
+                        {1: {...pawns[1]}, 2: {...pawns[2]}},
+                        [...placedFences],
+                        {...fences},
+                        {1: [...positionHistory[1]], 2: [...positionHistory[2]]}
+                    );
+                    aiThinking = false;
+                    hideAIThinkingIndicator();
+                    if (bestMove && !gameOver && currentPlayer === aiPlayer) {
+                        executeAIMove(bestMove);
+                    }
+                } catch (e) {
+                    console.error('AI2 sync fallback error:', e);
+                    aiThinking = false;
+                    hideAIThinkingIndicator();
+                }
+            }, 30);
+        }
+    } else if (aiDifficulty === 'easy') {
+        // MCTS engine
         setTimeout(() => {
-            activateAIWeights();
+            if (!aiEnabled) { aiThinking = false; hideAIThinkingIndicator(); return; }
             const bestMove = findBestMoveMCTS(aiPlayer);
             aiThinking = false;
             hideAIThinkingIndicator();
             if (bestMove) executeAIMove(bestMove);
         }, 50);
-        return;
-    }
-
-    if (aiWorker && workersAvailable) {
-        // Worker already has AI personality weights via setWeights
-        aiWorker.postMessage({
-            type: 'calculate', data: {
-                player: aiPlayer,
-                pawns: {1: {...pawns[1]}, 2: {...pawns[2]}},
-                placedFences: [...placedFences],
-                fences: {...fences},
-                positionHistory: {
-                    1: [...positionHistory[1]], 2: [...positionHistory[2]]
-                }
-            }
-        });
     } else {
-        // Synchronous fallback — activate AI personality weights
-        setTimeout(() => {
-            activateAIWeights();
-            const bestMove = findBestMoveForPlayer(aiPlayer, null, null, null, positionHistory);
-            aiThinking = false;
-            hideAIThinkingIndicator();
-            if (bestMove) {
-                executeAIMove(bestMove);
-            }
-        }, 50);
+        // 'good' — Minimax engine via Web Worker or sync
+        if (aiWorker && workersAvailable) {
+            aiWorker.postMessage({
+                type: 'calculate', data: {
+                    player: aiPlayer,
+                    pawns: {1: {...pawns[1]}, 2: {...pawns[2]}},
+                    placedFences: [...placedFences],
+                    fences: {...fences},
+                    positionHistory: {
+                        1: [...positionHistory[1]], 2: [...positionHistory[2]]
+                    }
+                }
+            });
+        } else {
+            setTimeout(() => {
+                if (!aiEnabled) { aiThinking = false; hideAIThinkingIndicator(); return; }
+                activateAIWeights();
+                const bestMove = findBestMoveForPlayer(aiPlayer, null, null, null, positionHistory);
+                aiThinking = false;
+                hideAIThinkingIndicator();
+                if (bestMove) executeAIMove(bestMove);
+            }, 50);
+        }
     }
 }
 
-// Start Assist calculation - uses worker if available, otherwise sync fallback
+// Start Assist calculation - always uses AI2 (hard) engine for best suggestions
 function startAssistCalculation() {
-    // Track which player this calculation is for
     assistCalculationPlayer = currentPlayer;
-
     showCurrentPlayerThinkingIndicator();
 
-    // Use MCTS Assist for this game?
-    if (useMCTSAssist) {
-        setTimeout(() => {
-            if (assistCalculationPlayer !== currentPlayer) return;
-            activateAssistWeights();
-            const bestMove = findBestMoveMCTSAssist(currentPlayer);
-            hideCurrentPlayerThinkingIndicator();
-            assistCalculationPlayer = null;
-            if (bestMove) displayAssistProposal(bestMove);
-        }, 50);
-        return;
-    }
-
-    if (assistWorker && workersAvailable) {
-        // Worker already has Assist personality weights via setWeights
-        assistWorker.postMessage({
+    // Always use AI2 engine for assist (strongest analysis)
+    if (ai2AssistWorker && workersAvailable) {
+        ai2AssistWorker.postMessage({
             type: 'calculate', data: {
                 player: currentPlayer,
                 pawns: {1: {...pawns[1]}, 2: {...pawns[2]}},
@@ -361,17 +546,26 @@ function startAssistCalculation() {
             }
         });
     } else {
-        // Synchronous fallback — activate Assist personality weights
+        const calcPlayer = currentPlayer;
         setTimeout(() => {
-            if (assistCalculationPlayer !== currentPlayer) return;
-            activateAssistWeights();
-            const bestMove = findBestMoveForPlayer(currentPlayer, null, null, null, positionHistory);
-            hideCurrentPlayerThinkingIndicator();
-            assistCalculationPlayer = null;
-            if (bestMove) {
-                displayAssistProposal(bestMove);
+            if (assistCalculationPlayer !== calcPlayer || calcPlayer !== currentPlayer) return;
+            try {
+                const bestMove = ai2FindBestMove(
+                    calcPlayer,
+                    {1: {...pawns[1]}, 2: {...pawns[2]}},
+                    [...placedFences],
+                    {...fences},
+                    {1: [...positionHistory[1]], 2: [...positionHistory[2]]}
+                );
+                hideCurrentPlayerThinkingIndicator();
+                assistCalculationPlayer = null;
+                if (bestMove && calcPlayer === currentPlayer) displayAssistProposal(bestMove);
+            } catch (e) {
+                console.error('AI2 assist error:', e);
+                hideCurrentPlayerThinkingIndicator();
+                assistCalculationPlayer = null;
             }
-        }, 50);
+        }, 30);
     }
 }
 
@@ -925,7 +1119,7 @@ function findBestMove() {
 
 // Execute the AI's move (called from worker callback or synchronously)
 function executeAIMove(bestMove) {
-    if (gameOver || currentPlayer !== aiPlayer) return;
+    if (!aiEnabled || gameOver || currentPlayer !== aiPlayer) return;
 
     if (!bestMove) {
         console.error('AI could not find a valid move!');
@@ -2478,3 +2672,436 @@ function findBestMoveMCTSAssist(player) {
     if (!mctsAssist) initMCTSAssist();
     return mctsAssist.chooseNextMove(pawns, placedFences, fences, player);
 }
+
+// ==================== AI2 ENGINE (HARD MODE) ====================
+// Iterative-deepening alpha-beta with PVS, transposition table,
+// Zobrist hashing, killer/history move ordering, strategic fence generation.
+
+const AI2_BOARD_SIZE = 9;
+const AI2_INF = 999999;
+const AI2_WIN_SCORE = 100000;
+const AI2_MAX_DEPTH = 6;
+const AI2_TIME_LIMIT_MS = 2500;
+const AI2_TT_SIZE = 1 << 18;
+const AI2_TT_MASK = AI2_TT_SIZE - 1;
+
+const AI2_EXACT = 0;
+const AI2_LOWER = 1;
+const AI2_UPPER = 2;
+
+// Zobrist tables
+const ai2_zobristPawn = [];
+const ai2_zobristFence = [];
+const ai2_zobristTurn = [];
+(function initZobrist() {
+    function rand64() { return Math.floor(Math.random() * 9007199254740992); }
+    for (let p = 0; p < 2; p++) {
+        ai2_zobristPawn[p] = [];
+        for (let x = 0; x < 9; x++) {
+            ai2_zobristPawn[p][x] = [];
+            for (let y = 0; y < 9; y++) { ai2_zobristPawn[p][x][y] = rand64(); }
+        }
+    }
+    for (let i = 0; i < 128; i++) ai2_zobristFence[i] = rand64();
+    ai2_zobristTurn[0] = rand64();
+    ai2_zobristTurn[1] = rand64();
+})();
+
+let ai2_tt = new Array(AI2_TT_SIZE);
+let ai2_killerMoves = [];
+let ai2_historyTable = {};
+let ai2_nodesSearched = 0;
+let ai2_searchStartTime = 0;
+let ai2_searchAborted = false;
+
+function ai2_fenceIndex(x, y, orientation) {
+    return (orientation === 'h' ? 0 : 64) + y * 8 + x;
+}
+
+function ai2_computeHash(testPawns, testFences, currentTurnPlayer) {
+    let h = 0;
+    h ^= ai2_zobristPawn[0][testPawns[1].x][testPawns[1].y];
+    h ^= ai2_zobristPawn[1][testPawns[2].x][testPawns[2].y];
+    for (const f of testFences) { h ^= ai2_zobristFence[ai2_fenceIndex(f.x, f.y, f.orientation)]; }
+    h ^= ai2_zobristTurn[currentTurnPlayer === 1 ? 0 : 1];
+    return h;
+}
+
+function ai2_ttClear() { ai2_tt = new Array(AI2_TT_SIZE); }
+
+function ai2_ttProbe(hash, depth, alpha, beta) {
+    const entry = ai2_tt[hash & AI2_TT_MASK];
+    if (!entry || entry.hash !== hash) return null;
+    if (entry.depth < depth) return { bestMove: entry.bestMove };
+    if (entry.flag === AI2_EXACT) return { score: entry.score, bestMove: entry.bestMove, exact: true };
+    if (entry.flag === AI2_LOWER && entry.score >= beta) return { score: entry.score, bestMove: entry.bestMove, exact: true };
+    if (entry.flag === AI2_UPPER && entry.score <= alpha) return { score: entry.score, bestMove: entry.bestMove, exact: true };
+    return { bestMove: entry.bestMove };
+}
+
+function ai2_ttStore(hash, depth, score, flag, bestMove) {
+    const idx = hash & AI2_TT_MASK;
+    const existing = ai2_tt[idx];
+    if (!existing || existing.hash === hash || existing.depth <= depth) {
+        ai2_tt[idx] = { hash, depth, score, flag, bestMove };
+    }
+}
+
+function ai2_shortestDist(px, py, goalY, testFences) {
+    const visited = new Uint8Array(81);
+    const queue = []; let head = 0;
+    queue.push(px | (py << 4) | (0 << 8));
+    visited[py * 9 + px] = 1;
+    while (head < queue.length) {
+        const packed = queue[head++];
+        const cx = packed & 0xF, cy = (packed >> 4) & 0xF, cd = packed >> 8;
+        if (cy === goalY) return cd;
+        const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+        for (const [dx, dy] of dirs) {
+            const nx = cx + dx, ny = cy + dy;
+            if (nx < 0 || nx >= 9 || ny < 0 || ny >= 9) continue;
+            if (visited[ny * 9 + nx]) continue;
+            if (ai2_isFenceBlocking(cx, cy, nx, ny, testFences)) continue;
+            visited[ny * 9 + nx] = 1;
+            queue.push(nx | (ny << 4) | ((cd + 1) << 8));
+        }
+    }
+    return 999;
+}
+
+function ai2_shortestDistWithOpp(player, testPawns, testFences) {
+    const goalY = player === 1 ? 8 : 0;
+    const opp = player === 1 ? 2 : 1;
+    const oppX = testPawns[opp].x, oppY = testPawns[opp].y;
+    const visited = new Uint8Array(81);
+    const queue = []; let head = 0;
+    queue.push({ x: testPawns[player].x, y: testPawns[player].y, d: 0 });
+    visited[testPawns[player].y * 9 + testPawns[player].x] = 1;
+    while (head < queue.length) {
+        const cur = queue[head++];
+        if (cur.y === goalY) return cur.d;
+        const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+        for (const [dx, dy] of dirs) {
+            const nx = cur.x + dx, ny = cur.y + dy;
+            if (nx < 0 || nx >= 9 || ny < 0 || ny >= 9) continue;
+            if (ai2_isFenceBlocking(cur.x, cur.y, nx, ny, testFences)) continue;
+            if (nx === oppX && ny === oppY) {
+                const jx = nx + dx, jy = ny + dy;
+                if (jx >= 0 && jx < 9 && jy >= 0 && jy < 9 && !ai2_isFenceBlocking(nx, ny, jx, jy, testFences)) {
+                    if (!visited[jy * 9 + jx]) { visited[jy * 9 + jx] = 1; queue.push({ x: jx, y: jy, d: cur.d + 1 }); }
+                } else {
+                    const sideDirs = dx === 0 ? [[1,0],[-1,0]] : [[0,1],[0,-1]];
+                    for (const [sdx, sdy] of sideDirs) {
+                        const sx = nx + sdx, sy = ny + sdy;
+                        if (sx >= 0 && sx < 9 && sy >= 0 && sy < 9 && !ai2_isFenceBlocking(nx, ny, sx, sy, testFences)) {
+                            if (!visited[sy * 9 + sx]) { visited[sy * 9 + sx] = 1; queue.push({ x: sx, y: sy, d: cur.d + 1 }); }
+                        }
+                    }
+                }
+            } else {
+                if (!visited[ny * 9 + nx]) { visited[ny * 9 + nx] = 1; queue.push({ x: nx, y: ny, d: cur.d + 1 }); }
+            }
+        }
+    }
+    return 999;
+}
+
+function ai2_shortestPath(player, testPawns, testFences) {
+    const goalY = player === 1 ? 8 : 0;
+    const opp = player === 1 ? 2 : 1;
+    const oppX = testPawns[opp].x, oppY = testPawns[opp].y;
+    const visited = new Uint8Array(81);
+    const queue = [{ x: testPawns[player].x, y: testPawns[player].y, path: [{ x: testPawns[player].x, y: testPawns[player].y }] }];
+    let head = 0;
+    visited[testPawns[player].y * 9 + testPawns[player].x] = 1;
+    while (head < queue.length) {
+        const cur = queue[head++];
+        if (cur.y === goalY) return cur.path;
+        const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+        for (const [dx, dy] of dirs) {
+            const nx = cur.x + dx, ny = cur.y + dy;
+            if (nx < 0 || nx >= 9 || ny < 0 || ny >= 9) continue;
+            if (ai2_isFenceBlocking(cur.x, cur.y, nx, ny, testFences)) continue;
+            if (nx === oppX && ny === oppY) {
+                const jx = nx + dx, jy = ny + dy;
+                if (jx >= 0 && jx < 9 && jy >= 0 && jy < 9 && !ai2_isFenceBlocking(nx, ny, jx, jy, testFences)) {
+                    if (!visited[jy * 9 + jx]) { visited[jy * 9 + jx] = 1; queue.push({ x: jx, y: jy, path: [...cur.path, { x: jx, y: jy }] }); }
+                } else {
+                    const sideDirs = dx === 0 ? [[1,0],[-1,0]] : [[0,1],[0,-1]];
+                    for (const [sdx, sdy] of sideDirs) {
+                        const sx = nx + sdx, sy = ny + sdy;
+                        if (sx >= 0 && sx < 9 && sy >= 0 && sy < 9 && !ai2_isFenceBlocking(nx, ny, sx, sy, testFences)) {
+                            if (!visited[sy * 9 + sx]) { visited[sy * 9 + sx] = 1; queue.push({ x: sx, y: sy, path: [...cur.path, { x: sx, y: sy }] }); }
+                        }
+                    }
+                }
+            } else {
+                if (!visited[ny * 9 + nx]) { visited[ny * 9 + nx] = 1; queue.push({ x: nx, y: ny, path: [...cur.path, { x: nx, y: ny }] }); }
+            }
+        }
+    }
+    return null;
+}
+
+function ai2_shortestPathAllNext(px, py, goalY, testFences) {
+    const dist = new Int16Array(81).fill(-1);
+    const queue = []; let head = 0;
+    dist[py * 9 + px] = 0; queue.push(px | (py << 4));
+    while (head < queue.length) {
+        const packed = queue[head++];
+        const cx = packed & 0xF, cy = (packed >> 4) & 0xF, cd = dist[cy * 9 + cx];
+        const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+        for (const [dx, dy] of dirs) {
+            const nx = cx + dx, ny = cy + dy;
+            if (nx < 0 || nx >= 9 || ny < 0 || ny >= 9) continue;
+            if (ai2_isFenceBlocking(cx, cy, nx, ny, testFences)) continue;
+            const ni = ny * 9 + nx;
+            if (dist[ni] >= 0) continue;
+            dist[ni] = cd + 1; queue.push(nx | (ny << 4));
+        }
+    }
+    return dist;
+}
+
+function ai2_isFenceBlocking(x1, y1, x2, y2, testFences) {
+    const dx = x2 - x1, dy = y2 - y1;
+    for (let i = 0; i < testFences.length; i++) {
+        const f = testFences[i];
+        if (f.orientation === 'h') {
+            if (dy !== 0) { const fy = f.y + 1; if ((y1 === fy - 1 && y2 === fy) || (y1 === fy && y2 === fy - 1)) { if (x1 >= f.x && x1 <= f.x + 1) return true; } }
+        } else {
+            if (dx !== 0) { const fx = f.x + 1; if ((x1 === fx - 1 && x2 === fx) || (x1 === fx && x2 === fx - 1)) { if (y1 >= f.y && y1 <= f.y + 1) return true; } }
+        }
+    }
+    return false;
+}
+
+function ai2_hasPathToGoal(player, testPawns, testFences) {
+    const goalY = player === 1 ? 8 : 0;
+    const visited = new Uint8Array(81);
+    const queue = []; let head = 0;
+    queue.push(testPawns[player].x | (testPawns[player].y << 4));
+    visited[testPawns[player].y * 9 + testPawns[player].x] = 1;
+    while (head < queue.length) {
+        const packed = queue[head++];
+        const cx = packed & 0xF, cy = (packed >> 4) & 0xF;
+        if (cy === goalY) return true;
+        const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+        for (const [dx, dy] of dirs) {
+            const nx = cx + dx, ny = cy + dy;
+            if (nx < 0 || nx >= 9 || ny < 0 || ny >= 9) continue;
+            if (visited[ny * 9 + nx]) continue;
+            if (ai2_isFenceBlocking(cx, cy, nx, ny, testFences)) continue;
+            visited[ny * 9 + nx] = 1; queue.push(nx | (ny << 4));
+        }
+    }
+    return false;
+}
+
+function ai2_canPlaceFence(x, y, orientation, testFences, testPawns) {
+    if (x < 0 || x >= 8 || y < 0 || y >= 8) return false;
+    for (let i = 0; i < testFences.length; i++) {
+        const f = testFences[i];
+        if (f.x === x && f.y === y) return false;
+        if (orientation === 'h' && f.orientation === 'h' && f.y === y && Math.abs(f.x - x) === 1) return false;
+        if (orientation === 'v' && f.orientation === 'v' && f.x === x && Math.abs(f.y - y) === 1) return false;
+    }
+    const newFences = testFences.slice(); newFences.push({ x, y, orientation });
+    return ai2_hasPathToGoal(1, testPawns, newFences) && ai2_hasPathToGoal(2, testPawns, newFences);
+}
+
+function ai2_getValidMoves(player, testPawns, testFences) {
+    const moves = [], pos = testPawns[player], opp = player === 1 ? 2 : 1, oppPos = testPawns[opp];
+    const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+    for (const [dx, dy] of dirs) {
+        const nx = pos.x + dx, ny = pos.y + dy;
+        if (nx < 0 || nx >= 9 || ny < 0 || ny >= 9) continue;
+        if (ai2_isFenceBlocking(pos.x, pos.y, nx, ny, testFences)) continue;
+        if (nx === oppPos.x && ny === oppPos.y) {
+            const jx = nx + dx, jy = ny + dy;
+            if (jx >= 0 && jx < 9 && jy >= 0 && jy < 9 && !ai2_isFenceBlocking(nx, ny, jx, jy, testFences)) { moves.push({ x: jx, y: jy }); }
+            else { const sd = dx === 0 ? [[1,0],[-1,0]] : [[0,1],[0,-1]]; for (const [sdx, sdy] of sd) { const sx = nx + sdx, sy = ny + sdy; if (sx >= 0 && sx < 9 && sy >= 0 && sy < 9 && !ai2_isFenceBlocking(nx, ny, sx, sy, testFences)) moves.push({ x: sx, y: sy }); } }
+        } else { moves.push({ x: nx, y: ny }); }
+    }
+    return moves;
+}
+
+function ai2_evaluate(player, testPawns, testFences, testFenceCounts) {
+    const opp = player === 1 ? 2 : 1, goalP = player === 1 ? 8 : 0, goalO = opp === 1 ? 8 : 0;
+    if (testPawns[player].y === goalP) return AI2_WIN_SCORE;
+    if (testPawns[opp].y === goalO) return -AI2_WIN_SCORE;
+    const myDist = ai2_shortestDistWithOpp(player, testPawns, testFences);
+    const oppDist = ai2_shortestDistWithOpp(opp, testPawns, testFences);
+    const myTopoDist = ai2_shortestDist(testPawns[player].x, testPawns[player].y, goalP, testFences);
+    const oppTopoDist = ai2_shortestDist(testPawns[opp].x, testPawns[opp].y, goalO, testFences);
+    let score = (oppDist - myDist) * 120;
+    if (myDist < oppDist) score += 40; else if (myDist === oppDist) score += 10;
+    if (myDist <= 1) score += 500; else if (myDist <= 2) score += 200; else if (myDist <= 3) score += 80;
+    if (oppDist <= 1) score -= 500; else if (oppDist <= 2) score -= 200; else if (oppDist <= 3) score -= 80;
+    const myProgress = player === 1 ? testPawns[1].y : (8 - testPawns[2].y);
+    const oppProgress = opp === 1 ? testPawns[1].y : (8 - testPawns[2].y);
+    score += (myProgress - oppProgress) * 15;
+    const myVertDist = Math.abs(testPawns[player].y - goalP);
+    if (myTopoDist <= myVertDist && myVertDist > 0) score += 80;
+    const oppVertDist = Math.abs(testPawns[opp].y - goalO);
+    if (oppTopoDist <= oppVertDist && oppVertDist > 0) score -= 80;
+    score += (Math.abs(testPawns[opp].x - 4) - Math.abs(testPawns[player].x - 4)) * 5;
+    const myFences = testFenceCounts[player], oppFences = testFenceCounts[opp];
+    if (oppDist <= 4 && myFences > 0) score += myFences * 8;
+    if (myDist <= 4 && oppFences > 0) score -= oppFences * 8;
+    if (myFences === 0 && oppFences >= 4) score -= 30;
+    if (oppFences === 0 && myFences >= 4) score += 30;
+    score += (myFences - oppFences) * 3;
+    if (myDist <= 4) { const pX = testPawns[player].x, pY = testPawns[player].y, fwdY = player === 1 ? pY + 1 : pY - 1; let os = 0; if (fwdY >= 0 && fwdY < 9 && !ai2_isFenceBlocking(pX, pY, pX, fwdY, testFences)) os++; if (pX - 1 >= 0 && !ai2_isFenceBlocking(pX, pY, pX - 1, pY, testFences)) os++; if (pX + 1 < 9 && !ai2_isFenceBlocking(pX, pY, pX + 1, pY, testFences)) os++; if (os % 2 === 1) score += 25; }
+    if (oppVertDist > 0) score += (oppTopoDist - oppVertDist) * 12;
+    if (myVertDist > 0) score -= (myTopoDist - myVertDist) * 12;
+    score += (ai2_estimatePathWidth(testPawns[player].x, testPawns[player].y, goalP, testFences) - ai2_estimatePathWidth(testPawns[opp].x, testPawns[opp].y, goalO, testFences)) * 8;
+    return score;
+}
+
+function ai2_estimatePathWidth(px, py, goalY, testFences) {
+    const dist = ai2_shortestPathAllNext(px, py, goalY, testFences);
+    const targetDist = dist.length > 0 ? ai2_shortestDist(px, py, goalY, testFences) : 999;
+    if (targetDist >= 999) return 0;
+    const midDist = Math.floor(targetDist / 2); if (midDist === 0) return 1;
+    let width = 0;
+    for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) if (dist[y * 9 + x] === midDist) width++;
+    return Math.min(width, 5);
+}
+
+function ai2_genPawnMoves(player, testPawns, testFences, goalY) {
+    const raw = ai2_getValidMoves(player, testPawns, testFences);
+    const fwd = player === 1 ? 1 : -1;
+    raw.sort((a, b) => { if (a.y === goalY) return -1; if (b.y === goalY) return 1; const pA = (a.y - testPawns[player].y) * fwd, pB = (b.y - testPawns[player].y) * fwd; if (pA !== pB) return pB - pA; return Math.abs(a.x - 4) - Math.abs(b.x - 4); });
+    return raw.map(m => ({ type: 'move', x: m.x, y: m.y }));
+}
+
+function ai2_genFenceMoves(player, testPawns, testFences, testFenceCounts) {
+    if (testFenceCounts[player] <= 0) return [];
+    const opp = player === 1 ? 2 : 1;
+    const oppPath = ai2_shortestPath(opp, testPawns, testFences);
+    const pathCells = new Set();
+    if (oppPath) { for (const cell of oppPath) for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) pathCells.add(`${cell.x+dx},${cell.y+dy}`); }
+    const candidates = [], seen = new Set(), oppPos = testPawns[opp], oppGoalY = opp === 1 ? 8 : 0;
+    function tryAdd(x, y, ori, priority) {
+        const key = `${x},${y},${ori}`; if (seen.has(key)) return; seen.add(key);
+        if (!ai2_canPlaceFence(x, y, ori, testFences, testPawns)) return;
+        const nf = testFences.slice(); nf.push({ x, y, orientation: ori });
+        const oppDB = ai2_shortestDist(oppPos.x, oppPos.y, oppGoalY, testFences);
+        const oppDA = ai2_shortestDist(oppPos.x, oppPos.y, oppGoalY, nf);
+        const myGY = player === 1 ? 8 : 0;
+        const myDA = ai2_shortestDist(testPawns[player].x, testPawns[player].y, myGY, nf);
+        const myDB = ai2_shortestDist(testPawns[player].x, testPawns[player].y, myGY, testFences);
+        const impact = (oppDA - oppDB) - (myDA - myDB) * 0.7;
+        candidates.push({ type: 'fence', x, y, orientation: ori, priority, impact });
+    }
+    for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) { if (pathCells.has(`${x},${y}`) || pathCells.has(`${x+1},${y}`) || pathCells.has(`${x},${y+1}`) || pathCells.has(`${x+1},${y+1}`)) { tryAdd(x, y, 'h', 1); tryAdd(x, y, 'v', 1); } }
+    for (let x = Math.max(0, oppPos.x - 3); x <= Math.min(7, oppPos.x + 3); x++) for (let y = Math.max(0, oppPos.y - 3); y <= Math.min(7, oppPos.y + 3); y++) { tryAdd(x, y, 'h', 2); tryAdd(x, y, 'v', 2); }
+    const goalRow = opp === 1 ? 7 : 0; for (let x = 0; x < 8; x++) { tryAdd(x, goalRow, 'h', 3); tryAdd(x, goalRow, 'v', 3); }
+    candidates.sort((a, b) => b.impact !== a.impact ? b.impact - a.impact : a.priority - b.priority);
+    const filtered = candidates.filter(c => c.impact > 0).slice(0, 24);
+    if (filtered.length < 6) for (const c of candidates) { if (filtered.length >= 8) break; if (!filtered.some(f => f.x === c.x && f.y === c.y && f.orientation === c.orientation)) filtered.push(c); }
+    return filtered;
+}
+
+function ai2_resetTables() { ai2_killerMoves = []; for (let i = 0; i <= AI2_MAX_DEPTH + 2; i++) ai2_killerMoves.push([null, null]); ai2_historyTable = {}; }
+function ai2_moveKey(move) { return move.type === 'move' ? `m${move.x},${move.y}` : `f${move.x},${move.y},${move.orientation}`; }
+function ai2_updateKiller(depth, move) { if (!ai2_killerMoves[depth]) return; const key = ai2_moveKey(move); if (ai2_killerMoves[depth][0] && ai2_moveKey(ai2_killerMoves[depth][0]) === key) return; ai2_killerMoves[depth][1] = ai2_killerMoves[depth][0]; ai2_killerMoves[depth][0] = move; }
+function ai2_updateHistory(move, depth) { const key = ai2_moveKey(move); ai2_historyTable[key] = (ai2_historyTable[key] || 0) + depth * depth; }
+
+function ai2_orderMoves(moves, ttBestMove, depth) {
+    const scored = moves.map(m => { let p = 0; const key = ai2_moveKey(m); if (ttBestMove && ai2_moveKey(ttBestMove) === key) p += 1000000; if (ai2_killerMoves[depth]) { if (ai2_killerMoves[depth][0] && ai2_moveKey(ai2_killerMoves[depth][0]) === key) p += 100000; else if (ai2_killerMoves[depth][1] && ai2_moveKey(ai2_killerMoves[depth][1]) === key) p += 90000; } if (m.type === 'fence' && m.impact !== undefined) p += m.impact * 100; p += (ai2_historyTable[key] || 0); return { move: m, priority: p }; });
+    scored.sort((a, b) => b.priority - a.priority); return scored.map(s => s.move);
+}
+
+function ai2_alphabeta(player, testPawns, testFences, testFenceCounts, depth, alpha, beta, isMaximizing, ply) {
+    ai2_nodesSearched++;
+    if ((ai2_nodesSearched & 4095) === 0 && Date.now() - ai2_searchStartTime > AI2_TIME_LIMIT_MS) { ai2_searchAborted = true; return 0; }
+    if (ai2_searchAborted) return 0;
+    const opp = player === 1 ? 2 : 1, goalP = player === 1 ? 8 : 0, goalO = opp === 1 ? 8 : 0;
+    if (testPawns[player].y === goalP) return AI2_WIN_SCORE + depth;
+    if (testPawns[opp].y === goalO) return -(AI2_WIN_SCORE + depth);
+    if (depth <= 0) return ai2_evaluate(player, testPawns, testFences, testFenceCounts);
+    const currentTurn = isMaximizing ? player : opp;
+    const hash = ai2_computeHash(testPawns, testFences, currentTurn);
+    const origAlpha = alpha, origBeta = beta;
+    let ttBestMove = null;
+    const ttEntry = ai2_ttProbe(hash, depth, alpha, beta);
+    if (ttEntry) { ttBestMove = ttEntry.bestMove; if (ttEntry.exact) return ttEntry.score; }
+    const goalCurrent = currentTurn === 1 ? 8 : 0;
+    const pawnMoves = ai2_genPawnMoves(currentTurn, testPawns, testFences, goalCurrent);
+    let fenceMoves;
+    const oppForF = currentTurn === player ? opp : player, oppGoalF = oppForF === 1 ? 8 : 0;
+    const crit = Math.abs(testPawns[oppForF].y - oppGoalF) <= 3;
+    if (depth <= 2 && !crit) fenceMoves = [];
+    else { fenceMoves = ai2_genFenceMoves(currentTurn, testPawns, testFences, testFenceCounts); const fl = depth >= 5 ? 16 : (depth >= 4 ? 12 : (depth >= 3 ? 8 : 5)); if (fenceMoves.length > fl) fenceMoves = fenceMoves.slice(0, fl); }
+    const allMoves = pawnMoves.concat(fenceMoves);
+    if (allMoves.length === 0) return ai2_evaluate(player, testPawns, testFences, testFenceCounts);
+    const ordered = ai2_orderMoves(allMoves, ttBestMove, ply);
+    let bestScore, bestMove = ordered[0];
+    if (isMaximizing) {
+        bestScore = -AI2_INF;
+        for (let i = 0; i < ordered.length; i++) {
+            const move = ordered[i]; let nP, nF, nC;
+            if (move.type === 'move') { nP = { 1: { ...testPawns[1] }, 2: { ...testPawns[2] } }; nP[currentTurn] = { x: move.x, y: move.y }; nF = testFences; nC = testFenceCounts; }
+            else { nP = testPawns; nF = testFences.slice(); nF.push({ x: move.x, y: move.y, orientation: move.orientation }); nC = { ...testFenceCounts }; nC[currentTurn]--; }
+            let score; if (i === 0) score = ai2_alphabeta(player, nP, nF, nC, depth - 1, alpha, beta, false, ply + 1);
+            else { score = ai2_alphabeta(player, nP, nF, nC, depth - 1, alpha, alpha + 1, false, ply + 1); if (score > alpha && score < beta && !ai2_searchAborted) score = ai2_alphabeta(player, nP, nF, nC, depth - 1, alpha, beta, false, ply + 1); }
+            if (ai2_searchAborted) return bestScore === -AI2_INF ? 0 : bestScore;
+            if (score > bestScore) { bestScore = score; bestMove = move; } if (score > alpha) alpha = score; if (alpha >= beta) { ai2_updateKiller(ply, move); ai2_updateHistory(move, depth); break; }
+        }
+    } else {
+        bestScore = AI2_INF;
+        for (let i = 0; i < ordered.length; i++) {
+            const move = ordered[i]; let nP, nF, nC;
+            if (move.type === 'move') { nP = { 1: { ...testPawns[1] }, 2: { ...testPawns[2] } }; nP[currentTurn] = { x: move.x, y: move.y }; nF = testFences; nC = testFenceCounts; }
+            else { nP = testPawns; nF = testFences.slice(); nF.push({ x: move.x, y: move.y, orientation: move.orientation }); nC = { ...testFenceCounts }; nC[currentTurn]--; }
+            let score; if (i === 0) score = ai2_alphabeta(player, nP, nF, nC, depth - 1, alpha, beta, true, ply + 1);
+            else { score = ai2_alphabeta(player, nP, nF, nC, depth - 1, beta - 1, beta, true, ply + 1); if (score < beta && score > alpha && !ai2_searchAborted) score = ai2_alphabeta(player, nP, nF, nC, depth - 1, alpha, beta, true, ply + 1); }
+            if (ai2_searchAborted) return bestScore === AI2_INF ? 0 : bestScore;
+            if (score < bestScore) { bestScore = score; bestMove = move; } if (score < beta) beta = score; if (alpha >= beta) { ai2_updateKiller(ply, move); ai2_updateHistory(move, depth); break; }
+        }
+    }
+    if (isMaximizing) { const flag = bestScore <= origAlpha ? AI2_UPPER : (bestScore >= origBeta ? AI2_LOWER : AI2_EXACT); ai2_ttStore(hash, depth, bestScore, flag, bestMove); }
+    else { const flag = bestScore >= origBeta ? AI2_LOWER : (bestScore <= origAlpha ? AI2_UPPER : AI2_EXACT); ai2_ttStore(hash, depth, bestScore, flag, bestMove); }
+    return bestScore;
+}
+
+function ai2_iterativeDeepening(player, testPawns, testFences, testFenceCounts, posHistory) {
+    ai2_resetTables(); ai2_ttClear(); ai2_searchStartTime = Date.now(); ai2_searchAborted = false;
+    let bestMove = null, bestScore = -AI2_INF;
+    const goalY = player === 1 ? 8 : 0;
+    const pawnMoves = ai2_getValidMoves(player, testPawns, testFences);
+    for (const m of pawnMoves) { if (m.y === goalY) return { type: 'move', x: m.x, y: m.y }; }
+    if (testFenceCounts[player] <= 0 && testFenceCounts[player === 1 ? 2 : 1] <= 0) { const path = ai2_shortestPath(player, testPawns, testFences); if (path && path.length > 1) return { type: 'move', x: path[1].x, y: path[1].y }; }
+    for (let depth = 1; depth <= AI2_MAX_DEPTH; depth++) {
+        ai2_nodesSearched = 0; ai2_searchAborted = false;
+        const score = ai2_alphabeta(player, testPawns, testFences, testFenceCounts, depth, -AI2_INF, AI2_INF, true, 0);
+        if (ai2_searchAborted && depth > 1) break;
+        const hash = ai2_computeHash(testPawns, testFences, player);
+        const ttE = ai2_tt[hash & AI2_TT_MASK];
+        if (ttE && ttE.hash === hash && ttE.bestMove) { bestMove = ttE.bestMove; bestScore = score; }
+        if (Math.abs(score) >= AI2_WIN_SCORE - 20) break;
+        if (Date.now() - ai2_searchStartTime > AI2_TIME_LIMIT_MS * 0.6) break;
+    }
+    if (!bestMove) { const path = ai2_shortestPath(player, testPawns, testFences); if (path && path.length > 1) bestMove = { type: 'move', x: path[1].x, y: path[1].y }; else { const moves = ai2_getValidMoves(player, testPawns, testFences); if (moves.length > 0) bestMove = { type: 'move', x: moves[0].x, y: moves[0].y }; } }
+    if (bestMove && bestMove.type === 'move' && posHistory && posHistory[player]) {
+        const hist = posHistory[player];
+        if (hist.length >= 3 && hist.slice(-4).some(p => p.x === bestMove.x && p.y === bestMove.y)) {
+            const path = ai2_shortestPath(player, testPawns, testFences);
+            if (path && path.length > 1) { const pm = { type: 'move', x: path[1].x, y: path[1].y }; if (!hist.slice(-4).some(p => p.x === pm.x && p.y === pm.y)) bestMove = pm; else { const fwd = player === 1 ? 1 : -1; const pM = ai2_getValidMoves(player, testPawns, testFences).filter(m => (m.y - testPawns[player].y) * fwd > 0); const nr = pM.filter(m => !hist.slice(-4).some(p => p.x === m.x && p.y === m.y)); if (nr.length > 0) bestMove = { type: 'move', x: nr[0].x, y: nr[0].y }; else if (testFenceCounts[player] > 0) { const fM = ai2_genFenceMoves(player, testPawns, testFences, testFenceCounts); if (fM.length > 0 && fM[0].impact > 0) bestMove = { type: 'fence', x: fM[0].x, y: fM[0].y, orientation: fM[0].orientation }; } } }
+        }
+    }
+    return bestMove;
+}
+
+function ai2FindBestMove(player, pawnsState, placedFencesState, fencesCount, posHistory) {
+    const testPawns = { 1: { ...pawnsState[1] }, 2: { ...pawnsState[2] } };
+    const testFences = placedFencesState.map(f => ({ ...f }));
+    const testCounts = { ...fencesCount };
+    const raw = ai2_iterativeDeepening(player, testPawns, testFences, testCounts, posHistory);
+    if (!raw) return null;
+    if (raw.type === 'move') return { type: 'move', x: raw.x, y: raw.y };
+    return { type: 'fence', x: raw.x, y: raw.y, orientation: raw.orientation };
+}
+

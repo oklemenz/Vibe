@@ -325,17 +325,59 @@ body {
 }
 
 #winner-content {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    padding: 50px;
+    background: linear-gradient(135deg, #1a1a2e 0%, #2d3436 100%);
+    padding: 40px;
     border-radius: 20px;
     text-align: center;
     color: white;
+    border: 2px solid #6c5ce7;
     position: relative;
 }
 
-#winner-content h1 {
-    font-size: 48px;
-    margin-bottom: 20px;
+#winner-content h2 {
+    font-size: 28px;
+    margin-bottom: 15px;
+    color: #6c5ce7;
+}
+
+#winner-subtitle {
+    font-size: 16px;
+    margin-bottom: 25px;
+    color: #aaa;
+}
+
+#winner-restart-first {
+    background: #6c5ce7;
+    color: white;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    transition: background 0.3s, transform 0.2s;
+}
+
+#winner-restart-first:hover {
+    background: #5a4bd1;
+    transform: scale(1.05);
+}
+
+#winner-restart-second {
+    background: #00b894;
+    color: white;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    transition: background 0.3s, transform 0.2s;
+}
+
+#winner-restart-second:hover {
+    background: #00a381;
+    transform: scale(1.05);
 }
 
 .modal-close-btn {
@@ -356,22 +398,6 @@ body {
 
 .modal-close-btn:hover {
     background: rgba(255, 255, 255, 0.4);
-}
-
-#restart-btn {
-    background: white;
-    color: #667eea;
-    border: none;
-    padding: 15px 40px;
-    border-radius: 10px;
-    cursor: pointer;
-    font-size: 20px;
-    font-weight: bold;
-    transition: transform 0.3s;
-}
-
-#restart-btn:hover {
-    transform: scale(1.1);
 }
 
 /* Fence Panel Styles */
@@ -515,7 +541,7 @@ body {
     margin: 8px 0;
     font-weight: bold;
     display: inline-block;
-    width: 50px;
+    width: 55px;
     text-align: center;
     font-variant-numeric: tabular-nums;
 }
@@ -559,7 +585,7 @@ body {
     gap: 5px;
 }
 
-#game-info-btn, #controls-btn, #ai-btn, #rules-btn, #switch-btn, #assist-btn, #restart-game-btn, #view-btn {
+#game-info-btn, #controls-btn, #ai-btn, #rules-btn, #assist-btn, #restart-game-btn, #view-btn {
     background: rgba(0, 0, 0, 0.7);
     color: white;
     border: none;
@@ -572,7 +598,7 @@ body {
     text-align: left;
 }
 
-#game-info-btn:hover, #controls-btn:hover, #ai-btn:hover, #rules-btn:hover, #switch-btn:hover, #assist-btn:hover, #restart-game-btn:hover, #view-btn:hover {
+#game-info-btn:hover, #controls-btn:hover, #ai-btn:hover, #rules-btn:hover, #assist-btn:hover, #restart-game-btn:hover, #view-btn:hover {
     background: rgba(0, 0, 0, 0.9);
 }
 
@@ -592,12 +618,6 @@ body {
     background: #219a52;
 }
 
-#switch-btn.disabled,
-#switch-btn:disabled {
-    opacity: 0.25;
-    cursor: not-allowed;
-    pointer-events: none;
-}
 
 #assist-btn.active {
     background: #f39c12;
@@ -731,6 +751,7 @@ body {
     text-align: center;
     color: white;
     border: 2px solid #6c5ce7;
+    position: relative;
 }
 
 #confirm-restart-content h2 {
@@ -750,8 +771,8 @@ body {
     justify-content: center;
 }
 
-#confirm-restart-yes {
-    background: #e74c3c;
+#confirm-restart-first {
+    background: #6c5ce7;
     color: white;
     border: none;
     padding: 12px 30px;
@@ -762,13 +783,13 @@ body {
     transition: background 0.3s, transform 0.2s;
 }
 
-#confirm-restart-yes:hover {
-    background: #c0392b;
+#confirm-restart-first:hover {
+    background: #5a4bd1;
     transform: scale(1.05);
 }
 
-#confirm-restart-no {
-    background: #636e72;
+#confirm-restart-second {
+    background: #00b894;
     color: white;
     border: none;
     padding: 12px 30px;
@@ -779,8 +800,8 @@ body {
     transition: background 0.3s, transform 0.2s;
 }
 
-#confirm-restart-no:hover {
-    background: #4a5568;
+#confirm-restart-second:hover {
+    background: #00a381;
     transform: scale(1.05);
 }
 
@@ -852,21 +873,21 @@ body {
 }
 
 #intro-start-btn {
-    background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+    background: #6c5ce7;
     color: white;
     border: none;
-    padding: 10px 40px;
+    padding: 12px 30px;
     border-radius: 10px;
     cursor: pointer;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: bold;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: background 0.3s, transform 0.2s;
     margin-bottom: -5px;
 }
 
 #intro-start-btn:hover {
+    background: #5a4bd1;
     transform: scale(1.05);
-    box-shadow: 0 5px 20px rgba(108, 92, 231, 0.4);
 }
 
 /* Portrait Mode - Move fence panel to bottom (all devices) */

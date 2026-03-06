@@ -9,10 +9,18 @@ const FENCE_LENGTH = 1.85; // Slightly shorter than 2 cells to show gaps between
 const PAWN_RADIUS = 0.3;
 const PAWN_HEIGHT = 0.6;
 
+// AI difficulty labels for the button
+const AI_DIFFICULTY_LABELS = {
+    easy: '🤖 AI Easy',
+    good: '🤖 AI Good',
+    hard: '🤖 AI Hard'
+};
+
 // Local Storage Keys
 const STORAGE_KEYS = {
     VIEW_MODE: 'quoridor_viewMode',
     AI_ENABLED: 'quoridor_aiEnabled',
+    AI_DIFFICULTY: 'quoridor_aiDifficulty',
     ASSIST_ENABLED: 'quoridor_assistEnabled',
     INTRO_SHOWN: 'quoridor_introShown',
     PANEL_LEFT_OPEN: 'quoridor_panelLeftOpen',
@@ -35,6 +43,11 @@ function loadSettings() {
     const savedAssistEnabled = localStorage.getItem(STORAGE_KEYS.ASSIST_ENABLED);
     if (savedAssistEnabled !== null) {
         assistEnabled = savedAssistEnabled === 'true';
+    }
+
+    const savedDifficulty = localStorage.getItem(STORAGE_KEYS.AI_DIFFICULTY);
+    if (savedDifficulty && ['easy', 'good', 'hard'].includes(savedDifficulty)) {
+        aiDifficulty = savedDifficulty;
     }
 }
 
@@ -383,6 +396,8 @@ function init() {
     // Initialize Web Workers for AI calculations
     initAIWorker();
     initAssistWorker();
+    initAI2Worker();
+    initAI2AssistWorker();
 
     // Randomize AI algorithm and weights for the first game
     randomizeAIForNewGame();
@@ -467,7 +482,14 @@ function init() {
     setupDragAndDrop();
 
     // UI buttons
-    document.getElementById('restart-btn').addEventListener('click', restartGame);
+    document.getElementById('winner-restart-first').addEventListener('click', function() {
+        document.getElementById('winner-modal').style.display = 'none';
+        restartGame(1);
+    });
+    document.getElementById('winner-restart-second').addEventListener('click', function() {
+        document.getElementById('winner-modal').style.display = 'none';
+        restartGame(2);
+    });
 
     // Winner modal close button
     document.getElementById('winner-close-btn').addEventListener('click', closeWinnerModal);
@@ -475,8 +497,6 @@ function init() {
     // AI toggle button
     document.getElementById('ai-btn').addEventListener('click', toggleAI);
 
-    // Switch button - switches starting player
-    document.getElementById('switch-btn').addEventListener('click', toggleP2First);
 
     // Assist toggle button
     document.getElementById('assist-btn').addEventListener('click', toggleAssist);
@@ -509,7 +529,7 @@ function applyLoadedSettings() {
     // Apply AI setting
     const aiBtn = document.getElementById('ai-btn');
     if (aiEnabled) {
-        aiBtn.textContent = '🤖 AI On';
+        aiBtn.textContent = AI_DIFFICULTY_LABELS[aiDifficulty] || '🤖 AI Hard';
         aiBtn.classList.add('active');
         // Keep icon in span for pulsating animation
         document.getElementById('player1-name').innerHTML = '<span class="player-icon">🔴</span> Player';
@@ -533,7 +553,7 @@ function applyLoadedSettings() {
     // Apply View setting
     const viewBtn = document.getElementById('view-btn');
     if (viewMode === 'top') {
-        viewBtn.textContent = '👁️ Top View';
+        viewBtn.textContent = '👁️ Top';
         viewBtn.classList.add('active');
     }
 }
@@ -890,10 +910,13 @@ function checkWin() {
 function endGame(winner) {
     gameOver = true;
     let winnerName;
+    let winnerEmoji;
     if (aiEnabled) {
         winnerName = winner === 1 ? 'Player' : 'AI';
+        winnerEmoji = winner === 1 ? '🏆' : '🤖';
     } else {
         winnerName = `Player ${winner}`;
+        winnerEmoji = '🏆';
     }
 
     // Hide all move highlights and disable all fences immediately
@@ -902,7 +925,7 @@ function endGame(winner) {
 
     // Delay showing the winner modal so the last move can be seen
     setTimeout(() => {
-        document.getElementById('winner-text').textContent = `${winnerName} Wins!`;
+        document.getElementById('winner-text').textContent = `${winnerEmoji} ${winnerName} Wins!`;
         document.getElementById('winner-modal').style.display = 'flex';
     }, 250);
 }
@@ -956,23 +979,8 @@ function updateUI() {
 
     // Enable/disable fence elements based on current player and fence count
     updateFencePanelState();
-
-    // Update Switch button state (only enabled at game start)
-    updateSwitchButtonState();
 }
 
-function updateSwitchButtonState() {
-    const switchBtn = document.getElementById('switch-btn');
-    const isGameStart = pawns[1].x === 4 && pawns[1].y === 0 && pawns[2].x === 4 && pawns[2].y === 8 && placedFences.length === 0;
-
-    if (isGameStart && !gameOver) {
-        switchBtn.disabled = false;
-        switchBtn.classList.remove('disabled');
-    } else {
-        switchBtn.disabled = true;
-        switchBtn.classList.add('disabled');
-    }
-}
 
 function updateFencePanelState() {
     // Get all fence elements (including top panel)
@@ -1489,9 +1497,9 @@ function rotateCurrentFence() {
     updateDragPreview3D(lastDragX, lastDragY);
 }
 
-function restartGame() {
+function restartGame(startingPlayer) {
     // Reset game state
-    currentPlayer = 1;  // Always start with Player 1
+    currentPlayer = startingPlayer || 1;
     fences = {1: 10, 2: 10};
     pawns = {
         1: {x: 4, y: 0}, 2: {x: 4, y: 8}
@@ -1527,11 +1535,18 @@ function restartGame() {
     // Hide winner modal
     document.getElementById('winner-modal').style.display = 'none';
 
-    // Show assist proposal if assist mode is active and it's Player 1's turn
-    if (assistEnabled && currentPlayer === 1) {
-        setTimeout(() => {
-            showAssistProposal();
-        }, 100);
+    // If AI is enabled and it's AI's turn, start AI thinking
+    if (aiEnabled && currentPlayer === aiPlayer && !gameOver && !aiThinking) {
+        aiThinking = true;
+        showAIThinkingIndicator();
+        startAICalculation();
+    } else if (assistEnabled && !gameOver) {
+        // Show assist proposal for the starting player
+        if (currentPlayer === 1 || (currentPlayer === 2 && !aiEnabled)) {
+            setTimeout(() => {
+                showAssistProposal();
+            }, 100);
+        }
     }
 }
 
@@ -1547,11 +1562,23 @@ function animate() {
 
 // ==================== AI IMPLEMENTATION ====================
 
-function toggleAI() {
-    aiEnabled = !aiEnabled;
 
-    // Save setting to Local Storage
+function toggleAI() {
+    // Cycle: Off → Easy → Good → Hard → Off
+    if (!aiEnabled) {
+        aiEnabled = true;
+        aiDifficulty = 'easy';
+    } else if (aiDifficulty === 'easy') {
+        aiDifficulty = 'good';
+    } else if (aiDifficulty === 'good') {
+        aiDifficulty = 'hard';
+    } else {
+        aiEnabled = false;
+    }
+
+    // Save settings to Local Storage
     saveSetting(STORAGE_KEYS.AI_ENABLED, aiEnabled);
+    saveSetting(STORAGE_KEYS.AI_DIFFICULTY, aiDifficulty);
 
     const btn = document.getElementById('ai-btn');
     const player1Name = document.getElementById('player1-name');
@@ -1561,7 +1588,7 @@ function toggleAI() {
     const rulesPlayer2 = document.getElementById('rules-player2');
 
     if (aiEnabled) {
-        btn.textContent = '🤖 AI On';
+        btn.textContent = AI_DIFFICULTY_LABELS[aiDifficulty];
         btn.classList.add('active');
 
         // Rename players in fence panel (keep icon in span)
@@ -1577,6 +1604,11 @@ function toggleAI() {
         if (currentPlayer === aiPlayer) {
             clearAssistProposal();
             hideCurrentPlayerThinkingIndicator();
+        }
+
+        // Cancel any pending calculations when switching difficulty
+        if (aiThinking) {
+            cancelPendingCalculations();
         }
 
         // If it's already AI's turn, start thinking
@@ -1654,39 +1686,6 @@ function toggleAssist() {
     }
 }
 
-// Switch starting player - switches between Player 1 and Player 2 at game start
-function toggleP2First() {
-    // Check if game just started
-    const isGameStart = pawns[1].x === 4 && pawns[1].y === 0 && pawns[2].x === 4 && pawns[2].y === 8 && placedFences.length === 0;
-
-    // Only allow switch at game start
-    if (!isGameStart || gameOver) {
-        return;
-    }
-
-    // Simply switch the current player
-    if (currentPlayer === 1) {
-        currentPlayer = 2;
-        clearAssistProposal();
-    } else {
-        currentPlayer = 1;
-    }
-
-    updateUI();
-    updateValidMoves();
-
-    // If AI is enabled and it's now AI's turn
-    if (aiEnabled && currentPlayer === aiPlayer && !aiThinking) {
-        aiThinking = true;
-        showAIThinkingIndicator();
-        startAICalculation();
-    } else if (assistEnabled && !gameOver) {
-        // Show assist proposal for current player
-        if (currentPlayer === 1 || (currentPlayer === 2 && !aiEnabled)) {
-            startAssistCalculation();
-        }
-    }
-}
 
 // ==================== VIEW MODE ====================
 
@@ -1740,12 +1739,12 @@ function toggleView() {
 
     if (viewMode === '3d') {
         viewMode = 'top';
-        btn.textContent = '👁️ Top View';
+        btn.textContent = '👁️ Top';
         btn.classList.add('active');
         animateToTopView();
     } else {
         viewMode = '3d';
-        btn.textContent = '👁️ 3D View';
+        btn.textContent = '👁️ 3D';
         btn.classList.remove('active');
         animateTo3DView();
     }

@@ -40,11 +40,10 @@
     <div id="ui-overlay">
         <button id="ui-panel-toggle"></button>
         <div class="top-bar">
-            <button id="view-btn">👁️ 3D View</button>
+            <button id="view-btn">👁️ 3D</button>
             <button id="ai-btn">🤖 AI</button>
             <button id="assist-btn">🎓 Assist</button>
             <button id="restart-game-btn">🔄 Restart</button>
-            <button id="switch-btn">🔀 Switch</button>
             <button id="rules-btn">📖 Rules</button>
         </div>
     </div>
@@ -108,19 +107,24 @@
 <div id="winner-modal">
     <div id="winner-content">
         <button id="winner-close-btn" class="modal-close-btn">✕</button>
-        <h1 id="winner-text">🔴Player 1 Wins!</h1>
-        <button id="restart-btn">Play Again</button>
+        <h2 id="winner-text">🔴 Player 1 Wins!</h2>
+        <p id="winner-subtitle">Start a new game — who moves first?</p>
+        <div class="confirm-buttons">
+            <button id="winner-restart-first">Move First</button>
+            <button id="winner-restart-second">Move Second</button>
+        </div>
     </div>
 </div>
 
 <!-- Confirm Restart Dialog -->
 <div id="confirm-restart-modal">
     <div id="confirm-restart-content">
-        <h2>🔄 Restart Game?</h2>
-        <p>Are you sure you want to resign and restart the game?</p>
+        <button id="confirm-restart-close" class="modal-close-btn">✕</button>
+        <h2>🔄 Restart Game</h2>
+        <p>Start a new game — who moves first?</p>
         <div class="confirm-buttons">
-            <button id="confirm-restart-yes">Yes, Restart</button>
-            <button id="confirm-restart-no">Cancel</button>
+            <button id="confirm-restart-first">Move First</button>
+            <button id="confirm-restart-second">Move Second</button>
         </div>
     </div>
 </div>
@@ -216,29 +220,30 @@
     // Restart Game Button with Confirmation Dialog
     const restartGameBtn = document.getElementById('restart-game-btn');
     const confirmRestartModal = document.getElementById('confirm-restart-modal');
-    const confirmRestartYes = document.getElementById('confirm-restart-yes');
-    const confirmRestartNo = document.getElementById('confirm-restart-no');
+    const confirmRestartFirst = document.getElementById('confirm-restart-first');
+    const confirmRestartSecond = document.getElementById('confirm-restart-second');
+    const confirmRestartClose = document.getElementById('confirm-restart-close');
 
     restartGameBtn.addEventListener('click', function () {
-        // If game is already over, restart directly without confirmation
-        if (typeof gameOver !== 'undefined' && gameOver) {
-            if (typeof restartGame === 'function') {
-                restartGame();
-            }
-        } else {
-            // Show confirmation dialog only if game is still active
-            confirmRestartModal.classList.add('visible');
-        }
+        // If game is already over, show dialog for next game
+        confirmRestartModal.classList.add('visible');
     });
 
-    confirmRestartYes.addEventListener('click', function () {
+    confirmRestartFirst.addEventListener('click', function () {
         confirmRestartModal.classList.remove('visible');
         if (typeof restartGame === 'function') {
-            restartGame();
+            restartGame(1);
         }
     });
 
-    confirmRestartNo.addEventListener('click', function () {
+    confirmRestartSecond.addEventListener('click', function () {
+        confirmRestartModal.classList.remove('visible');
+        if (typeof restartGame === 'function') {
+            restartGame(2);
+        }
+    });
+
+    confirmRestartClose.addEventListener('click', function () {
         confirmRestartModal.classList.remove('visible');
     });
 
