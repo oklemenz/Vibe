@@ -69,7 +69,7 @@ let positionHistory = {
 };
 
 // AI state
-let aiEnabled = false;
+let aiEnabled = true; // Default: AI enabled on first app start (overridden by localStorage)
 let aiPlayer = 2; // AI plays as Player 2
 let aiThinking = false;
 
@@ -533,7 +533,7 @@ function applyLoadedSettings() {
     // Apply View setting
     const viewBtn = document.getElementById('view-btn');
     if (viewMode === 'top') {
-        viewBtn.textContent = '👁️ View Top';
+        viewBtn.textContent = '👁️ Top View';
         viewBtn.classList.add('active');
     }
 }
@@ -1740,12 +1740,12 @@ function toggleView() {
 
     if (viewMode === '3d') {
         viewMode = 'top';
-        btn.textContent = '👁️ View Top';
+        btn.textContent = '👁️ Top View';
         btn.classList.add('active');
         animateToTopView();
     } else {
         viewMode = '3d';
-        btn.textContent = '👁️ View 3D';
+        btn.textContent = '👁️ 3D View';
         btn.classList.remove('active');
         animateTo3DView();
     }

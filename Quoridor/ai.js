@@ -19,8 +19,8 @@ let mctsAssist = null;
 let useMCTSAI = false;    // AI opponent: Minimax or MCTS
 let useMCTSAssist = false; // Assist: Minimax or MCTS (independent choice)
 
-const AI_TYPE_RATIO = 0.75;
-const AI_VARIANCE_RANGE = 0.10;
+const AI_TYPE_RATIO = 0.5;
+const AI_VARIANCE_RANGE = 0.05;
 const AI_VARIANCE_NOISE = 5;
 
 // Default base values for all evaluation weights
