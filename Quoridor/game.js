@@ -396,8 +396,6 @@ function init() {
     // Initialize Web Workers for AI calculations
     initAIWorker();
     initAssistWorker();
-    initAI2Worker();
-    initAI2AssistWorker();
 
     // Randomize AI algorithm and weights for the first game
     randomizeAIForNewGame();
