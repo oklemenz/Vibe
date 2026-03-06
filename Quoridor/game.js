@@ -11,9 +11,7 @@ const PAWN_HEIGHT = 0.6;
 
 // AI difficulty labels for the button
 const AI_DIFFICULTY_LABELS = {
-    easy: '🤖 AI Easy',
-    good: '🤖 AI Good',
-    hard: '🤖 AI Hard'
+    easy: '🤖 AI Easy', good: '🤖 AI Good', hard: '🤖 AI Hard'
 };
 
 // Local Storage Keys
@@ -480,11 +478,11 @@ function init() {
     setupDragAndDrop();
 
     // UI buttons
-    document.getElementById('winner-restart-first').addEventListener('click', function() {
+    document.getElementById('winner-restart-first').addEventListener('click', function () {
         document.getElementById('winner-modal').style.display = 'none';
         restartGame(1);
     });
-    document.getElementById('winner-restart-second').addEventListener('click', function() {
+    document.getElementById('winner-restart-second').addEventListener('click', function () {
         document.getElementById('winner-modal').style.display = 'none';
         restartGame(2);
     });
@@ -551,7 +549,7 @@ function applyLoadedSettings() {
     // Apply View setting
     const viewBtn = document.getElementById('view-btn');
     if (viewMode === 'top') {
-        viewBtn.textContent = '👁️ Top';
+        viewBtn.textContent = '👁️ Top View';
         viewBtn.classList.add('active');
     }
 }
@@ -1737,12 +1735,12 @@ function toggleView() {
 
     if (viewMode === '3d') {
         viewMode = 'top';
-        btn.textContent = '👁️ Top';
+        btn.textContent = '👁️ Top View';
         btn.classList.add('active');
         animateToTopView();
     } else {
         viewMode = '3d';
-        btn.textContent = '👁️ 3D';
+        btn.textContent = '👁️ 3D View';
         btn.classList.remove('active');
         animateTo3DView();
     }

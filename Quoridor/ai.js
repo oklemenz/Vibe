@@ -28,12 +28,24 @@ let hardAI = null;
 const AI_VARIANCE_RANGE = 0.05;
 const AI_VARIANCE_NOISE = 5;
 const DEFAULT_WEIGHTS = Object.freeze({
-    pathAdvantage: 100, criticalAdvantage: 50, defensivePenalty: 60,
-    tempoBonus: 25, centerControl: 5, progressivePosition: 15,
-    progressivePenalty: 12, directPath: 20, fenceAdvantage: 3,
-    fenceDefense: 5, noFencePenalty: 20, sidePreference: 2,
-    antiOscillation: 150, backwardPenalty: 80, forwardBonus: 20,
-    shortestPathBonus: 30, oddSidesBonus: 35, clearPathForward: 200,
+    pathAdvantage: 100,
+    criticalAdvantage: 50,
+    defensivePenalty: 60,
+    tempoBonus: 25,
+    centerControl: 5,
+    progressivePosition: 15,
+    progressivePenalty: 12,
+    directPath: 20,
+    fenceAdvantage: 3,
+    fenceDefense: 5,
+    noFencePenalty: 20,
+    sidePreference: 2,
+    antiOscillation: 150,
+    backwardPenalty: 80,
+    forwardBonus: 20,
+    shortestPathBonus: 30,
+    oddSidesBonus: 35,
+    clearPathForward: 200,
 });
 
 let aiWeightVariance = {};
@@ -70,8 +82,7 @@ function randomizeAIForNewGame() {
 
 function syncWeightsToWorkers() {
     const msg = {
-        type: 'setWeights',
-        data: {aiWeightVariance: aiPersonality.weights, aiScoreNoise: aiPersonality.noise}
+        type: 'setWeights', data: {aiWeightVariance: aiPersonality.weights, aiScoreNoise: aiPersonality.noise}
     };
     if (aiWorker && workersAvailable) aiWorker.postMessage(msg);
     if (assistWorker && workersAvailable) {
@@ -198,8 +209,7 @@ function getShortestPathDistance(player, testPawns, testFences) {
                     if (!visited.has(`${jx},${jy}`)) queue.push({x: jx, y: jy, dist: current.dist + 1});
                 } else {
                     const sideDirs = dir.dx === 0 ? [{dx: 1, dy: 0}, {dx: -1, dy: 0}] : [{dx: 0, dy: 1}, {
-                        dx: 0,
-                        dy: -1
+                        dx: 0, dy: -1
                     }];
                     for (const sd of sideDirs) {
                         const sx = nx + sd.dx, sy = ny + sd.dy;
@@ -229,11 +239,9 @@ function getShortestPath(player, testPawns, testFences) {
         if (visited.has(key)) continue;
         visited.add(key);
         if (current.y === goalY) return current.path;
-        const directions = [
-            {dx: 0, dy: player === 1 ? 1 : -1},
-            {dx: 1, dy: 0}, {dx: -1, dy: 0},
-            {dx: 0, dy: player === 1 ? -1 : 1}
-        ];
+        const directions = [{dx: 0, dy: player === 1 ? 1 : -1}, {dx: 1, dy: 0}, {dx: -1, dy: 0}, {
+            dx: 0, dy: player === 1 ? -1 : 1
+        }];
         for (const dir of directions) {
             const nx = current.x + dir.dx, ny = current.y + dir.dy;
             if (nx < 0 || nx >= 9 || ny < 0 || ny >= 9) continue;
@@ -242,22 +250,17 @@ function getShortestPath(player, testPawns, testFences) {
                 const jx = nx + dir.dx, jy = ny + dir.dy;
                 if (jx >= 0 && jx < 9 && jy >= 0 && jy < 9 && !isFenceBlockingTest(nx, ny, jx, jy, testFences)) {
                     if (!visited.has(`${jx},${jy}`)) queue.push({
-                        x: jx,
-                        y: jy,
-                        path: [...current.path, {x: jx, y: jy}]
+                        x: jx, y: jy, path: [...current.path, {x: jx, y: jy}]
                     });
                 } else {
                     const sideDirs = dir.dx === 0 ? [{dx: 1, dy: 0}, {dx: -1, dy: 0}] : [{dx: 0, dy: 1}, {
-                        dx: 0,
-                        dy: -1
+                        dx: 0, dy: -1
                     }];
                     for (const sd of sideDirs) {
                         const sx = nx + sd.dx, sy = ny + sd.dy;
                         if (sx >= 0 && sx < 9 && sy >= 0 && sy < 9 && !isFenceBlockingTest(nx, ny, sx, sy, testFences)) {
                             if (!visited.has(`${sx},${sy}`)) queue.push({
-                                x: sx,
-                                y: sy,
-                                path: [...current.path, {x: sx, y: sy}]
+                                x: sx, y: sy, path: [...current.path, {x: sx, y: sy}]
                             });
                         }
                     }
@@ -684,12 +687,10 @@ function createEasyAI(numSimulations, uctConst) {
             c.winner = g.winner === null ? null : c.board.pawns[g.winner.index];
             c._turn = g._turn;
             c.validNextWalls = {
-                horizontal: clone2D(g.validNextWalls.horizontal),
-                vertical: clone2D(g.validNextWalls.vertical)
+                horizontal: clone2D(g.validNextWalls.horizontal), vertical: clone2D(g.validNextWalls.vertical)
             };
             c._probableNextWalls = {
-                horizontal: clone2D(g._probableNextWalls.horizontal),
-                vertical: clone2D(g._probableNextWalls.vertical)
+                horizontal: clone2D(g._probableNextWalls.horizontal), vertical: clone2D(g._probableNextWalls.vertical)
             };
             c._probableValidNextWalls = null;
             c._probableValidNextWallsUpdated = false;
@@ -980,10 +981,7 @@ function createEasyAI(numSimulations, uctConst) {
         if (sg.winner !== null) node.isTerminal = true;
 
         const cache = [{updated: false, prev: null, next: null, distanceToGoal: null}, {
-            updated: false,
-            prev: null,
-            next: null,
-            distanceToGoal: null
+            updated: false, prev: null, next: null, distanceToGoal: null
         }];
         let pawnMoveFlag = false;
 
@@ -1184,33 +1182,21 @@ function createGoodAI() {
             const nearPath = pathCells.has(`${x},${y}`) || pathCells.has(`${x + 1},${y}`) || pathCells.has(`${x},${y + 1}`) || pathCells.has(`${x + 1},${y + 1}`);
             if (nearPath) {
                 for (const ori of ['h', 'v']) if (canPlaceFenceTest(x, y, ori, testFences, testPawns)) moves.push({
-                    type: 'fence',
-                    x,
-                    y,
-                    orientation: ori,
-                    priority: 1
+                    type: 'fence', x, y, orientation: ori, priority: 1
                 });
             }
         }
         for (let x = Math.max(0, oppPos.x - 2); x <= Math.min(7, oppPos.x + 2); x++) for (let y = Math.max(0, oppPos.y - 2); y <= Math.min(7, oppPos.y + 2); y++) {
             for (const ori of ['h', 'v']) {
                 if (canPlaceFenceTest(x, y, ori, testFences, testPawns) && !moves.some(m => m.x === x && m.y === y && m.orientation === ori)) moves.push({
-                    type: 'fence',
-                    x,
-                    y,
-                    orientation: ori,
-                    priority: 2
+                    type: 'fence', x, y, orientation: ori, priority: 2
                 });
             }
         }
         const oppGoalY = opp === 1 ? 7 : 0;
         for (let x = 0; x <= 7; x++) for (const ori of ['h', 'v']) {
             if (canPlaceFenceTest(x, oppGoalY, ori, testFences, testPawns) && !moves.some(m => m.x === x && m.y === oppGoalY && m.orientation === ori)) moves.push({
-                type: 'fence',
-                x,
-                y: oppGoalY,
-                orientation: ori,
-                priority: 3
+                type: 'fence', x, y: oppGoalY, orientation: ori, priority: 3
             });
         }
         moves.sort((a, b) => a.priority - b.priority);
@@ -1277,8 +1263,7 @@ function createGoodAI() {
     return {
         findBestMove: function (player, inputPawns, inputFences, inputFenceCounts, inputPositionHistory) {
             const testPawns = inputPawns ? {1: {...inputPawns[1]}, 2: {...inputPawns[2]}} : {
-                1: {...pawns[1]},
-                2: {...pawns[2]}
+                1: {...pawns[1]}, 2: {...pawns[2]}
             };
             const testFences = inputFences ? [...inputFences] : [...placedFences];
             const testFencesCounts = inputFenceCounts ? {...inputFenceCounts} : {...fences};
@@ -1291,9 +1276,7 @@ function createGoodAI() {
             const shortestPath = getShortestPath(player, testPawns, testFences);
             const nextPathCell = shortestPath && shortestPath.length > 1 ? shortestPath[1] : null;
             if (testFencesCounts[player] <= 0 && shortestPath && shortestPath.length > 1) return {
-                type: 'move',
-                x: shortestPath[1].x,
-                y: shortestPath[1].y
+                type: 'move', x: shortestPath[1].x, y: shortestPath[1].y
             };
 
             const w = (typeof aiWeightVariance !== 'undefined') ? aiWeightVariance : {};
@@ -1359,8 +1342,7 @@ function createGoodAI() {
                 let c2 = c.filter(m => !m.isBackward);
                 if (c2.length > 0) c = c2;
                 const pm = c.filter(m => m.isOnPath);
-                if (pm.length > 0) bestMove = pm[0].move;
-                else {
+                if (pm.length > 0) bestMove = pm[0].move; else {
                     c.sort((a, b) => a.distToGoal !== b.distToGoal ? a.distToGoal - b.distToGoal : (testPawns[player].x <= 4 ? a.move.x - b.move.x : b.move.x - a.move.x));
                     bestMove = c[0].move;
                 }
@@ -1650,14 +1632,12 @@ function createHardAI() {
             if (nx === op.x && ny === op.y) {
                 const jx = nx + dx, jy = ny + dy;
                 if (jx >= 0 && jx < 9 && jy >= 0 && jy < 9 && !fenceBlocking(nx, ny, jx, jy, tf)) moves.push({
-                    x: jx,
-                    y: jy
+                    x: jx, y: jy
                 }); else {
                     for (const [sdx, sdy] of (dx === 0 ? [[1, 0], [-1, 0]] : [[0, 1], [0, -1]])) {
                         const sx = nx + sdx, sy = ny + sdy;
                         if (sx >= 0 && sx < 9 && sy >= 0 && sy < 9 && !fenceBlocking(nx, ny, sx, sy, tf)) moves.push({
-                            x: sx,
-                            y: sy
+                            x: sx, y: sy
                         });
                     }
                 }
@@ -1745,12 +1725,7 @@ function createHardAI() {
                 mg = player === 1 ? 8 : 0, ma = shortestDist(tp[player].x, tp[player].y, mg, nf),
                 mb = shortestDist(tp[player].x, tp[player].y, mg, tf);
             candidates.push({
-                type: 'fence',
-                x,
-                y,
-                orientation: ori,
-                priority: pri,
-                impact: (oa - ob) - (ma - mb) * 0.7
+                type: 'fence', x, y, orientation: ori, priority: pri, impact: (oa - ob) - (ma - mb) * 0.7
             });
         }
 
@@ -1978,10 +1953,7 @@ function createHardAI() {
                         if (nr.length > 0) bestMove = {type: 'move', x: nr[0].x, y: nr[0].y}; else if (fc[player] > 0) {
                             const fM = genFenceMoves(player, tp, tf, fc);
                             if (fM.length > 0 && fM[0].impact > 0) bestMove = {
-                                type: 'fence',
-                                x: fM[0].x,
-                                y: fM[0].y,
-                                orientation: fM[0].orientation
+                                type: 'fence', x: fM[0].x, y: fM[0].y, orientation: fM[0].orientation
                             };
                         }
                     }
