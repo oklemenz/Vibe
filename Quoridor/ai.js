@@ -277,6 +277,17 @@ function cancelPendingCalculations() {
 
 // Start AI calculation - uses worker if available, otherwise sync fallback
 function startAICalculation() {
+    // Shortcut: if AI has no fences, just follow shortest path (skip expensive search)
+    const shortcut = noFencesShortestPathMove(aiPlayer);
+    if (shortcut) {
+        setTimeout(() => {
+            aiThinking = false;
+            hideAIThinkingIndicator();
+            executeAIMove(shortcut);
+        }, 50);
+        return;
+    }
+
     // Use MCTS AI for this game?
     if (useMCTSAI) {
         setTimeout(() => {
@@ -370,9 +381,11 @@ function startAssistCalculation() {
 // Get shortest path distance for a player
 function getShortestPathDistance(player, testPawns, testFences) {
     const goalY = player === 1 ? 8 : 0;
+    const opponent = player === 1 ? 2 : 1;
+    const oppPos = testPawns[opponent];
     const start = {x: testPawns[player].x, y: testPawns[player].y};
     const visited = new Set();
-    const queue = [{...start, dist: 0}];
+    const queue = [{x: start.x, y: start.y, dist: 0}];
 
     while (queue.length > 0) {
         const current = queue.shift();
@@ -389,8 +402,39 @@ function getShortestPathDistance(player, testPawns, testFences) {
             const newX = current.x + dir.dx;
             const newY = current.y + dir.dy;
 
-            if (newX >= 0 && newX < BOARD_SIZE && newY >= 0 && newY < BOARD_SIZE && !isFenceBlockingTest(current.x, current.y, newX, newY, testFences)) {
-                queue.push({x: newX, y: newY, dist: current.dist + 1});
+            if (newX < 0 || newX >= BOARD_SIZE || newY < 0 || newY >= BOARD_SIZE) continue;
+            if (isFenceBlockingTest(current.x, current.y, newX, newY, testFences)) continue;
+
+            // Check if opponent is on the target cell
+            if (newX === oppPos.x && newY === oppPos.y) {
+                // Try to jump straight over the opponent
+                const jumpX = newX + dir.dx;
+                const jumpY = newY + dir.dy;
+                if (jumpX >= 0 && jumpX < BOARD_SIZE && jumpY >= 0 && jumpY < BOARD_SIZE &&
+                    !isFenceBlockingTest(newX, newY, jumpX, jumpY, testFences)) {
+                    if (!visited.has(`${jumpX},${jumpY}`)) {
+                        queue.push({x: jumpX, y: jumpY, dist: current.dist + 1});
+                    }
+                } else {
+                    // Can't jump straight, try diagonal (side jumps)
+                    const sideDirs = dir.dx === 0
+                        ? [{dx: 1, dy: 0}, {dx: -1, dy: 0}]
+                        : [{dx: 0, dy: 1}, {dx: 0, dy: -1}];
+                    for (const sideDir of sideDirs) {
+                        const sideX = newX + sideDir.dx;
+                        const sideY = newY + sideDir.dy;
+                        if (sideX >= 0 && sideX < BOARD_SIZE && sideY >= 0 && sideY < BOARD_SIZE &&
+                            !isFenceBlockingTest(newX, newY, sideX, sideY, testFences)) {
+                            if (!visited.has(`${sideX},${sideY}`)) {
+                                queue.push({x: sideX, y: sideY, dist: current.dist + 1});
+                            }
+                        }
+                    }
+                }
+            } else {
+                if (!visited.has(`${newX},${newY}`)) {
+                    queue.push({x: newX, y: newY, dist: current.dist + 1});
+                }
             }
         }
     }
@@ -545,12 +589,13 @@ function countOpenSidesToGoal(x, y, player, testFences) {
 }
 
 // Check if the player has a clear, straight-line path to the goal
-// (path distance equals vertical distance — no detour needed)
+// (path distance is at most vertical distance — no detour needed;
+//  jumps over the opponent can make it shorter than vertical distance)
 function isPathClear(player, testPawns, testFences) {
     const playerDist = getShortestPathDistance(player, testPawns, testFences);
     const goalY = player === 1 ? 8 : 0;
     const verticalDist = Math.abs(testPawns[player].y - goalY);
-    return playerDist === verticalDist && verticalDist > 0;
+    return playerDist <= verticalDist && verticalDist > 0;
 }
 
 // Evaluate board state for a specific player (positive = good for player, negative = good for opponent)
@@ -638,12 +683,14 @@ function evaluateStateForPlayer(player, testPawns, testFences, testFencesCounts)
     return score;
 }
 
-// Get the shortest path as an array of cells
+// Get the shortest path as an array of cells (accounts for opponent blocking & jumps)
 function getShortestPath(player, testPawns, testFences) {
     const goalY = player === 1 ? 8 : 0;
+    const opponent = player === 1 ? 2 : 1;
+    const oppPos = testPawns[opponent];
     const start = {x: testPawns[player].x, y: testPawns[player].y};
     const visited = new Set();
-    const queue = [{...start, path: [start]}];
+    const queue = [{x: start.x, y: start.y, path: [start]}];
 
     while (queue.length > 0) {
         const current = queue.shift();
@@ -654,15 +701,50 @@ function getShortestPath(player, testPawns, testFences) {
 
         if (current.y === goalY) return current.path;
 
-        const directions = [{dx: 0, dy: player === 1 ? 1 : -1}, // Towards goal first
-            {dx: 1, dy: 0}, {dx: -1, dy: 0}, {dx: 0, dy: player === 1 ? -1 : 1}];
+        // Use the same movement logic as getValidMovesTest (including jumps)
+        const directions = [
+            {dx: 0, dy: player === 1 ? 1 : -1}, // Towards goal first
+            {dx: 1, dy: 0}, {dx: -1, dy: 0},
+            {dx: 0, dy: player === 1 ? -1 : 1}   // Away from goal last
+        ];
 
         for (const dir of directions) {
             const newX = current.x + dir.dx;
             const newY = current.y + dir.dy;
 
-            if (newX >= 0 && newX < BOARD_SIZE && newY >= 0 && newY < BOARD_SIZE && !isFenceBlockingTest(current.x, current.y, newX, newY, testFences)) {
-                queue.push({x: newX, y: newY, path: [...current.path, {x: newX, y: newY}]});
+            if (newX < 0 || newX >= BOARD_SIZE || newY < 0 || newY >= BOARD_SIZE) continue;
+            if (isFenceBlockingTest(current.x, current.y, newX, newY, testFences)) continue;
+
+            // Check if opponent is on the target cell
+            if (newX === oppPos.x && newY === oppPos.y) {
+                // Try to jump straight over the opponent
+                const jumpX = newX + dir.dx;
+                const jumpY = newY + dir.dy;
+                if (jumpX >= 0 && jumpX < BOARD_SIZE && jumpY >= 0 && jumpY < BOARD_SIZE &&
+                    !isFenceBlockingTest(newX, newY, jumpX, jumpY, testFences)) {
+                    if (!visited.has(`${jumpX},${jumpY}`)) {
+                        queue.push({x: jumpX, y: jumpY, path: [...current.path, {x: jumpX, y: jumpY}]});
+                    }
+                } else {
+                    // Can't jump straight, try diagonal (side jumps)
+                    const sideDirs = dir.dx === 0
+                        ? [{dx: 1, dy: 0}, {dx: -1, dy: 0}]
+                        : [{dx: 0, dy: 1}, {dx: 0, dy: -1}];
+                    for (const sideDir of sideDirs) {
+                        const sideX = newX + sideDir.dx;
+                        const sideY = newY + sideDir.dy;
+                        if (sideX >= 0 && sideX < BOARD_SIZE && sideY >= 0 && sideY < BOARD_SIZE &&
+                            !isFenceBlockingTest(newX, newY, sideX, sideY, testFences)) {
+                            if (!visited.has(`${sideX},${sideY}`)) {
+                                queue.push({x: sideX, y: sideY, path: [...current.path, {x: sideX, y: sideY}]});
+                            }
+                        }
+                    }
+                }
+            } else {
+                if (!visited.has(`${newX},${newY}`)) {
+                    queue.push({x: newX, y: newY, path: [...current.path, {x: newX, y: newY}]});
+                }
             }
         }
     }
@@ -928,6 +1010,13 @@ function findBestMoveForPlayer(player, inputPawns, inputFences, inputFenceCounts
     // Get the shortest path to use for tie-breaking
     const shortestPath = getShortestPath(player, testPawns, testFences);
     const nextPathCell = shortestPath && shortestPath.length > 1 ? shortestPath[1] : null;
+
+    // If the AI has no fences left, simply follow the shortest path to the goal.
+    // With 0 fences, the only action is moving — shortest path is always optimal.
+    if (testFencesCounts[player] <= 0 && shortestPath && shortestPath.length > 1) {
+        const next = shortestPath[1];
+        return {type: 'move', x: next.x, y: next.y};
+    }
 
     // Evaluate pawn moves
     const moveMoves = getValidMovesTest(player, testPawns, testFences);
@@ -2365,14 +2454,27 @@ function initMCTSAssist(numSimulations = 1000, uctConst = 1.41) {
     mctsAssist = new MCTSAI(numSimulations, uctConst);
 }
 
+// Shortcut: if the player has no fences, just follow the shortest path
+function noFencesShortestPathMove(player) {
+    if (fences[player] > 0) return null;
+    const path = getShortestPath(player, pawns, placedFences);
+    if (!path || path.length < 2) return null;
+    // With 0 fences, the only action is moving — shortest path is always optimal
+    return {type: 'move', x: path[1].x, y: path[1].y};
+}
+
 // Find best move using MCTS AI (opponent)
 function findBestMoveMCTS(player) {
+    const shortcut = noFencesShortestPathMove(player);
+    if (shortcut) return shortcut;
     if (!mctsAI) initMCTSAI();
     return mctsAI.chooseNextMove(pawns, placedFences, fences, player);
 }
 
 // Find best move using MCTS Assist (separate instance)
 function findBestMoveMCTSAssist(player) {
+    const shortcut = noFencesShortestPathMove(player);
+    if (shortcut) return shortcut;
     if (!mctsAssist) initMCTSAssist();
     return mctsAssist.chooseNextMove(pawns, placedFences, fences, player);
 }
