@@ -585,7 +585,7 @@ body {
     gap: 5px;
 }
 
-#game-info-btn, #controls-btn, #ai-btn, #rules-btn, #assist-btn, #restart-game-btn, #view-btn {
+#game-info-btn, #controls-btn, #ai-btn, #rules-btn, #assist-btn, #undo-btn, #restart-game-btn, #view-btn {
     background: rgba(0, 0, 0, 0.7);
     color: white;
     border: none;
@@ -598,7 +598,7 @@ body {
     text-align: left;
 }
 
-#game-info-btn:hover, #controls-btn:hover, #ai-btn:hover, #rules-btn:hover, #assist-btn:hover, #restart-game-btn:hover, #view-btn:hover {
+#game-info-btn:hover, #controls-btn:hover, #ai-btn:hover, #rules-btn:hover, #assist-btn:hover, #undo-btn:hover, #restart-game-btn:hover, #view-btn:hover {
     background: rgba(0, 0, 0, 0.9);
 }
 
@@ -625,6 +625,30 @@ body {
 
 #assist-btn.active:hover {
     background: #d68910;
+}
+
+#undo-btn.active {
+    background: #C05530;
+}
+
+#undo-btn.active:hover {
+    background: #A84525;
+}
+
+#rules-btn.active {
+    background: #008080;
+}
+
+#rules-btn.active:hover {
+    background: #006d6d;
+}
+
+#restart-game-btn.active {
+    background: #7d3c98;
+}
+
+#restart-game-btn.active:hover {
+    background: #6c3483;
 }
 
 #view-btn.active {
@@ -769,6 +793,11 @@ body {
     display: flex;
     gap: 15px;
     justify-content: center;
+}
+
+.confirm-buttons button {
+    flex: 1;
+    min-width: 125px;
 }
 
 #confirm-restart-first {

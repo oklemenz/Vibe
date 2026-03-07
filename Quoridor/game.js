@@ -73,6 +73,9 @@ let pawns = {
 let placedFences = []; // { x, y, orientation: 'h' | 'v' }
 let gameOver = false;
 
+// Undo history stack - each entry stores the full state before a move
+let undoHistory = [];
+
 // Position history to prevent back-and-forth movement
 let positionHistory = {
     1: [{x: 4, y: 0}],  // Player 1 starts at y=0
@@ -493,6 +496,8 @@ function init() {
     // AI toggle button
     document.getElementById('ai-btn').addEventListener('click', toggleAI);
 
+    // Undo button
+    document.getElementById('undo-btn').addEventListener('click', undoLastMove);
 
     // Assist toggle button
     document.getElementById('assist-btn').addEventListener('click', toggleAssist);
@@ -505,6 +510,9 @@ function init() {
 
     // Apply loaded settings to UI
     applyLoadedSettings();
+
+    // Update dialog button labels based on AI state
+    updateDialogButtonLabels();
 
     // Initialize UI state (including fence panel transparency)
     updateUI();
@@ -1122,12 +1130,19 @@ function setupDragAndDrop() {
         // Try to place fence at current position
         const boardPos = getBoardPositionFromMouse(clientX, clientY);
 
-        if (boardPos && placeFence(boardPos.x, boardPos.y, dragOrientation)) {
-            // Cancel any pending AI/Assist calculations
-            cancelPendingCalculations();
+        if (boardPos) {
+            saveStateForUndo();
+            if (placeFence(boardPos.x, boardPos.y, dragOrientation)) {
+                // Cancel any pending AI/Assist calculations
+                cancelPendingCalculations();
 
-            if (!checkWin()) {
-                switchPlayer();
+                if (!checkWin()) {
+                    switchPlayer();
+                }
+            } else {
+                // Fence placement failed, remove saved state
+                undoHistory.pop();
+                updateUndoButton();
             }
         }
 
@@ -1290,6 +1305,7 @@ function onClick(event) {
         // Cancel any pending AI/Assist calculations
         cancelPendingCalculations();
 
+        saveStateForUndo();
         if (movePawn(target.x, target.y)) {
             if (!checkWin()) {
                 switchPlayer();
@@ -1424,6 +1440,7 @@ function onTouchEnd(event) {
         // Cancel any pending AI/Assist calculations
         cancelPendingCalculations();
 
+        saveStateForUndo();
         if (movePawn(target.x, target.y)) {
             if (!checkWin()) {
                 switchPlayer();
@@ -1457,6 +1474,7 @@ function onTouchEnd(event) {
             // Cancel any pending AI/Assist calculations
             cancelPendingCalculations();
 
+            saveStateForUndo();
             if (movePawn(validMove.x, validMove.y)) {
                 if (!checkWin()) {
                     switchPlayer();
@@ -1493,6 +1511,142 @@ function rotateCurrentFence() {
     updateDragPreview3D(lastDragX, lastDragY);
 }
 
+// ==================== UNDO ====================
+
+function updateUndoButton() {
+    const btn = document.getElementById('undo-btn');
+    const steps = countUndoSteps();
+    if (steps > 0) {
+        btn.classList.add('active');
+        btn.textContent = '↩️ Undo (' + steps + ')';
+    } else {
+        btn.classList.remove('active');
+        btn.textContent = '↩️ Undo';
+    }
+}
+
+function countUndoSteps() {
+    if (undoHistory.length === 0) return 0;
+    if (!aiEnabled) return undoHistory.length;
+    // With AI: count how many undo-click groups exist
+    // Each group is: one human move (+ any preceding AI moves that get undone with it)
+    let steps = 0;
+    let i = undoHistory.length - 1;
+    while (i >= 0) {
+        // If top entry is an AI move, skip over consecutive AI moves
+        while (i >= 0 && undoHistory[i].movedBy === aiPlayer) {
+            i--;
+        }
+        // Now we're either at a human move or exhausted the stack
+        if (i >= 0) {
+            // Human move found — this is one undo click
+            steps++;
+            i--;
+        } else {
+            // Only AI moves left (AI started first) — that's one more undo click (fresh board)
+            steps++;
+        }
+    }
+    return steps;
+}
+
+function saveStateForUndo() {
+    undoHistory.push({
+        currentPlayer: currentPlayer,
+        movedBy: currentPlayer,
+        fences: {1: fences[1], 2: fences[2]},
+        pawns: {1: {...pawns[1]}, 2: {...pawns[2]}},
+        placedFences: placedFences.map(f => ({...f})),
+        positionHistory: {
+            1: positionHistory[1].map(p => ({...p})), 2: positionHistory[2].map(p => ({...p}))
+        },
+        gameOver: gameOver,
+        fenceMeshCount: fencesGroup.children.length
+    });
+    updateUndoButton();
+}
+
+function applyUndoState(state) {
+    currentPlayer = state.currentPlayer;
+    fences = state.fences;
+    pawns = state.pawns;
+    placedFences = state.placedFences;
+    positionHistory = state.positionHistory;
+    gameOver = state.gameOver;
+
+    // Remove fence meshes that were added after this state
+    while (fencesGroup.children.length > state.fenceMeshCount) {
+        fencesGroup.remove(fencesGroup.children[fencesGroup.children.length - 1]);
+    }
+}
+
+function undoLastMove() {
+    if (undoHistory.length === 0) return;
+
+    // Cancel any pending AI/Assist calculations
+    cancelPendingCalculations();
+
+    if (aiEnabled) {
+        // With AI active: undo back to the last human move.
+        // If the last entry is an AI move, undo it first, then undo the human move too.
+        // If the last entry is a human move, just undo that one.
+        // Keep undoing AI moves until we hit a human move or the stack is empty.
+        let state = undoHistory.pop();
+        const isAI = (player) => player === aiPlayer;
+
+        if (isAI(state.movedBy)) {
+            // Last move was AI — keep undoing until we also undo the preceding human move
+            applyUndoState(state);
+            if (undoHistory.length > 0) {
+                // Check if next entry is also AI (shouldn't normally happen, but handle it)
+                // Keep popping AI moves, then pop the human move
+                while (undoHistory.length > 0 && isAI(undoHistory[undoHistory.length - 1].movedBy)) {
+                    state = undoHistory.pop();
+                    applyUndoState(state);
+                }
+                // Now pop the human move
+                if (undoHistory.length > 0) {
+                    state = undoHistory.pop();
+                    applyUndoState(state);
+                }
+            }
+            // If no human move was found (AI started first), we've undone to a fresh board
+        } else {
+            // Last move was human — undo just this one
+            applyUndoState(state);
+        }
+    } else {
+        // Without AI: undo just one move
+        const state = undoHistory.pop();
+        applyUndoState(state);
+    }
+
+    // Update visuals
+    updatePawnPositions();
+    updateUI();
+    updateValidMoves();
+    updateFencePanelState();
+    clearAssistProposal();
+    updateUndoButton();
+
+    // Hide winner modal in case we're undoing a winning move
+    document.getElementById('winner-modal').style.display = 'none';
+
+    // If AI is enabled and it's AI's turn (e.g. AI starts the game), trigger AI
+    if (aiEnabled && currentPlayer === aiPlayer && !gameOver && !aiThinking) {
+        aiThinking = true;
+        showAIThinkingIndicator();
+        startAICalculation();
+    } else if (assistEnabled && !gameOver) {
+        // If assist is enabled and it's a human player's turn, show assist
+        if (currentPlayer === 1 || (currentPlayer === 2 && !aiEnabled)) {
+            setTimeout(() => {
+                showAssistProposal();
+            }, 100);
+        }
+    }
+}
+
 function restartGame(startingPlayer) {
     // Reset game state
     currentPlayer = startingPlayer || 1;
@@ -1504,6 +1658,9 @@ function restartGame(startingPlayer) {
     isDragging = false;
     gameOver = false;
     aiThinking = false;
+    // Reset undo history
+    undoHistory = [];
+    updateUndoButton();
     // Reset position history
     positionHistory = {
         1: [{x: 4, y: 0}], 2: [{x: 4, y: 8}]
@@ -1558,6 +1715,20 @@ function animate() {
 
 // ==================== AI IMPLEMENTATION ====================
 
+
+function updateDialogButtonLabels() {
+    const secondLabel = aiEnabled ? 'AI' : 'Player 2';
+    // Winner modal buttons
+    const winnerFirst = document.getElementById('winner-restart-first');
+    const winnerSecond = document.getElementById('winner-restart-second');
+    if (winnerFirst) winnerFirst.textContent = 'Player 1';
+    if (winnerSecond) winnerSecond.textContent = secondLabel;
+    // Restart modal buttons
+    const restartFirst = document.getElementById('confirm-restart-first');
+    const restartSecond = document.getElementById('confirm-restart-second');
+    if (restartFirst) restartFirst.textContent = 'Player 1';
+    if (restartSecond) restartSecond.textContent = secondLabel;
+}
 
 function toggleAI() {
     // Cycle: Off → Easy → Good → Hard → Off
@@ -1640,6 +1811,12 @@ function toggleAI() {
     // Update UI to reflect changes (fence panel state, valid moves)
     updateFencePanelState();
     updateValidMoves();
+
+    // Recount undo steps (AI moves count differently when AI is on vs off)
+    updateUndoButton();
+
+    // Update dialog button labels
+    updateDialogButtonLabels();
 
     // Update layout class for player 2 rotation
     updateMobileLayoutClass();

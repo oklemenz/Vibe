@@ -43,6 +43,7 @@
             <button id="view-btn">👁️ 3D View</button>
             <button id="ai-btn">🤖 AI</button>
             <button id="assist-btn">🎓 Assist</button>
+            <button id="undo-btn">↩️ Undo</button>
             <button id="restart-game-btn">🔄 Restart</button>
             <button id="rules-btn">📖 Rules</button>
         </div>
@@ -108,10 +109,10 @@
     <div id="winner-content">
         <button id="winner-close-btn" class="modal-close-btn">✕</button>
         <h2 id="winner-text">🔴 Player 1 Wins!</h2>
-        <p id="winner-subtitle">Start a new game — who moves first?</p>
+        <p id="winner-subtitle">New game — who starts first?</p>
         <div class="confirm-buttons">
-            <button id="winner-restart-first">Move First</button>
-            <button id="winner-restart-second">Move Second</button>
+            <button id="winner-restart-first">Player 1</button>
+            <button id="winner-restart-second">Player 2</button>
         </div>
     </div>
 </div>
@@ -121,10 +122,10 @@
     <div id="confirm-restart-content">
         <button id="confirm-restart-close" class="modal-close-btn">✕</button>
         <h2>🔄 Restart Game</h2>
-        <p>Start a new game — who moves first?</p>
+        <p>Who starts first?</p>
         <div class="confirm-buttons">
-            <button id="confirm-restart-first">Move First</button>
-            <button id="confirm-restart-second">Move Second</button>
+            <button id="confirm-restart-first">Player 1</button>
+            <button id="confirm-restart-second">Player 2</button>
         </div>
     </div>
 </div>
@@ -227,10 +228,12 @@
     restartGameBtn.addEventListener('click', function () {
         // If game is already over, show dialog for next game
         confirmRestartModal.classList.add('visible');
+        restartGameBtn.classList.add('active');
     });
 
     confirmRestartFirst.addEventListener('click', function () {
         confirmRestartModal.classList.remove('visible');
+        restartGameBtn.classList.remove('active');
         if (typeof restartGame === 'function') {
             restartGame(1);
         }
@@ -238,6 +241,7 @@
 
     confirmRestartSecond.addEventListener('click', function () {
         confirmRestartModal.classList.remove('visible');
+        restartGameBtn.classList.remove('active');
         if (typeof restartGame === 'function') {
             restartGame(2);
         }
@@ -245,12 +249,14 @@
 
     confirmRestartClose.addEventListener('click', function () {
         confirmRestartModal.classList.remove('visible');
+        restartGameBtn.classList.remove('active');
     });
 
     // Close modal when clicking outside
     confirmRestartModal.addEventListener('click', function (e) {
         if (e.target === confirmRestartModal) {
             confirmRestartModal.classList.remove('visible');
+            restartGameBtn.classList.remove('active');
         }
     });
 
@@ -267,6 +273,7 @@
         e.stopPropagation();
         e.preventDefault();
         introModal.classList.add('hidden');
+        rulesBtn.classList.remove('active');
 
         // Mark intro as shown in Local Storage
         if (typeof markIntroAsShown === 'function') {
@@ -285,16 +292,15 @@
         e.stopPropagation();
         // Zeige Intro-Modal
         introModal.classList.remove('hidden');
+        rulesBtn.classList.add('active');
     });
 
     // Remove loading class to show UI after everything is initialized and rendered
     // Use double requestAnimationFrame + small delay to ensure all layouts are complete
     requestAnimationFrame(function () {
-        requestAnimationFrame(function () {
-            setTimeout(function () {
-                document.body.classList.remove('loading');
-            }, 50);
-        });
+        setTimeout(function () {
+            document.body.classList.remove('loading');
+        }, 50);
     });
 </script>
 </body>

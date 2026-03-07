@@ -1664,11 +1664,49 @@ function createHardAI() {
         if (oppTD <= oppV && oppV > 0) s -= 80;
         s += (Math.abs(tp[opp].x - 4) - Math.abs(tp[player].x - 4)) * 5;
         const mf = fc[player], of2 = fc[opp];
+
+        // --- Enhanced fence conservation logic ---
+        // Game phase: how many total fences have been placed (0=early, 20=all placed)
+        const totalFencesPlaced = (10 - mf) + (10 - of2);
+        const gamePhase = totalFencesPlaced / 20; // 0.0 = start, 1.0 = all fences used
+
+        // Base fence difference advantage (scales up as game progresses)
+        const fenceDiffWeight = 3 + gamePhase * 12;
+        s += (mf - of2) * fenceDiffWeight;
+
+        // Defensive value of having fences when opponent is approaching
         if (oppD <= 4 && mf > 0) s += mf * 8;
         if (myD <= 4 && of2 > 0) s -= of2 * 8;
-        if (mf === 0 && of2 >= 4) s -= 30;
-        if (of2 === 0 && mf >= 4) s += 30;
-        s += (mf - of2) * 3;
+
+        // CRITICAL: Heavy penalty for running out of fences while opponent has many
+        // This is the key fix — having 0 fences vs opponent with fences is catastrophic
+        if (mf === 0 && of2 > 0) {
+            // Scale penalty by how many fences opponent has — more fences = more danger
+            s -= 40 + of2 * 20;
+            // Extra penalty if opponent is not yet close to goal (they can build corridors)
+            if (oppD > 3) s -= of2 * 15;
+        }
+        if (of2 === 0 && mf > 0) {
+            s += 40 + mf * 20;
+            if (myD > 3) s += mf * 15;
+        }
+
+        // Fence reserve bonus: reward keeping fences in reserve (diminishing returns for spending)
+        // Having 3+ fences in reserve is strategically valuable as insurance
+        if (mf >= 3) s += 15 + (mf - 3) * 5;
+        if (of2 >= 3) s -= 15 + (of2 - 3) * 5;
+
+        // Vulnerability: penalize if we have few fences AND opponent has corridor-building potential
+        // (opponent has fences and is not yet near goal — they can redirect us)
+        if (mf <= 2 && of2 >= 3 && myD > 3) {
+            s -= (of2 - mf) * 25;
+        }
+        if (of2 <= 2 && mf >= 3 && oppD > 3) {
+            s += (mf - of2) * 25;
+        }
+
+        // --- End of enhanced fence logic ---
+
         if (myD <= 4) {
             const px = tp[player].x, py = tp[player].y, fy = player === 1 ? py + 1 : py - 1;
             let os = 0;
@@ -1709,6 +1747,30 @@ function createHardAI() {
     function genFenceMoves(player, tp, tf, fc) {
         if (fc[player] <= 0) return [];
         const opp = player === 1 ? 2 : 1;
+
+        // Fence conservation: require minimum impact threshold based on remaining fences
+        // When AI has many fences left, threshold is low (place freely)
+        // When AI has few fences left, threshold is high (only place high-impact fences)
+        const myFences = fc[player], oppFences = fc[opp];
+        const oppGoalDist = shortestDistWithOpp(opp, tp, tf);
+        let minImpactThreshold = 0;
+        if (myFences <= 2) {
+            // Very few fences: only place if very high impact
+            minImpactThreshold = 3;
+        } else if (myFences <= 4) {
+            // Getting low: require decent impact
+            minImpactThreshold = 2;
+        } else if (myFences <= 6 && oppFences >= myFences) {
+            // Mid-game with opponent having equal or more fences: be somewhat careful
+            minImpactThreshold = 1;
+        }
+        // If opponent is very close to goal, lower the threshold (must block urgently)
+        if (oppGoalDist <= 3) {
+            minImpactThreshold = Math.max(0, minImpactThreshold - 2);
+        } else if (oppGoalDist <= 5) {
+            minImpactThreshold = Math.max(0, minImpactThreshold - 1);
+        }
+
         const oppPath = shortestPath(opp, tp, tf);
         const pathCells = new Set();
         if (oppPath) for (const c of oppPath) for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) pathCells.add(`${c.x + dx},${c.y + dy}`);
@@ -1745,10 +1807,14 @@ function createHardAI() {
             tryAdd(x, gr, 'v', 3);
         }
         candidates.sort((a, b) => b.impact !== a.impact ? b.impact - a.impact : a.priority - b.priority);
-        const filtered = candidates.filter(c => c.impact > 0).slice(0, 24);
-        if (filtered.length < 6) for (const c of candidates) {
-            if (filtered.length >= 8) break;
-            if (!filtered.some(f => f.x === c.x && f.y === c.y && f.orientation === c.orientation)) filtered.push(c);
+        // Apply conservation threshold: only include fences with sufficient impact
+        const filtered = candidates.filter(c => c.impact >= minImpactThreshold).slice(0, 24);
+        // If very few candidates pass the threshold, allow a small number of best ones
+        if (filtered.length < 4 && oppGoalDist <= 5) {
+            for (const c of candidates) {
+                if (filtered.length >= 6) break;
+                if (c.impact > 0 && !filtered.some(f => f.x === c.x && f.y === c.y && f.orientation === c.orientation)) filtered.push(c);
+            }
         }
         return filtered;
     }
@@ -2228,6 +2294,8 @@ function executeAIMove(bestMove) {
         console.error('AI could not find a valid move!');
         return;
     }
+
+    saveStateForUndo();
 
     if (bestMove.type === 'move') {
         pawns[aiPlayer] = {x: bestMove.x, y: bestMove.y};
