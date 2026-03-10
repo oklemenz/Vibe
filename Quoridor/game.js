@@ -1518,7 +1518,7 @@ function updateUndoButton() {
     const steps = countUndoSteps();
     if (steps > 0) {
         btn.classList.add('active');
-        btn.textContent = '↩️ Undo (' + steps + ')';
+        btn.textContent = '↩️ Undo ' + steps;
     } else {
         btn.classList.remove('active');
         btn.textContent = '↩️ Undo';
