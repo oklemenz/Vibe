@@ -221,14 +221,6 @@ body {
     margin-right: 20px;
 }
 
-#player1-fences {
-    color: #ff6b6b;
-}
-
-#player2-fences {
-    color: #4ecdc4;
-}
-
 /* Controls Section */
 #controls {
     background: rgba(0, 0, 0, 0.7);
@@ -347,7 +339,7 @@ body {
 }
 
 #winner-restart-first {
-    background: #6c5ce7;
+    background: #e63939;
     color: white;
     border: none;
     padding: 12px 30px;
@@ -359,12 +351,12 @@ body {
 }
 
 #winner-restart-first:hover {
-    background: #5a4bd1;
+    background: #cc2e2e;
     transform: scale(1.05);
 }
 
 #winner-restart-second {
-    background: #00b894;
+    background: #1aab9d;
     color: white;
     border: none;
     padding: 12px 30px;
@@ -376,7 +368,7 @@ body {
 }
 
 #winner-restart-second:hover {
-    background: #00a381;
+    background: #15968a;
     transform: scale(1.05);
 }
 
@@ -802,7 +794,7 @@ body {
 }
 
 #confirm-restart-first {
-    background: #6c5ce7;
+    background: #e63939;
     color: white;
     border: none;
     padding: 12px 30px;
@@ -814,12 +806,12 @@ body {
 }
 
 #confirm-restart-first:hover {
-    background: #5a4bd1;
+    background: #cc2e2e;
     transform: scale(1.05);
 }
 
 #confirm-restart-second {
-    background: #00b894;
+    background: #1aab9d;
     color: white;
     border: none;
     padding: 12px 30px;
@@ -831,7 +823,7 @@ body {
 }
 
 #confirm-restart-second:hover {
-    background: #00a381;
+    background: #15968a;
     transform: scale(1.05);
 }
 
