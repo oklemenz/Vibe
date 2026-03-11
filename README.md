@@ -16,3 +16,8 @@
 - Play: [Click to Start](https://oklemenz.github.io/Vibe/AutoWelt/index.html)
 - Source: [Directory](./AutoWelt)
 
+## Tic-Tac-Toe
+
+- Play: [Click to Start](https://oklemenz.github.io/Vibe/TicTacToe/index.html)
+- Source: [Directory](./TicTacToe)
+

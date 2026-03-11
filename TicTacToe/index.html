@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Tic Tac Toe</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+        }
+        #ui-overlay {
+            position: absolute;
+            top: max(10px, env(safe-area-inset-top));
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            color: white;
+            z-index: 100;
+            width: 90%;
+            max-width: 400px;
+        }
+        #status {
+            font-size: clamp(18px, 5vw, 28px);
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+            padding: 10px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+        }
+        #reset-btn {
+            padding: 14px 35px;
+            font-size: clamp(14px, 4vw, 18px);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #reset-btn:hover, #reset-btn:active {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.5);
+        }
+        #instructions {
+            position: absolute;
+            bottom: max(15px, env(safe-area-inset-bottom));
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255,255,255,0.6);
+            font-size: clamp(11px, 3vw, 14px);
+            width: 90%;
+            text-align: center;
+            padding: 8px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+        }
+
+        /* Landscape mobile adjustments */
+        @media (max-height: 500px) and (orientation: landscape) {
+            #ui-overlay {
+                top: 5px;
+                left: 10px;
+                transform: none;
+                width: auto;
+                text-align: left;
+            }
+            #status {
+                font-size: 16px;
+                padding: 6px 12px;
+                margin-bottom: 5px;
+                display: inline-block;
+            }
+            #reset-btn {
+                padding: 8px 20px;
+                font-size: 14px;
+            }
+            #instructions {
+                bottom: 5px;
+                right: 10px;
+                left: auto;
+                transform: none;
+                width: auto;
+                font-size: 11px;
+            }
+        }
+
+        /* Small mobile screens */
+        @media (max-width: 380px) {
+            #status {
+                font-size: 16px;
+            }
+            #reset-btn {
+                padding: 10px 25px;
+            }
+        }
+
+        /* Show/hide appropriate instructions */
+        .mobile-text { display: none; }
+        .desktop-text { display: inline; }
+
+        @media (hover: none) and (pointer: coarse) {
+            .mobile-text { display: inline; }
+            .desktop-text { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    <div id="ui-overlay">
+        <div id="status">Player X's Turn</div>
+        <button id="reset-btn">New Game</button>
+    </div>
+    <div id="instructions"><span class="desktop-text">Click on a cell to place your mark | Drag to rotate view</span><span class="mobile-text">Tap to place mark | Swipe to rotate</span></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
