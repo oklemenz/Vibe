@@ -1,0 +1,13 @@
+{
+    "name": "Flow Paths",
+    "short_name": "FlowPaths",
+    "description": "Flow Paths - A strategic arrow-placement board game",
+    "icons": [{
+        "src": "img/touch-icon-192.png",
+        "sizes": "192x192",
+        "type": "image/png"
+    }],
+    "display": "fullscreen",
+    "orientation": "any"
+}
+

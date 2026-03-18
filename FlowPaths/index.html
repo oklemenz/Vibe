@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, height=device-height, initial-scale=1.0, maximum-scale=1.0, user-scalable=0.0, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+    <meta name="apple-mobile-web-app-title" content="Flow Paths"/>
+    <link rel="icon" type="image/png" href="img/favicon.png"/>
+    <link rel="shortcut icon" type="image/png" href="img/touch-icon-152.png"/>
+    <link rel="apple-touch-icon" href="img/touch-icon-152.png"/>
+    <link rel="apple-touch-icon" sizes="152x152" href="img/touch-icon-152.png"/>
+    <link rel="apple-touch-icon" sizes="180x180" href="img/touch-icon-180.png"/>
+    <link rel="manifest" href="site.webmanifest"/>
+    <link rel="stylesheet" href="style/game.css">
+    <title>Flow Paths</title>
+    <style>
+        body.loading {
+            background: #1a1a2e;
+        }
+        body.loading > * {
+            visibility: hidden;
+            opacity: 0;
+        }
+    </style>
+</head>
+<body class="loading">
+
+<canvas id="game-canvas"></canvas>
+
+<!-- Drag preview that follows the pointer -->
+<div id="drag-preview"></div>
+
+<!-- Right side panel: players + arrows (toggleable) -->
+<div id="right-panel">
+    <button id="right-panel-toggle"></button>
+    <div id="right-panel-content">
+        <div id="hud-player2" class="hud-player">
+            <span class="hud-icon">🟢</span>
+            <span class="hud-name" id="p2-name">AI</span>
+            <span class="hud-arrows" id="p2-arrows">🏹 10 / 10</span>
+        </div>
+        <div class="panel-divider"></div>
+        <div id="arrow-tiles-tray">
+            <div class="arrow-tile-draggable" data-dir="up" title="Drag ⬆ arrow onto board">⬆</div>
+            <div class="arrow-tile-draggable" data-dir="down" title="Drag ⬇ arrow onto board">⬇</div>
+            <div class="arrow-tile-draggable" data-dir="left" title="Drag ⬅ arrow onto board">⬅</div>
+            <div class="arrow-tile-draggable" data-dir="right" title="Drag ➡ arrow onto board">➡</div>
+        </div>
+        <div class="panel-divider"></div>
+        <div id="hud-player1" class="hud-player active">
+            <span class="hud-icon">🔴</span>
+            <span class="hud-name">Player 1</span>
+            <span class="hud-arrows" id="p1-arrows">🏹 10 / 10</span>
+        </div>
+    </div>
+</div>
+
+<!-- Left side panel (toggleable) -->
+<div id="left-panel">
+    <div id="left-panel-content">
+        <button id="btn-view">👁️ 3D View</button>
+        <button id="btn-ai" class="active">🤖 AI On</button>
+        <button id="btn-assist">💡 Assist</button>
+        <button id="btn-undo" disabled>↩️ Undo</button>
+        <button id="btn-restart">🔄 Restart</button>
+        <button id="btn-rules">📖 Rules</button>
+    </div>
+    <button id="left-panel-toggle"></button>
+</div>
+
+<!-- Winner Modal -->
+<div id="winner-modal" class="modal hidden">
+    <div class="modal-content">
+        <button class="modal-close-btn" id="winner-close">✕</button>
+        <h2 id="winner-text">🎉 Player 1 Wins!</h2>
+        <p id="winner-subtitle">New game — who starts first?</p>
+        <div class="modal-buttons">
+            <button id="winner-p1" class="btn-p1">Player 1</button>
+            <button id="winner-p2" class="btn-p2">Player 2</button>
+        </div>
+    </div>
+</div>
+
+<!-- Restart Modal -->
+<div id="restart-modal" class="modal hidden">
+    <div class="modal-content">
+        <button class="modal-close-btn" id="restart-close">✕</button>
+        <h2>Restart Game</h2>
+        <p>Who starts first?</p>
+        <div class="modal-buttons">
+            <button id="restart-p1" class="btn-p1">Player 1</button>
+            <button id="restart-p2" class="btn-p2">Player 2</button>
+        </div>
+    </div>
+</div>
+
+<!-- Rules / Intro Modal -->
+<div id="rules-modal" class="modal">
+    <div class="modal-content modal-rules">
+        <button class="modal-close-btn" id="rules-close">✕</button>
+        <h1>🌊 Flow Paths</h1>
+        <div class="rules-body">
+            <p><strong>🎯 Goal:</strong> Reach the opposite side of the board first!</p>
+            <p>🔴 Player 1: Bottom → Top &nbsp; 🟢 Player 2: Top → Bottom</p>
+            <hr>
+            <p><strong>📍 Move:</strong> Move your pawn one square up, down, left or right</p>
+            <p><strong>➡️ Arrow:</strong> Drag an arrow tile onto any empty square to place it</p>
+            <p><strong>🌊 Flow:</strong> When you step on an arrow, you slide along the chain until it ends</p>
+            <hr>
+            <p><strong>⚠️ Arrow rules:</strong> No loops, no two arrows facing each other, and both players must always be able to reach their goal</p>
+            <p><strong>🏆 Win:</strong> Reaching the opposite row wins instantly — even mid-flow!</p>
+        </div>
+        <button id="rules-play-btn" class="btn-play">Play</button>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="ai.js"></script>
+<script src="game.js"></script>
+<script>
+    // Left panel toggle
+    const PANEL_KEY = 'flowpaths_panelOpen';
+    const leftPanel = document.getElementById('left-panel');
+    const panelToggle = document.getElementById('left-panel-toggle');
+
+    // Load saved state (default: open)
+    if (localStorage.getItem(PANEL_KEY) !== 'false') {
+        leftPanel.classList.add('open');
+    }
+
+    panelToggle.addEventListener('click', () => {
+        leftPanel.classList.add('enable-transition');
+        leftPanel.classList.toggle('open');
+        localStorage.setItem(PANEL_KEY, leftPanel.classList.contains('open'));
+    });
+
+    // Right panel toggle
+    const RIGHT_PANEL_KEY = 'flowpaths_rightPanelOpen';
+    const rightPanel = document.getElementById('right-panel');
+    const rightToggle = document.getElementById('right-panel-toggle');
+
+    if (localStorage.getItem(RIGHT_PANEL_KEY) !== 'false') {
+        rightPanel.classList.add('open');
+    }
+
+    rightToggle.addEventListener('click', () => {
+        rightPanel.classList.add('enable-transition');
+        rightPanel.classList.toggle('open');
+        localStorage.setItem(RIGHT_PANEL_KEY, rightPanel.classList.contains('open'));
+    });
+
+    // Show rules on first visit
+    const INTRO_KEY = 'flowpaths_introShown';
+    const rulesModal = document.getElementById('rules-modal');
+    const rulesBtn = document.getElementById('btn-rules');
+    if (localStorage.getItem(INTRO_KEY) === 'true') {
+        rulesModal.classList.add('hidden');
+    }
+    rulesBtn.classList.toggle('active', !rulesModal.classList.contains('hidden'));
+    document.getElementById('rules-play-btn').addEventListener('click', () => {
+        rulesModal.classList.add('hidden');
+        rulesBtn.classList.remove('active');
+        localStorage.setItem(INTRO_KEY, 'true');
+    });
+    document.getElementById('rules-close').addEventListener('click', () => {
+        rulesModal.classList.add('hidden');
+        rulesBtn.classList.remove('active');
+    });
+    document.getElementById('btn-rules').addEventListener('click', () => {
+        rulesModal.classList.remove('hidden');
+        rulesBtn.classList.add('active');
+    });
+    rulesModal.addEventListener('click', (e) => {
+        if (e.target === rulesModal) {
+            rulesModal.classList.add('hidden');
+            rulesBtn.classList.remove('active');
+        }
+    });
+
+    // Remove loading class
+    requestAnimationFrame(() => {
+        setTimeout(() => document.body.classList.remove('loading'), 50);
+    });
+</script>
+</body>
+</html>
+

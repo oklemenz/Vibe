@@ -1,0 +1,609 @@
+html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: #1a1a2e;
+    overflow: hidden;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: white;
+}
+
+/* Disable all text selection and touch callouts */
+html, body, body * {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+#game-canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    touch-action: none;
+}
+
+/* ==================== Player HUD (inside right panel) ==================== */
+.hud-player {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    transition: all 0.3s;
+    opacity: 0.5;
+    white-space: nowrap;
+}
+
+.hud-player.active {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.15);
+}
+
+.hud-icon {
+    font-size: 18px;
+}
+
+.hud-name {
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.hud-arrows {
+    font-size: 10px;
+    opacity: 0.8;
+}
+
+.panel-divider {
+    width: 100%;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.12);
+    margin: 2px 0;
+}
+
+/* ==================== Right Panel (Arrows) ==================== */
+#right-panel {
+    position: fixed;
+    top: 50%;
+    right: 0;
+    transform: translateX(100%) translateY(-50%);
+    z-index: 60;
+    pointer-events: none;
+}
+
+#right-panel.enable-transition {
+    transition: transform 0.3s ease;
+}
+
+#right-panel.open {
+    transform: translateX(0) translateY(-50%);
+}
+
+#right-panel-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    padding-right: calc(14px + env(safe-area-inset-right, 0px));
+    background: rgba(0, 0, 0, 0.8);
+    border-radius: 14px 0 0 14px;
+    pointer-events: auto;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+/* Arrow tiles tray — 2x2 grid inside right panel */
+#right-panel-content #arrow-tiles-tray {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+}
+
+/* Toggle handle (left side of right panel) */
+#right-panel-toggle {
+    position: absolute;
+    left: -26px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 26px;
+    height: 56px;
+    background: rgba(0, 0, 0, 0.8);
+    border: none;
+    border-radius: 8px 0 0 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 12px;
+    pointer-events: auto;
+    touch-action: manipulation;
+    transition: background 0.2s;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+#right-panel-toggle::after {
+    content: '◀';
+}
+
+#right-panel.open #right-panel-toggle::after {
+    content: '▶';
+}
+
+/* When panel is closed, extend toggle to cover safe area inset */
+#right-panel:not(.open) #right-panel-toggle {
+    left: calc(-26px - env(safe-area-inset-right, 0px));
+    width: calc(26px + env(safe-area-inset-right, 0px));
+    justify-content: flex-start;
+    padding-left: 6px;
+}
+
+.arrow-tile-draggable {
+    width: 44px;
+    height: 44px;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+    border-radius: 10px;
+    cursor: grab;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    pointer-events: auto;
+    touch-action: none;
+}
+
+
+.arrow-tile-draggable:active {
+    cursor: grabbing;
+}
+
+.arrow-tile-draggable.dragging {
+    opacity: 0.35;
+    transform: scale(0.9);
+}
+
+.arrow-tile-draggable.disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+
+/* Drag preview (follows pointer) */
+#drag-preview {
+    display: none;
+    position: fixed;
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    font-size: 26px;
+    z-index: 300;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+#drag-preview.visible {
+    display: flex;
+}
+
+#drag-preview.can-place {
+    background: rgba(46, 204, 113, 0.5);
+    border-color: rgba(46, 204, 113, 0.8);
+    box-shadow: 0 4px 20px rgba(46, 204, 113, 0.4);
+}
+
+#drag-preview.cannot-place {
+    background: rgba(231, 76, 60, 0.5);
+    border-color: rgba(231, 76, 60, 0.8);
+    box-shadow: 0 4px 20px rgba(231, 76, 60, 0.4);
+}
+
+#drag-preview.neutral {
+    background: rgba(108, 92, 231, 0.45);
+    border-color: rgba(108, 92, 231, 0.7);
+    box-shadow: 0 4px 20px rgba(108, 92, 231, 0.3);
+}
+
+/* ==================== Left Panel ==================== */
+
+/* Calculation indicator on HUD (AI + Assist) */
+.hud-player.ai-thinking .hud-icon,
+.hud-player.calculating .hud-icon {
+    animation: ai-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes ai-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.2); }
+}
+
+#left-panel {
+    position: fixed;
+    top: 50%;
+    left: 0;
+    transform: translateX(-100%) translateY(-50%);
+    z-index: 60;
+    pointer-events: none;
+}
+
+#left-panel.enable-transition {
+    transition: transform 0.3s ease;
+}
+
+#left-panel.open {
+    transform: translateX(0) translateY(-50%);
+}
+
+#left-panel-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 14px;
+    padding-left: calc(14px + env(safe-area-inset-left, 0px));
+    background: rgba(0, 0, 0, 0.8);
+    border-radius: 0 14px 14px 0;
+    pointer-events: auto;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+#left-panel-content button {
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 13px;
+    text-align: left;
+    white-space: nowrap;
+    min-width: 120px;
+    transition: background 0.2s;
+    pointer-events: auto;
+    touch-action: manipulation;
+}
+
+#left-panel-content button.active {
+    background: rgba(108, 92, 231, 0.5);
+}
+
+#left-panel-content button#btn-view.active {
+    background: rgba(52, 152, 219, 0.62);
+}
+
+#left-panel-content button#btn-ai.active {
+    background: rgba(46, 204, 113, 0.62);
+}
+
+#left-panel-content button#btn-assist.active {
+    background: rgba(26, 188, 156, 0.62);
+}
+
+#left-panel-content button#btn-undo.active {
+    background: rgba(231, 76, 60, 0.62);
+}
+
+#left-panel-content button#btn-restart.active {
+    background: rgba(243, 156, 18, 0.62);
+}
+
+#left-panel-content button#btn-rules.active {
+    background: rgba(155, 89, 182, 0.62);
+}
+
+#left-panel-content button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+/* Toggle handle */
+#left-panel-toggle {
+    position: absolute;
+    right: -26px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 26px;
+    height: 56px;
+    background: rgba(0, 0, 0, 0.8);
+    border: none;
+    border-radius: 0 8px 8px 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 12px;
+    pointer-events: auto;
+    touch-action: manipulation;
+    transition: background 0.2s;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+
+#left-panel-toggle::after {
+    content: '▶';
+}
+
+#left-panel.open #left-panel-toggle::after {
+    content: '◀';
+}
+
+/* When panel is closed, extend toggle to cover safe area inset */
+#left-panel:not(.open) #left-panel-toggle {
+    right: calc(-26px - env(safe-area-inset-left, 0px));
+    width: calc(26px + env(safe-area-inset-left, 0px));
+    padding-right: 0;
+    justify-content: flex-end;
+    padding-right: 6px;
+}
+
+/* ==================== Modals ==================== */
+.modal {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 200;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-content {
+    background: linear-gradient(135deg, #1a1a2e 0%, #2d3436 100%);
+    padding: 36px;
+    border-radius: 20px;
+    text-align: center;
+    color: white;
+    border: 2px solid #6c5ce7;
+    position: relative;
+    max-width: 460px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-rules {
+    max-width: 540px;
+    text-align: left;
+}
+
+.modal-rules h1 {
+    text-align: center;
+    margin-bottom: 16px;
+    color: #6c5ce7;
+}
+
+.rules-body {
+    font-size: 14px;
+    line-height: 1.8;
+}
+
+.rules-body hr {
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    margin: 12px 0;
+}
+
+.rules-body ul {
+    padding-left: 20px;
+    margin: 8px 0;
+}
+
+.rules-body li {
+    margin-bottom: 4px;
+}
+
+.modal-close-btn {
+    position: absolute;
+    top: 10px; right: 10px;
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    border: none;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 18px;
+    transition: background 0.3s;
+    pointer-events: auto;
+}
+
+
+.modal-buttons {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    margin-top: 24px;
+}
+
+.btn-p1 {
+    background: #e63939;
+    color: white;
+    border: none;
+    padding: 12px 28px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    transition: all 0.2s;
+}
+
+
+.btn-p2 {
+    background: #1aab9d;
+    color: white;
+    border: none;
+    padding: 12px 28px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    transition: all 0.2s;
+}
+
+
+.btn-play {
+    display: block;
+    margin: 20px auto 0;
+    background: #6c5ce7;
+    color: white;
+    border: none;
+    padding: 14px 40px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: bold;
+    transition: all 0.2s;
+}
+
+
+/* ==================== Responsive ==================== */
+@media (max-width: 600px) {
+    .arrow-tile-draggable {
+        width: 38px;
+        height: 38px;
+        font-size: 17px;
+    }
+
+    #drag-preview.visible {
+        width: 46px;
+        height: 46px;
+        font-size: 22px;
+    }
+
+    #left-panel-content button {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    #left-panel-content {
+        padding: 10px 10px;
+        padding-left: calc(10px + env(safe-area-inset-left, 0px));
+    }
+
+    #right-panel-content {
+        padding: 10px 10px;
+        padding-right: calc(10px + env(safe-area-inset-right, 0px));
+    }
+
+    .hud-player {
+        padding: 4px 6px;
+    }
+
+    .hud-name {
+        font-size: 10px;
+    }
+
+    .hud-arrows {
+        font-size: 9px;
+    }
+
+    .hud-icon {
+        font-size: 14px;
+    }
+}
+
+/* Portrait mobile: panel at bottom, horizontal layout */
+@media (max-width: 600px) and (orientation: portrait) {
+    #right-panel {
+        top: auto;
+        right: auto;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%) translateY(100%);
+    }
+
+    #right-panel.open {
+        transform: translateX(-50%) translateY(0);
+    }
+
+    #right-panel-content {
+        flex-direction: row;
+        align-items: center;
+        border-radius: 14px 14px 0 0;
+        padding: 8px 12px;
+        padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+        padding-right: 12px;
+        gap: 6px;
+    }
+
+    /* Arrows in 1x4 row at bottom */
+    #right-panel-content #arrow-tiles-tray {
+        display: flex;
+        flex-direction: row;
+        gap: 4px;
+    }
+
+    .panel-divider {
+        width: 1px;
+        height: 36px;
+        margin: 0 2px;
+    }
+
+    /* Toggle on top of bottom panel */
+    #right-panel-toggle {
+        left: 50%;
+        top: -26px;
+        bottom: auto;
+        transform: translateX(-50%);
+        width: 56px;
+        height: 26px;
+        border-radius: 8px 8px 0 0;
+    }
+
+    #right-panel-toggle::after {
+        content: '▲';
+    }
+
+    #right-panel.open #right-panel-toggle::after {
+        content: '▼';
+    }
+
+    #right-panel:not(.open) #right-panel-toggle {
+        left: 50%;
+        top: calc(-26px - env(safe-area-inset-bottom, 0px));
+        width: 56px;
+        height: calc(26px + env(safe-area-inset-bottom, 0px));
+        padding-left: 0;
+        justify-content: center;
+        align-items: flex-start;
+        padding-top: 6px;
+    }
+}
+
+/* Landscape mobile: panel on the right */
+@media (max-width: 900px) and (orientation: landscape) {
+    #right-panel-content {
+        padding: 10px 10px;
+        padding-right: calc(10px + env(safe-area-inset-right, 0px));
+    }
+}
+
+
