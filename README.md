@@ -6,11 +6,11 @@
 - GitHub: [Click to Start](https://oklemenz.github.io/Vibe/Quoridor/index.html)
 - Source: [Directory](./Quoridor)
 
-## Flow Paths
+## Flow Path
 
-- Play: [Click to Start](https://flowpaths.oklemenz.de)
-- GitHub: [Click to Start](https://oklemenz.github.io/Vibe/FlowPaths/index.html)
-- Source: [Directory](./FlowPaths)
+- Play: [Click to Start](https://flowpath.oklemenz.de)
+- GitHub: [Click to Start](https://oklemenz.github.io/Vibe/FlowPath/index.html)
+- Source: [Directory](./FlowPath)
 
 
 ## The Red Devil
