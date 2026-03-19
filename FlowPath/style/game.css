@@ -38,7 +38,7 @@ html, body, body * {
     gap: 2px;
     padding: 6px 10px;
     border-radius: 10px;
-    transition: all 0.3s;
+    transition: opacity 0.3s, background 0.3s, box-shadow 0.3s;
     opacity: 0.5;
     white-space: nowrap;
 }
@@ -55,11 +55,12 @@ html, body, body * {
 
 .hud-name {
     font-weight: bold;
-    font-size: 12px;
+    font-size: 16px;
 }
 
 .hud-arrows {
-    font-size: 10px;
+    font-size: 12px;
+    font-weight: bold;
     opacity: 0.8;
 }
 
@@ -71,6 +72,12 @@ html, body, body * {
 }
 
 /* ==================== Right Panel (Arrows) ==================== */
+
+/* Upside-down player section (for two-player mode) */
+.hud-player.upside-down {
+    transform: rotate(180deg);
+}
+
 #right-panel {
     position: fixed;
     top: 50%;
@@ -103,7 +110,7 @@ html, body, body * {
 }
 
 /* Arrow tiles tray — 2x2 grid inside right panel */
-#right-panel-content #arrow-tiles-tray {
+#right-panel-content .arrow-tiles-tray {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 6px;
@@ -226,6 +233,96 @@ html, body, body * {
 
 /* ==================== Left Panel ==================== */
 
+/* ==================== Top Panel (Portrait Player 2) ==================== */
+#top-panel {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%) translateY(-100%);
+    z-index: 60;
+    pointer-events: none;
+    display: none; /* hidden by default, shown only in portrait */
+}
+
+#top-panel.enable-transition {
+    transition: transform 0.3s ease;
+}
+
+#top-panel.open {
+    transform: translateX(-50%) translateY(0);
+}
+
+#top-panel-content {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
+    background: rgba(0, 0, 0, 0.8);
+    border-radius: 0 0 14px 14px;
+    pointer-events: auto;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+#top-panel-content .panel-divider {
+    width: 1px;
+    height: 36px;
+    margin: 0 2px;
+}
+
+#top-panel-content .arrow-tiles-tray {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+}
+
+/* When top panel content is upside-down (two-player mode), rotate the whole content */
+#top-panel-content.upside-down {
+    transform: rotate(180deg);
+    border-radius: 14px 14px 0 0;
+}
+
+#top-panel-toggle {
+    position: absolute;
+    left: 50%;
+    bottom: -26px;
+    transform: translateX(-50%);
+    width: 56px;
+    height: 26px;
+    background: rgba(0, 0, 0, 0.8);
+    border: none;
+    border-radius: 0 0 8px 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 12px;
+    pointer-events: auto;
+    touch-action: manipulation;
+    transition: background 0.2s;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+#top-panel-toggle::after {
+    content: '▼';
+}
+
+#top-panel.open #top-panel-toggle::after {
+    content: '▲';
+}
+
+#top-panel:not(.open) #top-panel-toggle {
+    bottom: calc(-26px - env(safe-area-inset-top, 0px));
+    height: calc(26px + env(safe-area-inset-top, 0px));
+    justify-content: center;
+    align-items: flex-end;
+    padding-bottom: 6px;
+}
+
 /* Calculation indicator on HUD (AI + Assist) */
 .hud-player.ai-thinking .hud-icon,
 .hud-player.calculating .hud-icon {
@@ -268,47 +365,69 @@ html, body, body * {
 }
 
 #left-panel-content button {
-    background: rgba(255, 255, 255, 0.08);
+    background: #000000;
     color: white;
     border: none;
     padding: 10px 16px;
     border-radius: 10px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 16px;
     text-align: left;
     white-space: nowrap;
     min-width: 120px;
-    transition: background 0.2s;
+    transition: none;
     pointer-events: auto;
     touch-action: manipulation;
 }
 
+#left-panel-content button:hover {
+    background: #1a1a1a;
+}
+
 #left-panel-content button.active {
-    background: rgba(108, 92, 231, 0.5);
+    background: #000000;
 }
 
 #left-panel-content button#btn-view.active {
-    background: rgba(52, 152, 219, 0.62);
+    background: #3498db;
+}
+#left-panel-content button#btn-view.active:hover {
+    background: #2980b9;
 }
 
 #left-panel-content button#btn-ai.active {
-    background: rgba(46, 204, 113, 0.62);
+    background: #27ae60;
+}
+#left-panel-content button#btn-ai.active:hover {
+    background: #1e8449;
 }
 
 #left-panel-content button#btn-assist.active {
-    background: rgba(26, 188, 156, 0.62);
+    background: #f39c12;
+}
+#left-panel-content button#btn-assist.active:hover {
+    background: #d68910;
 }
 
 #left-panel-content button#btn-undo.active {
-    background: rgba(231, 76, 60, 0.62);
+    background: #C05530;
+}
+#left-panel-content button#btn-undo.active:hover {
+    background: #a04828;
 }
 
 #left-panel-content button#btn-restart.active {
-    background: rgba(243, 156, 18, 0.62);
+    background: #7d3c98;
+}
+#left-panel-content button#btn-restart.active:hover {
+    background: #6c3483;
 }
 
 #left-panel-content button#btn-rules.active {
-    background: rgba(155, 89, 182, 0.62);
+    background: #008080;
+}
+#left-panel-content button#btn-rules.active:hover {
+    background: #006666;
 }
 
 #left-panel-content button:disabled {
@@ -390,26 +509,64 @@ html, body, body * {
     overflow-y: auto;
 }
 
+#restart-modal .modal-content {
+    max-width: 350px;
+    height: 220px;
+    padding: 20px;
+    overflow: hidden;
+}
+
+#restart-modal .modal-content h2 {
+    font-size: 28px;
+    margin-bottom: 15px;
+    color: #6c5ce7;
+}
+
+#restart-modal .modal-content p {
+    font-size: 16px;
+    margin-bottom: 25px;
+    color: #aaa;
+}
+
+#restart-modal .modal-buttons {
+    margin-top: 0;
+}
+
+#restart-modal .modal-buttons button {
+    min-width: 125px;
+}
+
 .modal-rules {
-    max-width: 540px;
+    max-width: 400px;
     text-align: left;
+    overflow: hidden;
+    padding-top: 16px;
+}
+
+/* Landscape: wider and shorter rules dialog */
+@media (min-aspect-ratio: 1/1) {
+    .modal-rules {
+        max-width: 560px;
+        max-height: 400px;
+    }
 }
 
 .modal-rules h1 {
     text-align: center;
-    margin-bottom: 16px;
+    margin-top: 0;
+    margin-bottom: 12px;
     color: #6c5ce7;
 }
 
 .rules-body {
     font-size: 14px;
-    line-height: 1.8;
+    line-height: 1.6;
 }
 
 .rules-body hr {
     border: none;
     border-top: 1px solid rgba(255,255,255,0.15);
-    margin: 12px 0;
+    margin: 8px 0;
 }
 
 .rules-body ul {
@@ -528,10 +685,28 @@ html, body, body * {
     .hud-icon {
         font-size: 14px;
     }
+
+    #top-panel-content {
+        padding: 6px 10px;
+        padding-top: calc(6px + env(safe-area-inset-top, 0px));
+    }
 }
 
-/* Portrait mobile: panel at bottom, horizontal layout */
-@media (max-width: 600px) and (orientation: portrait) {
+/* Portrait mode: height > width — split into top + bottom panels */
+@media (max-aspect-ratio: 1/1) {
+
+    /* Show top panel in portrait */
+    #top-panel {
+        display: block;
+    }
+
+    /* Hide player 2 + arrows + dividers from right panel in portrait (they're in the top panel) */
+    #right-panel-content #hud-player2,
+    #right-panel-content #hud-player2 + .panel-divider {
+        display: none;
+    }
+
+    /* Right panel becomes bottom panel */
     #right-panel {
         top: auto;
         right: auto;
@@ -554,8 +729,15 @@ html, body, body * {
         gap: 6px;
     }
 
-    /* Arrows in 1x4 row at bottom */
-    #right-panel-content #arrow-tiles-tray {
+    /* Reorder: Player 1 first, then divider, then arrows */
+    #right-panel-content #hud-player1 {
+        order: 1;
+    }
+    #right-panel-content .arrow-tiles-tray ~ .panel-divider {
+        order: 2;
+    }
+    #right-panel-content .arrow-tiles-tray {
+        order: 3;
         display: flex;
         flex-direction: row;
         gap: 4px;
@@ -598,11 +780,13 @@ html, body, body * {
     }
 }
 
-/* Landscape mobile: panel on the right */
-@media (max-width: 900px) and (orientation: landscape) {
+/* Landscape mode: width > height — ensure right panel styling */
+@media (min-aspect-ratio: 1/1) {
+    /* Top panel stays hidden in landscape (display:none is default) */
+
+    /* Right panel safe area for landscape */
     #right-panel-content {
-        padding: 10px 10px;
-        padding-right: calc(10px + env(safe-area-inset-right, 0px));
+        padding-right: calc(14px + env(safe-area-inset-right, 0px));
     }
 }
 

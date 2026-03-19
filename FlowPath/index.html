@@ -33,6 +33,25 @@
 <!-- Drag preview that follows the pointer -->
 <div id="drag-preview"></div>
 
+<!-- Top panel: Player 2 / AI in portrait mode -->
+<div id="top-panel">
+    <div id="top-panel-content">
+        <div id="hud-player2-top" class="hud-player">
+            <span class="hud-icon">🟢</span>
+            <span class="hud-name" id="p2-name-top">AI</span>
+            <span class="hud-arrows" id="p2-arrows-top">10 / 10</span>
+        </div>
+        <div class="panel-divider"></div>
+        <div id="arrow-tiles-tray-top" class="arrow-tiles-tray">
+            <div class="arrow-tile-draggable" data-dir="up" data-player="2" title="Drag ⬆ arrow onto board">⬆</div>
+            <div class="arrow-tile-draggable" data-dir="down" data-player="2" title="Drag ⬇ arrow onto board">⬇</div>
+            <div class="arrow-tile-draggable" data-dir="left" data-player="2" title="Drag ⬅ arrow onto board">⬅</div>
+            <div class="arrow-tile-draggable" data-dir="right" data-player="2" title="Drag ➡ arrow onto board">➡</div>
+        </div>
+    </div>
+    <button id="top-panel-toggle"></button>
+</div>
+
 <!-- Right side panel: players + arrows (toggleable) -->
 <div id="right-panel">
     <button id="right-panel-toggle"></button>
@@ -40,10 +59,10 @@
         <div id="hud-player2" class="hud-player">
             <span class="hud-icon">🟢</span>
             <span class="hud-name" id="p2-name">AI</span>
-            <span class="hud-arrows" id="p2-arrows">🏹 10 / 10</span>
+            <span class="hud-arrows" id="p2-arrows">10 / 10</span>
         </div>
         <div class="panel-divider"></div>
-        <div id="arrow-tiles-tray">
+        <div id="arrow-tiles-tray" class="arrow-tiles-tray">
             <div class="arrow-tile-draggable" data-dir="up" title="Drag ⬆ arrow onto board">⬆</div>
             <div class="arrow-tile-draggable" data-dir="down" title="Drag ⬇ arrow onto board">⬇</div>
             <div class="arrow-tile-draggable" data-dir="left" title="Drag ⬅ arrow onto board">⬅</div>
@@ -53,7 +72,7 @@
         <div id="hud-player1" class="hud-player active">
             <span class="hud-icon">🔴</span>
             <span class="hud-name">Player 1</span>
-            <span class="hud-arrows" id="p1-arrows">🏹 10 / 10</span>
+            <span class="hud-arrows" id="p1-arrows">10 / 10</span>
         </div>
     </div>
 </div>
@@ -63,8 +82,8 @@
     <div id="left-panel-content">
         <button id="btn-view">👁️ 3D View</button>
         <button id="btn-ai" class="active">🤖 AI On</button>
-        <button id="btn-assist">💡 Assist</button>
-        <button id="btn-undo" disabled>↩️ Undo</button>
+        <button id="btn-assist">🎓 Assist</button>
+        <button id="btn-undo">↩️ Undo</button>
         <button id="btn-restart">🔄 Restart</button>
         <button id="btn-rules">📖 Rules</button>
     </div>
@@ -100,18 +119,15 @@
 <!-- Rules / Intro Modal -->
 <div id="rules-modal" class="modal">
     <div class="modal-content modal-rules">
-        <button class="modal-close-btn" id="rules-close">✕</button>
-        <h1>🌊 Flow Path</h1>
+        <h1>Flow Path</h1>
         <div class="rules-body">
-            <p><strong>🎯 Goal:</strong> Reach the opposite side of the board first!</p>
-            <p>🔴 Player 1: Bottom → Top &nbsp; 🟢 Player 2: Top → Bottom</p>
+            <p>🎯 Reach the opposite side first!</p>
+            <p>🔴 Bottom → Top &nbsp; 🟢 Top → Bottom</p>
             <hr>
-            <p><strong>📍 Move:</strong> Move your pawn one square up, down, left or right</p>
-            <p><strong>➡️ Arrow:</strong> Drag an arrow tile onto any empty square to place it</p>
-            <p><strong>🌊 Flow:</strong> When you step on an arrow, you slide along the chain until it ends</p>
-            <hr>
-            <p><strong>⚠️ Arrow rules:</strong> No loops, no two arrows facing each other, and both players must always be able to reach their goal</p>
-            <p><strong>🏆 Win:</strong> Reaching the opposite row wins instantly — even mid-flow!</p>
+            <p>📍 <strong>Move</strong> one square in any direction</p>
+            <p>➡️ <strong>Drag</strong> an arrow onto an empty square</p>
+            <p>🌊 <strong>Flow:</strong> Step on an arrow to slide along the chain</p>
+            <p>⚠️ <strong>Rule:</strong> No flow loops, path to goal must stay open</p>
         </div>
         <button id="rules-play-btn" class="btn-play">Play</button>
     </div>
@@ -153,6 +169,21 @@
         localStorage.setItem(RIGHT_PANEL_KEY, rightPanel.classList.contains('open'));
     });
 
+    // Top panel toggle
+    const TOP_PANEL_KEY = 'flowpaths_topPanelOpen';
+    const topPanel = document.getElementById('top-panel');
+    const topToggle = document.getElementById('top-panel-toggle');
+
+    if (localStorage.getItem(TOP_PANEL_KEY) !== 'false') {
+        topPanel.classList.add('open');
+    }
+
+    topToggle.addEventListener('click', () => {
+        topPanel.classList.add('enable-transition');
+        topPanel.classList.toggle('open');
+        localStorage.setItem(TOP_PANEL_KEY, topPanel.classList.contains('open'));
+    });
+
     // Show rules on first visit
     const INTRO_KEY = 'flowpaths_introShown';
     const rulesModal = document.getElementById('rules-modal');
@@ -165,10 +196,6 @@
         rulesModal.classList.add('hidden');
         rulesBtn.classList.remove('active');
         localStorage.setItem(INTRO_KEY, 'true');
-    });
-    document.getElementById('rules-close').addEventListener('click', () => {
-        rulesModal.classList.add('hidden');
-        rulesBtn.classList.remove('active');
     });
     document.getElementById('btn-rules').addEventListener('click', () => {
         rulesModal.classList.remove('hidden');

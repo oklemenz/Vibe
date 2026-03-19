@@ -46,6 +46,7 @@ let assistEnabled = false;
 // Drag & Drop state
 let isDragging = false;
 let dragDir = null;               // 'up'|'down'|'left'|'right'
+let dragPlayer = 0;               // 1 or 2: which player's arrow is being dragged
 let dragSourceElement = null;     // the DOM tile being dragged from
 let dragPreviewEl = null;         // the floating preview DOM element
 let dragBoardPreview = null;      // THREE.Group shown on the board (green/red)
@@ -99,7 +100,7 @@ function init() {
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.enableZoom = true;
-    controls.minDistance = 8;
+    controls.minDistance = 5;
     controls.maxDistance = 28;
     controls.maxPolarAngle = Math.PI / 2.2;
     controls.enablePan = false;
@@ -159,29 +160,41 @@ function init() {
     // Apply AI state to UI
     const aiBtn = document.getElementById('btn-ai');
     const p2Name = document.getElementById('p2-name');
+    const p2NameTop = document.getElementById('p2-name-top');
     const assistBtn = document.getElementById('btn-assist');
     if (aiEnabled) {
         aiBtn.textContent = '🤖 AI On';
         aiBtn.classList.add('active');
         p2Name.textContent = 'AI';
+        if (p2NameTop) p2NameTop.textContent = 'AI';
     } else {
         aiBtn.textContent = '🤖 AI';
         aiBtn.classList.remove('active');
         p2Name.textContent = 'Player 2';
+        if (p2NameTop) p2NameTop.textContent = 'Player 2';
     }
 
     if (assistEnabled) {
-        assistBtn.textContent = '💡 Assist On';
+        assistBtn.textContent = '🎓 Assist On';
         assistBtn.classList.add('active');
     } else {
-        assistBtn.textContent = '💡 Assist';
+        assistBtn.textContent = '🎓 Assist';
         assistBtn.classList.remove('active');
     }
 
     updateHUD();
 
-    // Initial view
-    set3DView();
+    // Initial view — restore saved preference
+    const savedView = localStorage.getItem('flowpaths_viewMode');
+    if (savedView === 'top') {
+        viewMode = 'top';
+        const viewBtn = document.getElementById('btn-view');
+        viewBtn.textContent = '👁️ Top View';
+        viewBtn.classList.add('active');
+        setTopView();
+    } else {
+        set3DView();
+    }
 }
 
 // ==================== LIGHTING ====================
@@ -258,6 +271,12 @@ function setPlayerCalculating(player, isCalculating) {
     const hud = document.getElementById(player === 1 ? 'hud-player1' : 'hud-player2');
     hud.classList.toggle('calculating', active);
 
+    // Sync top panel player 2
+    if (player === 2) {
+        const hudTop = document.getElementById('hud-player2-top');
+        if (hudTop) hudTop.classList.toggle('calculating', active);
+    }
+
     const ring = ensureCalcRing(player);
     ring.visible = active;
 }
@@ -268,6 +287,11 @@ function clearAllCalculatingIndicators() {
     document.getElementById('hud-player1').classList.remove('calculating');
     document.getElementById('hud-player2').classList.remove('calculating');
     document.getElementById('hud-player2').classList.remove('ai-thinking');
+    const hudP2Top = document.getElementById('hud-player2-top');
+    if (hudP2Top) {
+        hudP2Top.classList.remove('calculating');
+        hudP2Top.classList.remove('ai-thinking');
+    }
     if (playerCalcRing[1]) playerCalcRing[1].visible = false;
     if (playerCalcRing[2]) playerCalcRing[2].visible = false;
 }
@@ -620,6 +644,7 @@ function canPlayerReachGoal(player) {
 // Check if the flow path from (sx,sy) crosses the goal row
 function flowPassesGoalRow(sx, sy, goalRow, player) {
     let cx = sx, cy = sy;
+    const other = player === 1 ? 2 : 1;
     const visited = new Set();
     while (true) {
         if (cy === goalRow) return true;
@@ -629,9 +654,22 @@ function flowPassesGoalRow(sx, sy, goalRow, player) {
         const a = arrows[key];
         if (!a) break;
         const d = DIR_VECTORS[a.dir];
-        const nx = cx + d.dx;
-        const ny = cy + d.dy;
+        let nx = cx + d.dx;
+        let ny = cy + d.dy;
         if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
+        // Jump over other pawn
+        if (nx === pawns[other].x && ny === pawns[other].y) {
+            const jx = nx + d.dx;
+            const jy = ny + d.dy;
+            if (jx < 0 || jx >= BOARD_SIZE || jy < 0 || jy >= BOARD_SIZE) break;
+            const jk = arrowKey(jx, jy);
+            if (visited.has(jk)) break;
+            cx = jx;
+            cy = jy;
+            if (cy === goalRow) return true;
+            if (!arrows[jk]) break;
+            continue;
+        }
         cx = nx;
         cy = ny;
     }
@@ -657,14 +695,29 @@ function resolveFlow(x, y, movingPlayer) {
         if (!a) break; // No arrow → stop
 
         const d = DIR_VECTORS[a.dir];
-        const nx = cx + d.dx;
-        const ny = cy + d.dy;
+        let nx = cx + d.dx;
+        let ny = cy + d.dy;
 
         // Board edge
         if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
 
-        // Other pawn blocks
-        if (nx === pawns[other].x && ny === pawns[other].y) break;
+        // Other pawn in the way → try to jump over
+        if (nx === pawns[other].x && ny === pawns[other].y) {
+            const jx = nx + d.dx;
+            const jy = ny + d.dy;
+            // Can't jump off the board → flow stops here
+            if (jx < 0 || jx >= BOARD_SIZE || jy < 0 || jy >= BOARD_SIZE) break;
+            // Check if landing after jump would cause a cycle
+            const jk = arrowKey(jx, jy);
+            if (visited.has(jk)) break;
+            // Land after the pawn
+            cx = jx;
+            cy = jy;
+            // If no arrow on landing cell → flow stops here
+            if (!arrows[jk]) break;
+            // Arrow exists → continue the flow from here
+            continue;
+        }
 
         cx = nx;
         cy = ny;
@@ -691,11 +744,29 @@ function buildFlowPath(x, y, movingPlayer) {
         if (!a) break;
 
         const d = DIR_VECTORS[a.dir];
-        const nx = cx + d.dx;
-        const ny = cy + d.dy;
+        let nx = cx + d.dx;
+        let ny = cy + d.dy;
 
         if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
-        if (nx === pawns[other].x && ny === pawns[other].y) break;
+
+        // Other pawn in the way → try to jump over
+        if (nx === pawns[other].x && ny === pawns[other].y) {
+            const jx = nx + d.dx;
+            const jy = ny + d.dy;
+            // Can't jump off the board → flow stops here
+            if (jx < 0 || jx >= BOARD_SIZE || jy < 0 || jy >= BOARD_SIZE) break;
+            // Check if landing after jump would cause a cycle
+            const jk = arrowKey(jx, jy);
+            if (visited.has(jk)) break;
+            // Land after the pawn (add jump target to path for animation)
+            cx = jx;
+            cy = jy;
+            path.push({ x: cx, y: cy });
+            // If no arrow on landing cell → flow stops here
+            if (!arrows[jk]) break;
+            // Arrow exists → continue the flow from here
+            continue;
+        }
 
         cx = nx;
         cy = ny;
@@ -939,16 +1010,57 @@ function updateHUD() {
     document.getElementById('hud-player1').classList.toggle('active', currentPlayer === 1);
     document.getElementById('hud-player2').classList.toggle('active', currentPlayer === 2);
 
-    document.getElementById('p1-arrows').textContent = '🏹 ' + arrowCounts[1] + ' / ' + MAX_ARROWS_PER_PLAYER;
-    document.getElementById('p2-arrows').textContent = '🏹 ' + arrowCounts[2] + ' / ' + MAX_ARROWS_PER_PLAYER;
+    const p1Text = arrowCounts[1] + ' / ' + MAX_ARROWS_PER_PLAYER;
+    const p2Text = arrowCounts[2] + ' / ' + MAX_ARROWS_PER_PLAYER;
+    document.getElementById('p1-arrows').textContent = p1Text;
+    document.getElementById('p2-arrows').textContent = p2Text;
 
+    // Sync top panel (portrait mode player 2 display)
+    const p2TopEl = document.getElementById('hud-player2-top');
+    if (p2TopEl) {
+        p2TopEl.classList.toggle('active', currentPlayer === 2);
+        document.getElementById('p2-arrows-top').textContent = p2Text;
+    }
 
-    // Enable/disable arrow tiles: disabled when no arrows, game over, or it's AI's turn
+    // Apply upside-down to player 2 in right panel when AI is off (two-player mode)
+    const hudP2 = document.getElementById('hud-player2');
+    hudP2.classList.toggle('upside-down', !aiEnabled);
+
+    // Top panel content: upside-down when AI is off, normal when AI is on
+    const topPanelContent = document.getElementById('top-panel-content');
+    if (topPanelContent) {
+        topPanelContent.classList.toggle('upside-down', !aiEnabled);
+    }
+
+    // Enable/disable arrow tiles per panel:
     const isAITurn = aiEnabled && currentPlayer === 2;
-    const noArrows = arrowCounts[currentPlayer] <= 0;
-    document.querySelectorAll('.arrow-tile-draggable').forEach(el => {
-        el.classList.toggle('disabled', noArrows || gameOver || isAITurn);
-    });
+    const isPortrait = window.matchMedia('(max-aspect-ratio: 1/1)').matches;
+
+    if (isPortrait) {
+        // Portrait: bottom panel arrows = Player 1 only, top panel arrows = Player 2 only
+        const p1NoArrows = arrowCounts[1] <= 0;
+        const p1Disabled = currentPlayer !== 1 || p1NoArrows || gameOver;
+        document.querySelectorAll('#right-panel .arrow-tile-draggable').forEach(el => {
+            el.classList.toggle('disabled', p1Disabled);
+        });
+
+        const p2NoArrows = arrowCounts[2] <= 0;
+        const p2Disabled = currentPlayer !== 2 || p2NoArrows || gameOver || isAITurn;
+        document.querySelectorAll('#top-panel .arrow-tile-draggable').forEach(el => {
+            el.classList.toggle('disabled', p2Disabled);
+        });
+    } else {
+        // Landscape: right panel arrows = current player's arrows
+        const noArrows = arrowCounts[currentPlayer] <= 0;
+        const disabled = noArrows || gameOver || isAITurn;
+        document.querySelectorAll('#right-panel .arrow-tile-draggable').forEach(el => {
+            el.classList.toggle('disabled', disabled);
+        });
+        // Top panel hidden in landscape, but disable its tiles anyway
+        document.querySelectorAll('#top-panel .arrow-tile-draggable').forEach(el => {
+            el.classList.toggle('disabled', true);
+        });
+    }
 
     // Update undo button with step count
     const undoBtn = document.getElementById('btn-undo');
@@ -958,8 +1070,7 @@ function updateHUD() {
         ? Math.floor(steps / 2)
         : steps;
     // Keep undo clickable during active turns for both players.
-    undoBtn.disabled = flowAnimating || gameOver;
-    undoBtn.classList.toggle('active', steps > 0);
+    undoBtn.classList.toggle('active', steps > 0 && !flowAnimating);
     undoBtn.textContent = displaySteps > 0 ? '↩️ Undo ' + displaySteps : '↩️ Undo';
 
     updateAssistPreview();
@@ -1029,11 +1140,13 @@ function toggleAI() {
 
     const btn = document.getElementById('btn-ai');
     const p2Name = document.getElementById('p2-name');
+    const p2NameTop = document.getElementById('p2-name-top');
 
     if (aiEnabled) {
         btn.textContent = '🤖 AI On';
         btn.classList.add('active');
         p2Name.textContent = 'AI';
+        if (p2NameTop) p2NameTop.textContent = 'AI';
 
         // If it's currently Player 2's turn, trigger AI
         if (currentPlayer === 2 && !gameOver && !flowAnimating && !aiThinking) {
@@ -1043,6 +1156,7 @@ function toggleAI() {
         btn.textContent = '🤖 AI';
         btn.classList.remove('active');
         p2Name.textContent = 'Player 2';
+        if (p2NameTop) p2NameTop.textContent = 'Player 2';
 
         // Cancel any pending AI
         aiTurnToken++;
@@ -1064,10 +1178,10 @@ function toggleAssist() {
 
     const btn = document.getElementById('btn-assist');
     if (assistEnabled) {
-        btn.textContent = '💡 Assist On';
+        btn.textContent = '🎓 Assist On';
         btn.classList.add('active');
     } else {
-        btn.textContent = '💡 Assist';
+        btn.textContent = '🎓 Assist';
         btn.classList.remove('active');
     }
 
@@ -1288,6 +1402,9 @@ function undoLastMove() {
     rebuildArrowMeshes();
     updateHighlights();
     updateHUD();
+
+    // Hide winner modal if we're undoing from a game-over state
+    document.getElementById('winner-modal').classList.add('hidden');
 }
 
 // ==================== RESTART ====================
@@ -1338,26 +1455,70 @@ function toggleView() {
         btn.classList.remove('active');
         animateTo3DView();
     }
+    localStorage.setItem('flowpaths_viewMode', viewMode);
 }
 
 function getTopViewDistance() {
-    const size = BOARD_SIZE * CELL_SIZE + 0.6;
+    const size = BOARD_SIZE * CELL_SIZE + 0.6; // full visible extent including platform edge
     const aspect = window.innerWidth / window.innerHeight;
     const fov = camera.fov * (Math.PI / 180);
-    if (aspect >= 1) return (size / 2) / Math.tan(fov / 2) * 1.02;
-    return (size / 2) / (Math.tan(fov / 2) * aspect) * 1.02;
+    // "contain": pick the axis that needs more room
+    const dh = (size / 2) / Math.tan(fov / 2);           // distance to fit height
+    const dw = (size / 2) / (Math.tan(fov / 2) * aspect); // distance to fit width
+    return Math.max(dh, dw);
 }
 
 function get3DPos() {
     const size = BOARD_SIZE * CELL_SIZE + 0.6;
     const aspect = window.innerWidth / window.innerHeight;
     const fov = camera.fov * (Math.PI / 180);
-    const hFov = 2 * Math.atan(Math.tan(fov / 2) * aspect);
-    const dw = (size / 2) / Math.tan(hFov / 2) * 1.15;
-    const dh = (size * 0.7 + 1.5) / Math.tan(fov / 2) * 1.1;
-    const dist = Math.max(dw, dh);
-    const angle = Math.PI / 4;
-    return { x: 0, y: dist * Math.sin(angle), z: dist * Math.cos(angle) };
+    const angle = Math.PI / 4; // 45° tilt
+
+    // Camera looks at origin from position (0, d*sin(angle), d*cos(angle)).
+    // The board lies on the XZ plane, spanning [-size/2, size/2] in both X and Z.
+    // We need to find the distance d so all 4 corners fit in the frustum.
+    //
+    // In camera space (looking down the -Z axis of the camera):
+    //   Camera right = world X
+    //   Camera up = rotated: world Y*cos(angle) + world Z*sin(angle) projected
+    //   Camera forward = toward origin
+    //
+    // For a corner at world (wx, 0, wz), its position relative to camera target (origin):
+    //   horizontal offset in camera space = wx (unchanged, camera right = world X)
+    //   depth from camera = d - wz*cos(angle)   (wz component along camera forward)
+    //   vertical in camera space = -wz*sin(angle) (wz component along camera up)
+    //
+    // The corner is visible if:
+    //   |vertical| < depth * tan(fov/2)      for vertical fit
+    //   |horizontal| < depth * tan(hfov/2)   for horizontal fit
+
+    const half = size / 2;
+    const sinA = Math.sin(angle);
+    const cosA = Math.cos(angle);
+    const tanHalfFov = Math.tan(fov / 2);
+    const hFov = 2 * Math.atan(tanHalfFov * aspect);
+    const tanHalfHFov = Math.tan(hFov / 2);
+
+    // Check all 4 board corners and find the minimum d that contains all of them.
+    let minDist = 0;
+    for (const wz of [-half, half]) {
+        const camV = Math.abs(-wz * sinA);  // vertical offset in camera space
+        const camDepthOffset = -wz * cosA;  // how much closer/further this corner is
+
+        // Vertical constraint: camV < (d + camDepthOffset) * tanHalfFov
+        // => d > camV / tanHalfFov - camDepthOffset
+        const dv = camV / tanHalfFov - camDepthOffset;
+
+        // Horizontal constraint: half < (d + camDepthOffset) * tanHalfHFov
+        // => d > half / tanHalfHFov - camDepthOffset
+        const dh = half / tanHalfHFov - camDepthOffset;
+
+        minDist = Math.max(minDist, dv, dh);
+    }
+
+    const dist = minDist * 1.01; // small margin to avoid edge clipping
+
+    return { x: 0, y: dist * sinA, z: dist * cosA };
 }
 
 function animateToTopView() {
@@ -1447,8 +1608,6 @@ function setupDragAndDrop() {
 
 function onTileDragStart(e) {
     if (gameOver || flowAnimating || aiThinking) return;
-    if (aiEnabled && currentPlayer === 2) return;
-    if (arrowCounts[currentPlayer] <= 0) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -1456,6 +1615,18 @@ function onTileDragStart(e) {
     const tile = e.currentTarget;
     const dir = tile.dataset.dir;
     if (!dir) return;
+
+    // Determine which player's arrow this is based on panel and mode
+    const isTopPanel = !!tile.closest('#top-panel');
+    const isPortrait = window.matchMedia('(max-aspect-ratio: 1/1)').matches;
+    // In portrait: top panel = P2, bottom panel = P1
+    // In landscape: right panel = currentPlayer (shared)
+    const player = isTopPanel ? 2 : (isPortrait ? 1 : currentPlayer);
+
+    // Validate: can this player drag right now?
+    if (aiEnabled && player === 2) return;       // AI controls P2
+    if (player !== currentPlayer) return;         // Not this player's turn
+    if (arrowCounts[player] <= 0) return;         // No arrows left
 
     // Capture pointer for reliable tracking
     tile.setPointerCapture(e.pointerId);
@@ -1465,6 +1636,7 @@ function onTileDragStart(e) {
 
     isDragging = true;
     dragDir = dir;
+    dragPlayer = player;
     dragSourceElement = tile;
     dragHoveredCell = null;
     dragCanPlace = false;
@@ -1509,7 +1681,7 @@ function onTileDragMove(e) {
         // Only update if cell changed
         if (!dragHoveredCell || dragHoveredCell.x !== cx || dragHoveredCell.y !== cy) {
             dragHoveredCell = { x: cx, y: cy };
-            dragCanPlace = canPlaceArrow(cx, cy, dragDir, currentPlayer);
+            dragCanPlace = canPlaceArrow(cx, cy, dragDir, dragPlayer);
             updateDragBoardPreview(cx, cy, dragDir, dragCanPlace);
         }
 
@@ -1532,7 +1704,7 @@ function onTileDragEnd(e) {
 
     if (dragCanPlace && dragHoveredCell) {
         // Place the arrow!
-        doPlaceArrow(currentPlayer, dragHoveredCell.x, dragHoveredCell.y, dragDir);
+        doPlaceArrow(dragPlayer, dragHoveredCell.x, dragHoveredCell.y, dragDir);
     }
 
     finishDrag();
@@ -1562,6 +1734,7 @@ function finishDrag() {
     clearDragBoardPreview();
 
     dragDir = null;
+    dragPlayer = 0;
     dragHoveredCell = null;
     dragCanPlace = false;
 
@@ -1662,7 +1835,14 @@ function onWindowResize() {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 
-    if (viewMode === 'top') setTopView();
+    if (viewMode === 'top') {
+        setTopView();
+    } else if (!isAnimatingView) {
+        set3DView();
+    }
+
+    // Re-evaluate HUD state (arrow tile enable/disable depends on portrait/landscape)
+    updateHUD();
 }
 
 // ==================== ANIMATION LOOP ====================

@@ -217,7 +217,7 @@ function aiCanReach(state, player) {
             if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) continue;
 
             const dest = aiResolveFlow(state, nx, ny, player);
-            if (aiFlowCrossesGoal(state, nx, ny, goalRow)) return true;
+            if (aiFlowCrossesGoal(state, nx, ny, goalRow, player)) return true;
 
             const dk = dest.x + "," + dest.y;
             if (!visited.has(dk)) {
@@ -248,7 +248,18 @@ function aiResolveFlow(state, x, y, player) {
         const nx = cx + d.dx;
         const ny = cy + d.dy;
         if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
-        if (nx === state.pawns[other].x && ny === state.pawns[other].y) break;
+        // Jump over other pawn
+        if (nx === state.pawns[other].x && ny === state.pawns[other].y) {
+            const jx = nx + d.dx;
+            const jy = ny + d.dy;
+            if (jx < 0 || jx >= BOARD_SIZE || jy < 0 || jy >= BOARD_SIZE) break;
+            const jk = jx + "," + jy;
+            if (visited.has(jk)) break;
+            cx = jx;
+            cy = jy;
+            if (!state.arrows[jk]) break;
+            continue;
+        }
         cx = nx;
         cy = ny;
     }
@@ -256,9 +267,10 @@ function aiResolveFlow(state, x, y, player) {
     return { x: cx, y: cy };
 }
 
-function aiFlowCrossesGoal(state, sx, sy, goalRow) {
+function aiFlowCrossesGoal(state, sx, sy, goalRow, player) {
     let cx = sx;
     let cy = sy;
+    const other = player === 1 ? 2 : 1;
     const visited = new Set();
 
     while (true) {
@@ -272,6 +284,19 @@ function aiFlowCrossesGoal(state, sx, sy, goalRow) {
         const nx = cx + d.dx;
         const ny = cy + d.dy;
         if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
+        // Jump over other pawn
+        if (nx === state.pawns[other].x && ny === state.pawns[other].y) {
+            const jx = nx + d.dx;
+            const jy = ny + d.dy;
+            if (jx < 0 || jx >= BOARD_SIZE || jy < 0 || jy >= BOARD_SIZE) break;
+            const jk = jx + "," + jy;
+            if (visited.has(jk)) break;
+            cx = jx;
+            cy = jy;
+            if (cy === goalRow) return true;
+            if (!state.arrows[jk]) break;
+            continue;
+        }
         cx = nx;
         cy = ny;
     }
@@ -293,7 +318,7 @@ function aiApplyMove(state, player, move) {
         const dest = aiResolveFlow(ns, move.x, move.y, player);
         ns.pawns[player] = dest;
         const goalRow = player === 1 ? 0 : 8;
-        if (dest.y === goalRow || aiFlowCrossesGoal(ns, move.x, move.y, goalRow)) {
+        if (dest.y === goalRow || aiFlowCrossesGoal(ns, move.x, move.y, goalRow, player)) {
             ns.gameOver = true;
         }
     } else if (move.type === "arrow") {
@@ -314,7 +339,7 @@ function aiOrderMoves(moves, state, player) {
 
         if (m.type === "move") {
             const dest = aiResolveFlow(state, m.x, m.y, player);
-            if (dest.y === goalRow || aiFlowCrossesGoal(state, m.x, m.y, goalRow)) {
+            if (dest.y === goalRow || aiFlowCrossesGoal(state, m.x, m.y, goalRow, player)) {
                 m._priority = 100000;
             } else {
                 const distBefore = player === 1 ? state.pawns[player].y : (8 - state.pawns[player].y);
@@ -416,7 +441,7 @@ function aiBFSDistance(state, player) {
             }
 
             const dest = aiResolveFlow(state, nx, ny, player);
-            if (dest.y === goalRow || aiFlowCrossesGoal(state, nx, ny, goalRow)) {
+            if (dest.y === goalRow || aiFlowCrossesGoal(state, nx, ny, goalRow, player)) {
                 return dist + 1;
             }
 
