@@ -2,8 +2,8 @@
 
 // ==================== AI CONSTANTS ====================
 const AI_PLAYER = 2;
-const AI_TIME_LIMIT = 1500;
-const AI_MAX_DEPTH = 12;
+const AI_TIME_LIMIT = 2500;
+const AI_MAX_DEPTH = 14;
 
 const AI_DIR_VECTORS = {
     up:    { dx: 0, dy: -1 },
@@ -13,6 +13,7 @@ const AI_DIR_VECTORS = {
 };
 
 const AI_DIR_OPPOSITE = { up: "down", down: "up", left: "right", right: "left" };
+const AI_ALL_DIRS = ["up", "down", "left", "right"];
 
 // Worker state (shared with game.js)
 let aiWorker = null;
@@ -30,9 +31,10 @@ function aiFindBestMove(gameState) {
         if (result.timedOut) break;
         bestMove = result.move;
 
+        // Found a winning/losing move — stop
         if (result.score >= 90000) break;
         if (result.score <= -90000) break;
-        if (performance.now() - startTime > AI_TIME_LIMIT * 0.8) break;
+        if (performance.now() - startTime > AI_TIME_LIMIT * 0.75) break;
     }
 
     return bestMove;
@@ -98,7 +100,7 @@ function aiGenerateMoves(state, player) {
     const py = state.pawns[player].y;
     const other = player === 1 ? 2 : 1;
 
-    for (const dir of ["up", "down", "left", "right"]) {
+    for (const dir of AI_ALL_DIRS) {
         const d = AI_DIR_VECTORS[dir];
         const nx = px + d.dx;
         const ny = py + d.dy;
@@ -109,6 +111,16 @@ function aiGenerateMoves(state, player) {
             const jy = ny + d.dy;
             if (jx >= 0 && jx < BOARD_SIZE && jy >= 0 && jy < BOARD_SIZE) {
                 moves.push({ type: "move", x: jx, y: jy });
+            } else {
+                // Quoridor rule: straight jump blocked (off board), allow side-steps
+                for (const sideDir of AI_ALL_DIRS) {
+                    if (sideDir === dir || sideDir === AI_DIR_OPPOSITE[dir]) continue;
+                    const sd = AI_DIR_VECTORS[sideDir];
+                    const sx = nx + sd.dx;
+                    const sy = ny + sd.dy;
+                    if (sx < 0 || sx >= BOARD_SIZE || sy < 0 || sy >= BOARD_SIZE) continue;
+                    moves.push({ type: "move", x: sx, y: sy });
+                }
             }
             continue;
         }
@@ -118,7 +130,7 @@ function aiGenerateMoves(state, player) {
     if (state.arrowCounts[player] > 0) {
         for (let y = 0; y < BOARD_SIZE; y++) {
             for (let x = 0; x < BOARD_SIZE; x++) {
-                for (const dir of ["up", "down", "left", "right"]) {
+                for (const dir of AI_ALL_DIRS) {
                     if (aiCanPlaceArrow(state, x, y, dir, player)) {
                         moves.push({ type: "arrow", x, y, dir });
                     }
@@ -169,7 +181,7 @@ function aiCreatesLoop(state, x, y, dir) {
         cy += AI_DIR_VECTORS[a.dir].dy;
     }
 
-    for (const otherDir of ["up", "down", "left", "right"]) {
+    for (const otherDir of AI_ALL_DIRS) {
         const od = AI_DIR_VECTORS[otherDir];
         const sx = x - od.dx;
         const sy = y - od.dy;
@@ -210,7 +222,7 @@ function aiCanReach(state, player) {
         const { x: cx, y: cy } = queue.shift();
         if (cy === goalRow) return true;
 
-        for (const dir of ["up", "down", "left", "right"]) {
+        for (const dir of AI_ALL_DIRS) {
             const d = AI_DIR_VECTORS[dir];
             const nx = cx + d.dx;
             const ny = cy + d.dy;
@@ -329,54 +341,117 @@ function aiApplyMove(state, player, move) {
     return ns;
 }
 
+// ==================== SMART MOVE ORDERING ====================
 function aiOrderMoves(moves, state, player) {
     const goalRow = player === 1 ? 0 : 8;
     const other = player === 1 ? 2 : 1;
     const otherGoalRow = other === 1 ? 0 : 8;
 
+    // Pre-compute distances (cheap relative to full search)
+    const oppBfsDist = aiBFSDistance(state, other);
+    const myBfsDist = aiBFSDistance(state, player);
+
+    // Analyze opponent's flow threat zones
+    const oppThreatCells = aiGetFlowThreatZone(state, other);
+
+    // Phase 1: Quick heuristic scoring for all moves
     for (const m of moves) {
         m._priority = 0;
 
         if (m.type === "move") {
             const dest = aiResolveFlow(state, m.x, m.y, player);
             if (dest.y === goalRow || aiFlowCrossesGoal(state, m.x, m.y, goalRow, player)) {
-                m._priority = 100000;
+                m._priority = 100000; // winning move
             } else {
                 const distBefore = player === 1 ? state.pawns[player].y : (8 - state.pawns[player].y);
                 const distAfter = player === 1 ? dest.y : (8 - dest.y);
-                m._priority = (distBefore - distAfter) * 1000 + 5000;
+                const progress = distBefore - distAfter;
+                m._priority = progress * 2000 + 5000;
+
+                // Bonus for moving onto a flow chain
+                const flowLen = aiFlowLength(state, m.x, m.y, player);
+                m._priority += flowLen * 500;
             }
         } else if (m.type === "arrow") {
-            const myDist = Math.abs(m.y - state.pawns[player].y) + Math.abs(m.x - state.pawns[player].x);
-            const oppDist = Math.abs(m.y - state.pawns[other].y) + Math.abs(m.x - state.pawns[other].x);
+            const arrowKey = m.x + "," + m.y;
 
-            if (m.dir === (otherGoalRow === 0 ? "down" : "up")) {
-                m._priority = 2000 - oppDist * 50;
-            } else if (m.dir === (goalRow === 0 ? "up" : "down")) {
-                m._priority = 1800 - myDist * 50;
-            } else {
-                m._priority = 1000 - Math.min(myDist, oppDist) * 30;
+            // Bonus for placing in opponent's flow threat zone
+            if (oppThreatCells.has(arrowKey)) {
+                m._priority += 2500;
             }
+
+            // Bonus for arrows that point opponent away from their goal
+            if (m.dir === (otherGoalRow === 0 ? "down" : "up")) {
+                const distToOpp = Math.abs(m.y - state.pawns[other].y) + Math.abs(m.x - state.pawns[other].x);
+                m._priority += Math.max(0, 2000 - distToOpp * 200);
+            }
+
+            // Bonus for arrows pointing us toward our goal
+            if (m.dir === (goalRow === 0 ? "up" : "down")) {
+                const distToMe = Math.abs(m.y - state.pawns[player].y) + Math.abs(m.x - state.pawns[player].x);
+                m._priority += Math.max(0, 1500 - distToMe * 200);
+            }
+
+            // Center bonus
+            const centerBonus = 4 - Math.abs(m.x - 4);
+            m._priority += centerBonus * 50;
+
+            // Arrows near opponent's current position
+            const nearOpp = Math.abs(m.x - state.pawns[other].x) + Math.abs(m.y - state.pawns[other].y);
+            if (nearOpp <= 3) {
+                m._priority += (4 - nearOpp) * 400;
+            }
+
+            // Arrows extending existing chains
+            const chainExt = aiArrowExtendsChain(state, m.x, m.y, m.dir, player);
+            m._priority += chainExt * 600;
         }
     }
 
+    // Sort by quick heuristic first
     moves.sort((a, b) => b._priority - a._priority);
 
+    // Phase 2: Expensive BFS-based evaluation for top candidate arrows only
+    // This avoids doing BFS for hundreds of arrow moves at every depth
     const arrowMoves = moves.filter(m => m.type === "arrow");
     const pawnMoves = moves.filter(m => m.type === "move");
-    if (arrowMoves.length > 20) {
-        const topArrows = arrowMoves.slice(0, 20);
-        moves.length = 0;
-        moves.push(...pawnMoves, ...topArrows);
+    const bfsEvalCount = Math.min(arrowMoves.length, oppBfsDist <= 3 ? 25 : 15);
+
+    for (let i = 0; i < bfsEvalCount; i++) {
+        const m = arrowMoves[i];
+        const childState = aiApplyMove(state, player, m);
+        const newOppDist = aiBFSDistance(childState, other);
+        const distIncrease = newOppDist - oppBfsDist;
+
+        if (distIncrease > 0) {
+            m._priority += 6000 + distIncrease * 1500;
+        }
+
+        const newMyDist = aiBFSDistance(childState, player);
+        const myDistDecrease = myBfsDist - newMyDist;
+        if (myDistDecrease > 0) {
+            m._priority += myDistDecrease * 1200;
+        }
     }
+
+    // Re-sort arrows after BFS evaluation and prune
+    arrowMoves.sort((a, b) => b._priority - a._priority);
+    const maxArrows = oppBfsDist <= 3 ? 40 : 30;
+    const topArrows = arrowMoves.length > maxArrows ? arrowMoves.slice(0, maxArrows) : arrowMoves;
+
+    moves.length = 0;
+    moves.push(...pawnMoves, ...topArrows);
+    moves.sort((a, b) => b._priority - a._priority);
 }
 
+// ==================== ENHANCED EVALUATION ====================
 function aiEvaluate(state) {
     const me = AI_PLAYER;
     const opp = me === 1 ? 2 : 1;
     const myGoal = me === 1 ? 0 : 8;
     const oppGoal = opp === 1 ? 0 : 8;
 
+    // Terminal states
     if (state.gameOver) {
         if (state.pawns[me].y === myGoal) return 100000;
         if (state.pawns[opp].y === oppGoal) return -100000;
@@ -384,34 +459,58 @@ function aiEvaluate(state) {
 
     let score = 0;
 
+    // === BFS DISTANCE (most important factor) ===
     const myPathLen = aiBFSDistance(state, me);
     const oppPathLen = aiBFSDistance(state, opp);
-    score += (oppPathLen - myPathLen) * 500;
+    score += (oppPathLen - myPathLen) * 800;
 
+    // === URGENCY: near-win/near-loss detection ===
+    if (myPathLen <= 1) score += 12000;
+    else if (myPathLen === 2) score += 4000;
+    else if (myPathLen === 3) score += 1500;
+
+    if (oppPathLen <= 1) score -= 15000;
+    else if (oppPathLen === 2) score -= 6000;
+    else if (oppPathLen === 3) score -= 2000;
+
+    // === RAW POSITIONAL DISTANCE ===
     const myRawDist = me === 1 ? state.pawns[me].y : (8 - state.pawns[me].y);
     const oppRawDist = opp === 1 ? state.pawns[opp].y : (8 - state.pawns[opp].y);
-    score += (oppRawDist - myRawDist) * 100;
+    score += (oppRawDist - myRawDist) * 150;
+    score += (8 - myRawDist) * 60;
+    score -= (8 - oppRawDist) * 60;
 
-    score += (state.arrowCounts[me] - state.arrowCounts[opp]) * 30;
+    // === FLOW CHAIN ANALYSIS ===
+    const myChainScore = aiAnalyzeFlowChains(state, me, myGoal);
+    const oppChainScore = aiAnalyzeFlowChains(state, opp, oppGoal);
+    score += myChainScore * 120;
+    score -= oppChainScore * 150; // Weight opponent's chains more to encourage blocking
 
-    score += aiFlowChainBonus(state, me, myGoal) * 80;
-    score -= aiFlowChainBonus(state, opp, oppGoal) * 80;
+    // === ARROW ECONOMY ===
+    score += (state.arrowCounts[me] - state.arrowCounts[opp]) * 40;
 
+    // === BOARD CONTROL ===
+    score += aiBoardControl(state, me, opp);
+
+    // === OPPONENT FLOW DISRUPTION ===
+    score += aiDisruptionScore(state, me, opp);
+
+    // === CENTER CONTROL ===
     const myCenterDist = Math.abs(state.pawns[me].x - 4);
     const oppCenterDist = Math.abs(state.pawns[opp].x - 4);
-    score += (oppCenterDist - myCenterDist) * 15;
+    score += (oppCenterDist - myCenterDist) * 20;
 
-    score += (8 - myRawDist) * 50;
-    score -= (8 - oppRawDist) * 50;
+    // === TEMPO ===
+    if (state.currentPlayer === me) score += 30;
 
-    if (state.currentPlayer === me) score += 25;
+    // === FLOW CONNECTIVITY ===
+    score += aiFlowConnectivity(state, me, myGoal) * 80;
+    score -= aiFlowConnectivity(state, opp, oppGoal) * 100;
 
-    if (oppPathLen <= 1) score -= 8000;
-    if (myPathLen <= 1) score += 8000;
-
-    score += aiRedirectionBonus(state, me, opp);
     return score;
 }
+
+// ==================== EVALUATION HELPERS ====================
 
 function aiBFSDistance(state, player) {
     const goalRow = player === 1 ? 0 : 8;
@@ -424,7 +523,7 @@ function aiBFSDistance(state, player) {
     while (queue.length > 0) {
         const { x: cx, y: cy, dist } = queue.shift();
 
-        for (const dir of ["up", "down", "left", "right"]) {
+        for (const dir of AI_ALL_DIRS) {
             const d = AI_DIR_VECTORS[dir];
             let nx = cx + d.dx;
             let ny = cy + d.dy;
@@ -456,46 +555,237 @@ function aiBFSDistance(state, player) {
     return 50;
 }
 
-function aiFlowChainBonus(state, player, goalRow) {
-    let bonus = 0;
+// Analyze flow chain quality for a player
+function aiAnalyzeFlowChains(state, player, goalRow) {
+    let chainScore = 0;
     const goalDir = goalRow === 0 ? "up" : "down";
+    const pawn = state.pawns[player];
 
     for (const key of Object.keys(state.arrows)) {
         const a = state.arrows[key];
-        const parts = key.split(",");
-        const ax = Number(parts[0]);
-        const ay = Number(parts[1]);
+        const [ax, ay] = key.split(",").map(Number);
 
-        if (a.player === player && a.dir === goalDir) {
-            const dist = Math.abs(ax - state.pawns[player].x) + Math.abs(ay - state.pawns[player].y);
-            bonus += Math.max(0, 5 - dist);
+        // Arrows belonging to this player pointing toward goal
+        if (a.player === player) {
+            if (a.dir === goalDir) {
+                const dist = Math.abs(ax - pawn.x) + Math.abs(ay - pawn.y);
+                chainScore += Math.max(0, 8 - dist);
+
+                // Extra bonus for arrows between pawn and goal
+                const pawnToGoal = player === 1 ? pawn.y : (8 - pawn.y);
+                const arrowToGoal = player === 1 ? ay : (8 - ay);
+                if (arrowToGoal < pawnToGoal) {
+                    chainScore += 3;
+                }
+            }
         }
-    }
 
-    return bonus;
-}
-
-function aiRedirectionBonus(state, me, opp) {
-    let bonus = 0;
-    const oppGoalDir = opp === 1 ? "up" : "down";
-
-    for (const key of Object.keys(state.arrows)) {
-        const a = state.arrows[key];
-        const parts = key.split(",");
-        const ax = Number(parts[0]);
-        const ay = Number(parts[1]);
-
-        const distToOpp = Math.abs(ax - state.pawns[opp].x) + Math.abs(ay - state.pawns[opp].y);
-        if (distToOpp <= 3 && a.player === me) {
-            if (a.dir === AI_DIR_OPPOSITE[oppGoalDir]) {
-                bonus += (4 - distToOpp) * 25;
-            } else if (a.dir === "left" || a.dir === "right") {
-                bonus += (4 - distToOpp) * 12;
+        // Any arrow that can flow toward our goal
+        const flowEnd = aiResolveFlow(state, ax, ay, player);
+        const startDist = player === 1 ? ay : (8 - ay);
+        const endDist = player === 1 ? flowEnd.y : (8 - flowEnd.y);
+        const progress = startDist - endDist;
+        if (progress > 0) {
+            const dist = Math.abs(ax - pawn.x) + Math.abs(ay - pawn.y);
+            if (dist <= 5) {
+                chainScore += progress * Math.max(0, 3 - dist / 2);
             }
         }
     }
 
-    return bonus;
+    return chainScore;
+}
+
+// Evaluate board control
+function aiBoardControl(state, me, opp) {
+    let score = 0;
+    const myGoalDir = me === 1 ? "up" : "down";
+    const oppGoalDir = opp === 1 ? "up" : "down";
+
+    let myGoalAligned = 0;
+    let oppDeflected = 0;
+    let myArrowsOnBoard = 0;
+    let oppArrowsOnBoard = 0;
+
+    for (const key of Object.keys(state.arrows)) {
+        const a = state.arrows[key];
+        const [ax, ay] = key.split(",").map(Number);
+
+        if (a.player === me) {
+            myArrowsOnBoard++;
+            if (a.dir === myGoalDir) myGoalAligned++;
+
+            // Arrows that deflect opponent sideways or backwards
+            const distToOpp = Math.abs(ax - state.pawns[opp].x) + Math.abs(ay - state.pawns[opp].y);
+            if (distToOpp <= 4) {
+                if (a.dir === AI_DIR_OPPOSITE[oppGoalDir]) {
+                    oppDeflected += (5 - distToOpp) * 2;
+                } else if (a.dir === "left" || a.dir === "right") {
+                    oppDeflected += (5 - distToOpp);
+                }
+            }
+        } else {
+            oppArrowsOnBoard++;
+        }
+    }
+
+    score += myGoalAligned * 30;
+    score += oppDeflected * 40;
+    score += (myArrowsOnBoard - oppArrowsOnBoard) * 10;
+
+    return score;
+}
+
+// Score how well our arrows disrupt opponent's path to goal
+function aiDisruptionScore(state, me, opp) {
+    let score = 0;
+    const oppGoalDir = opp === 1 ? "up" : "down";
+    const oppPawn = state.pawns[opp];
+    const oppGoalRow = opp === 1 ? 0 : 8;
+
+    const colMin = Math.max(0, oppPawn.x - 3);
+    const colMax = Math.min(8, oppPawn.x + 3);
+    const rowLo = Math.min(oppPawn.y, oppGoalRow);
+    const rowHi = Math.max(oppPawn.y, oppGoalRow);
+
+    for (let y = rowLo; y <= rowHi; y++) {
+        for (let x = colMin; x <= colMax; x++) {
+            const key = x + "," + y;
+            const a = state.arrows[key];
+            if (!a || a.player !== me) continue;
+
+            if (a.dir === AI_DIR_OPPOSITE[oppGoalDir]) {
+                score += 50;
+            } else if (a.dir === "left" || a.dir === "right") {
+                score += 30;
+            }
+        }
+    }
+
+    return score;
+}
+
+// Measure flow connectivity: how many cells near pawn can reach the goal
+function aiFlowConnectivity(state, player, goalRow) {
+    let connectivity = 0;
+    const pawn = state.pawns[player];
+
+    for (let dx = -3; dx <= 3; dx++) {
+        for (let dy = -3; dy <= 3; dy++) {
+            const cx = pawn.x + dx;
+            const cy = pawn.y + dy;
+            if (cx < 0 || cx >= BOARD_SIZE || cy < 0 || cy >= BOARD_SIZE) continue;
+
+            const key = cx + "," + cy;
+            if (!state.arrows[key]) continue;
+
+            if (aiFlowCrossesGoal(state, cx, cy, goalRow, player)) {
+                const dist = Math.abs(dx) + Math.abs(dy);
+                connectivity += Math.max(0, 5 - dist);
+            }
+        }
+    }
+
+    return connectivity;
+}
+
+// Get the cells in the opponent's flow threat zone
+function aiGetFlowThreatZone(state, player) {
+    const threatCells = new Set();
+    const goalRow = player === 1 ? 0 : 8;
+    const pawn = state.pawns[player];
+    const yStep = goalRow === 0 ? -1 : 1;
+
+    // Cells in front of the opponent pawn (toward their goal)
+    for (let y = pawn.y; y !== goalRow + yStep; y += yStep) {
+        for (let x = Math.max(0, pawn.x - 3); x <= Math.min(8, pawn.x + 3); x++) {
+            const key = x + "," + y;
+            if (!state.arrows[key]) {
+                threatCells.add(key);
+            }
+        }
+    }
+
+    // Cells adjacent to existing player arrows (chain extension points)
+    for (const key of Object.keys(state.arrows)) {
+        const a = state.arrows[key];
+        if (a.player !== player) continue;
+        const [ax, ay] = key.split(",").map(Number);
+
+        for (const dir of AI_ALL_DIRS) {
+            const d = AI_DIR_VECTORS[dir];
+            const nx = ax + d.dx;
+            const ny = ay + d.dy;
+            if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
+                const nk = nx + "," + ny;
+                if (!state.arrows[nk]) {
+                    threatCells.add(nk);
+                }
+            }
+        }
+    }
+
+    return threatCells;
+}
+
+// Check how many steps a flow chain covers from a given cell
+function aiFlowLength(state, x, y, player) {
+    let len = 0;
+    let cx = x, cy = y;
+    const visited = new Set();
+    const goalRow = player === 1 ? 0 : 8;
+
+    while (cx >= 0 && cx < BOARD_SIZE && cy >= 0 && cy < BOARD_SIZE) {
+        if (cy === goalRow) return len + 5;
+        const key = cx + "," + cy;
+        if (visited.has(key)) break;
+        visited.add(key);
+        const a = state.arrows[key];
+        if (!a) break;
+        const d = AI_DIR_VECTORS[a.dir];
+        cx += d.dx;
+        cy += d.dy;
+        len++;
+    }
+
+    return len;
+}
+
+// Check if placing an arrow extends an existing chain
+function aiArrowExtendsChain(state, x, y, dir, player) {
+    const goalRow = player === 1 ? 0 : 8;
+    const goalDir = goalRow === 0 ? "up" : "down";
+    let extends_ = 0;
+
+    // Check if there's an arrow pointing TO this cell
+    for (const checkDir of AI_ALL_DIRS) {
+        const d = AI_DIR_VECTORS[checkDir];
+        const sx = x - d.dx;
+        const sy = y - d.dy;
+        if (sx < 0 || sx >= BOARD_SIZE || sy < 0 || sy >= BOARD_SIZE) continue;
+        const srcKey = sx + "," + sy;
+        const srcArrow = state.arrows[srcKey];
+        if (srcArrow && srcArrow.dir === checkDir) {
+            extends_ += 2;
+            if (srcArrow.player === player) extends_ += 1;
+        }
+    }
+
+    // Check if the arrow's target has a continuation
+    const d = AI_DIR_VECTORS[dir];
+    const tx = x + d.dx;
+    const ty = y + d.dy;
+    if (tx >= 0 && tx < BOARD_SIZE && ty >= 0 && ty < BOARD_SIZE) {
+        const targetKey = tx + "," + ty;
+        if (state.arrows[targetKey]) {
+            extends_ += 1;
+        }
+    }
+
+    // Bonus if pointing toward our goal
+    if (dir === goalDir) extends_ += 2;
+
+    return extends_;
 }
 
 // ==================== WEB WORKER BLOB CREATION ====================
@@ -513,6 +803,7 @@ const AI_TIME_LIMIT = ${AI_TIME_LIMIT};
 const AI_MAX_DEPTH = ${AI_MAX_DEPTH};
 const AI_DIR_VECTORS = ${JSON.stringify(AI_DIR_VECTORS)};
 const AI_DIR_OPPOSITE = ${JSON.stringify(AI_DIR_OPPOSITE)};
+const AI_ALL_DIRS = ${JSON.stringify(AI_ALL_DIRS)};
 
 // AI engine functions (serialized from ai.js)
 ${aiFindBestMove.toString()}
@@ -528,8 +819,13 @@ ${aiApplyMove.toString()}
 ${aiOrderMoves.toString()}
 ${aiEvaluate.toString()}
 ${aiBFSDistance.toString()}
-${aiFlowChainBonus.toString()}
-${aiRedirectionBonus.toString()}
+${aiAnalyzeFlowChains.toString()}
+${aiBoardControl.toString()}
+${aiDisruptionScore.toString()}
+${aiFlowConnectivity.toString()}
+${aiGetFlowThreatZone.toString()}
+${aiFlowLength.toString()}
+${aiArrowExtendsChain.toString()}
 
 self.onmessage = function(event) {
     const { type, requestId, state } = event.data || {};
@@ -577,6 +873,7 @@ function initAIWorker() {
         console.error('AI worker crashed:', event.message || event);
     };
 }
+
 
 function requestBestMoveFromWorker(state) {
     initAIWorker();

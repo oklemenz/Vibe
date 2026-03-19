@@ -482,6 +482,7 @@ function getValidMoves(player) {
     const py = pawns[player].y;
     const other = player === 1 ? 2 : 1;
     const moves = [];
+    const added = new Set();
 
     for (const dir of ['up', 'down', 'left', 'right']) {
         const d = DIR_VECTORS[dir];
@@ -495,14 +496,35 @@ function getValidMoves(player) {
             const jx = nx + d.dx;
             const jy = ny + d.dy;
             if (jx >= 0 && jx < BOARD_SIZE && jy >= 0 && jy < BOARD_SIZE) {
-                moves.push({ x: jx, y: jy });
+                const key = jx + ',' + jy;
+                if (!added.has(key)) {
+                    moves.push({ x: jx, y: jy });
+                    added.add(key);
+                }
+            } else {
+                // Quoridor rule: straight jump blocked (off board), allow side-steps
+                // Move to cells adjacent to the opponent (perpendicular to the approach direction)
+                for (const sideDir of ['up', 'down', 'left', 'right']) {
+                    if (sideDir === dir || sideDir === DIR_OPPOSITE[dir]) continue;
+                    const sd = DIR_VECTORS[sideDir];
+                    const sx = nx + sd.dx;
+                    const sy = ny + sd.dy;
+                    if (sx < 0 || sx >= BOARD_SIZE || sy < 0 || sy >= BOARD_SIZE) continue;
+                    const key = sx + ',' + sy;
+                    if (!added.has(key)) {
+                        moves.push({ x: sx, y: sy });
+                        added.add(key);
+                    }
+                }
             }
-            // Diagonal jumps if straight jump is blocked
-            // (simplified: side-steps)
             continue;
         }
 
-        moves.push({ x: nx, y: ny });
+        const key = nx + ',' + ny;
+        if (!added.has(key)) {
+            moves.push({ x: nx, y: ny });
+            added.add(key);
+        }
     }
     return moves;
 }

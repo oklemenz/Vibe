@@ -166,7 +166,7 @@ body {
     color: white;
     font-size: 12px;
     pointer-events: auto;
-    touch-action: manipulation;
+    touch-action: none;
     transition: background 0.2s;
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -374,7 +374,7 @@ body {
     color: white;
     font-size: 12px;
     pointer-events: auto;
-    touch-action: manipulation;
+    touch-action: none;
     transition: background 0.2s;
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -527,7 +527,7 @@ body {
     color: white;
     font-size: 12px;
     pointer-events: auto;
-    touch-action: manipulation;
+    touch-action: none;
     transition: background 0.2s;
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
