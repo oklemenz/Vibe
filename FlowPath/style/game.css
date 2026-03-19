@@ -4,9 +4,6 @@ html, body {
     margin: 0;
     padding: 0;
     background-color: black;
-    overflow: hidden;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    color: white;
 }
 
 @media (orientation: landscape) {
@@ -58,15 +55,10 @@ canvas {
 }
 
 body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: #1a1a2e;
     margin-top: 0.5px;
-}
-
-#game-canvas {
-    display: block;
-    width: 100vw;
-    height: 100vh;
-    touch-action: none;
+    color: white;
 }
 
 /* ==================== Player HUD (inside right panel) ==================== */

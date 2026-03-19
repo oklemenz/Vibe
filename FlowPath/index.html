@@ -17,18 +17,23 @@
     <link rel="stylesheet" href="style/game.css">
     <title>Flow Path</title>
     <style>
+        /* Hide everything until loaded - black screen */
         body.loading {
             background: #1a1a2e;
         }
-        body.loading > * {
+
+        body.loading > *:not(#game-container) {
             visibility: hidden;
             opacity: 0;
+        }
+
+        body.loading #game-container {
+            visibility: hidden;
         }
     </style>
 </head>
 <body class="loading">
-
-<canvas id="game-canvas"></canvas>
+<div id="game-container"></div>
 
 <!-- Drag preview that follows the pointer -->
 <div id="drag-preview"></div>
@@ -208,18 +213,13 @@
         }
     });
 
-    // Remove loading class
-    requestAnimationFrame(() => {
-        setTimeout(() => document.body.classList.remove('loading'), 50);
+    // Remove loading class to show UI after everything is initialized and rendered
+    // Use double requestAnimationFrame + small delay to ensure all layouts are complete
+    requestAnimationFrame(function () {
+        setTimeout(function () {
+            document.body.classList.remove('loading');
+        }, 50);
     });
-
-    // Prevent pinch-zoom and double-tap zoom on mobile
-    document.addEventListener('gesturestart', (e) => e.preventDefault());
-    document.addEventListener('gesturechange', (e) => e.preventDefault());
-    document.addEventListener('gestureend', (e) => e.preventDefault());
-    document.addEventListener('touchstart', (e) => {
-        if (e.touches.length > 1) e.preventDefault();
-    }, { passive: false });
 </script>
 </body>
 </html>

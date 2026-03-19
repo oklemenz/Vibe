@@ -90,7 +90,8 @@ function init() {
     camera.position.set(0, 8, 8);
     camera.lookAt(0, 0, 0);
 
-    renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias: true });
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    document.getElementById('game-container').appendChild(renderer.domElement);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
