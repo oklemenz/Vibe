@@ -402,7 +402,7 @@ function rebuildArrowMeshes() {
         const arrow = arrows[key];
         const wpos = cellToWorld(x, y);
 
-        // Base tile — neutral stone/brown
+        // Brown base tile
         const tileGeo = new THREE.BoxGeometry(CELL_SIZE * 0.85, ARROW_HEIGHT, CELL_SIZE * 0.85);
         const tileMat = new THREE.MeshStandardMaterial({
             color: 0xc9a66b, transparent: true, opacity: 0.75, metalness: 0.1, roughness: 0.9
@@ -412,20 +412,16 @@ function rebuildArrowMeshes() {
         tileMesh.receiveShadow = true;
         arrowsGroup.add(tileMesh);
 
-        // Arrow indicator (triangle head + stem)
+        // White triangle arrow on top
         const triShape = new THREE.Shape();
         triShape.moveTo(0, 0.32);
-        triShape.lineTo(-0.22, -0.05);
-        triShape.lineTo(-0.08, -0.05);
-        triShape.lineTo(-0.08, -0.28);
-        triShape.lineTo(0.08, -0.28);
-        triShape.lineTo(0.08, -0.05);
-        triShape.lineTo(0.22, -0.05);
+        triShape.lineTo(-0.26, -0.22);
+        triShape.lineTo(0.26, -0.22);
         triShape.closePath();
 
         const triGeo = new THREE.ShapeGeometry(triShape);
         const triMat = new THREE.MeshStandardMaterial({
-            color: 0xf0e6d3, emissive: 0xd4c4a8, emissiveIntensity: 0.35,
+            color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.4,
             side: THREE.DoubleSide
         });
         const triMesh = new THREE.Mesh(triGeo, triMat);
@@ -1314,7 +1310,7 @@ async function updateAssistPreview() {
     }
 
     const wpos = cellToWorld(suggestion.x, suggestion.y);
-    const tileGeo = new THREE.BoxGeometry(CELL_SIZE * 0.82, ARROW_HEIGHT * 1.35, CELL_SIZE * 0.82);
+    const tileGeo = new THREE.BoxGeometry(CELL_SIZE * 0.85, ARROW_HEIGHT, CELL_SIZE * 0.85);
     const tileMat = new THREE.MeshStandardMaterial({
         color: 0x00ff00,
         emissive: 0x00cc00,
@@ -1325,17 +1321,13 @@ async function updateAssistPreview() {
         roughness: 0.85
     });
     const tileMesh = new THREE.Mesh(tileGeo, tileMat);
-    tileMesh.position.set(wpos.x, ARROW_HEIGHT + 0.04, wpos.z);
+    tileMesh.position.set(wpos.x, ARROW_HEIGHT / 2 + 0.04, wpos.z);
     assistPreviewGroup.add(tileMesh);
 
     const triShape = new THREE.Shape();
     triShape.moveTo(0, 0.32);
-    triShape.lineTo(-0.22, -0.05);
-    triShape.lineTo(-0.08, -0.05);
-    triShape.lineTo(-0.08, -0.28);
-    triShape.lineTo(0.08, -0.28);
-    triShape.lineTo(0.08, -0.05);
-    triShape.lineTo(0.22, -0.05);
+    triShape.lineTo(-0.26, -0.22);
+    triShape.lineTo(0.26, -0.22);
     triShape.closePath();
 
     const triGeo = new THREE.ShapeGeometry(triShape);
@@ -1350,20 +1342,12 @@ async function updateAssistPreview() {
     const triMesh = new THREE.Mesh(triGeo, triMat);
     triMesh.rotation.x = -Math.PI / 2;
     switch (suggestion.dir) {
-        case 'up':
-            triMesh.rotation.z = 0;
-            break;
-        case 'down':
-            triMesh.rotation.z = Math.PI;
-            break;
-        case 'left':
-            triMesh.rotation.z = Math.PI / 2;
-            break;
-        case 'right':
-            triMesh.rotation.z = -Math.PI / 2;
-            break;
+        case 'up':    triMesh.rotation.z = 0; break;
+        case 'down':  triMesh.rotation.z = Math.PI; break;
+        case 'left':  triMesh.rotation.z = Math.PI / 2; break;
+        case 'right': triMesh.rotation.z = -Math.PI / 2; break;
     }
-    triMesh.position.set(wpos.x, ARROW_HEIGHT * 2 + 0.06, wpos.z);
+    triMesh.position.set(wpos.x, ARROW_HEIGHT + 0.05, wpos.z);
     assistPreviewGroup.add(triMesh);
 }
 
@@ -1590,7 +1574,12 @@ function setTopView() {
 
 // ==================== DRAG & DROP ====================
 
-const DIR_SYMBOLS = { up: '⬆', down: '⬇', left: '⬅', right: '➡' };
+const DIR_SYMBOLS = {
+    up:    '<span class="arrow-icon arrow-up"></span>',
+    down:  '<span class="arrow-icon arrow-down"></span>',
+    left:  '<span class="arrow-icon arrow-left"></span>',
+    right: '<span class="arrow-icon arrow-right"></span>'
+};
 
 function setupDragAndDrop() {
     dragPreviewEl = document.getElementById('drag-preview');
@@ -1613,7 +1602,7 @@ function onTileDragStart(e) {
     e.stopPropagation();
 
     const tile = e.currentTarget;
-    const dir = tile.dataset.dir;
+    let dir = tile.dataset.dir;
     if (!dir) return;
 
     // Determine which player's arrow this is based on panel and mode
@@ -1622,6 +1611,13 @@ function onTileDragStart(e) {
     // In portrait: top panel = P2, bottom panel = P1
     // In landscape: right panel = currentPlayer (shared)
     const player = isTopPanel ? 2 : (isPortrait ? 1 : currentPlayer);
+
+    // When top panel is upside-down (two-player mode), flip the direction
+    // so the placed arrow matches Player 2's visual perspective
+    const isUpsideDown = isTopPanel && !aiEnabled;
+    if (isUpsideDown) {
+        dir = DIR_OPPOSITE[dir];
+    }
 
     // Validate: can this player drag right now?
     if (aiEnabled && player === 2) return;       // AI controls P2
@@ -1648,7 +1644,7 @@ function onTileDragStart(e) {
     tile.classList.add('dragging');
 
     // Show DOM drag preview
-    dragPreviewEl.textContent = DIR_SYMBOLS[dir] || '?';
+    dragPreviewEl.innerHTML = DIR_SYMBOLS[dir] || '';
     dragPreviewEl.className = 'visible neutral';
     dragPreviewEl.style.left = e.clientX + 'px';
     dragPreviewEl.style.top = e.clientY + 'px';
@@ -1740,7 +1736,6 @@ function finishDrag() {
 
     // Restore move highlights
     updateHighlights();
-    updateAssistPreview();
 }
 
 // ==================== 3D DRAG BOARD PREVIEW ====================
@@ -1762,7 +1757,7 @@ function updateDragBoardPreview(cx, cy, dir, valid) {
     const emissiveColor = valid ? 0x00cc00 : 0xc0392b;
 
     // Semi-transparent tile
-    const tileGeo = new THREE.BoxGeometry(CELL_SIZE * 0.88, ARROW_HEIGHT * 1.5, CELL_SIZE * 0.88);
+    const tileGeo = new THREE.BoxGeometry(CELL_SIZE * 0.85, ARROW_HEIGHT, CELL_SIZE * 0.85);
     const tileMat = new THREE.MeshStandardMaterial({
         color: tileColor,
         emissive: emissiveColor,
@@ -1773,19 +1768,15 @@ function updateDragBoardPreview(cx, cy, dir, valid) {
         roughness: 0.8
     });
     const tileMesh = new THREE.Mesh(tileGeo, tileMat);
-    tileMesh.position.set(wpos.x, ARROW_HEIGHT + 0.04, wpos.z);
+    tileMesh.position.set(wpos.x, ARROW_HEIGHT / 2 + 0.04, wpos.z);
     tileMesh.renderOrder = 5;
     dragBoardPreview.add(tileMesh);
 
-    // Arrow indicator (same shape as placed arrows)
+    // Arrow indicator — simple triangle, consistent with UI
     const triShape = new THREE.Shape();
     triShape.moveTo(0, 0.32);
-    triShape.lineTo(-0.22, -0.05);
-    triShape.lineTo(-0.08, -0.05);
-    triShape.lineTo(-0.08, -0.28);
-    triShape.lineTo(0.08, -0.28);
-    triShape.lineTo(0.08, -0.05);
-    triShape.lineTo(0.22, -0.05);
+    triShape.lineTo(-0.26, -0.22);
+    triShape.lineTo(0.26, -0.22);
     triShape.closePath();
 
     const triGeo = new THREE.ShapeGeometry(triShape);
@@ -1808,25 +1799,9 @@ function updateDragBoardPreview(cx, cy, dir, valid) {
         case 'right': triMesh.rotation.z = -Math.PI / 2; break;
     }
 
-    triMesh.position.set(wpos.x, ARROW_HEIGHT * 2 + 0.06, wpos.z);
+    triMesh.position.set(wpos.x, ARROW_HEIGHT + 0.05, wpos.z);
     triMesh.renderOrder = 6;
     dragBoardPreview.add(triMesh);
-
-    // Glowing ring outline
-    const ringGeo = new THREE.RingGeometry(0.42, 0.48, 4);
-    const ringMat = new THREE.MeshBasicMaterial({
-        color: tileColor,
-        transparent: true,
-        opacity: 0.6,
-        side: THREE.DoubleSide
-    });
-    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
-    ringMesh.rotation.x = -Math.PI / 2;
-    // Rotate the square ring 45° so corners align with cell edges
-    ringMesh.rotation.z = Math.PI / 4;
-    ringMesh.position.set(wpos.x, 0.13, wpos.z);
-    ringMesh.renderOrder = 5;
-    dragBoardPreview.add(ringMesh);
 }
 
 // ==================== RESIZE ====================
@@ -1852,15 +1827,6 @@ function animate() {
 
     updateFlowAnimation(now);
 
-    // Pulse drag board preview
-    if (isDragging && dragBoardPreview.children.length > 0) {
-        const dp = 0.45 + Math.sin(now * 0.006) * 0.15;
-        for (const child of dragBoardPreview.children) {
-            if (child.material && child.material.transparent) {
-                child.material.opacity = dp;
-            }
-        }
-    }
 
     // Pulse per-player calculation rings while worker is evaluating.
     for (const player of [1, 2]) {
@@ -1868,7 +1834,7 @@ function animate() {
         if (!ring || !ring.visible) continue;
 
         const mesh = player === 1 ? pawn1Mesh : pawn2Mesh;
-        ring.position.set(mesh.position.x, 0.07, mesh.position.z);
+        ring.position.set(mesh.position.x, 0.05, mesh.position.z);
 
         const pulse = 1.0 + Math.sin(now * 0.01 + (player === 1 ? 0 : Math.PI * 0.3)) * 0.12;
         ring.scale.set(pulse, pulse, 1);
