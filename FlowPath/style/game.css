@@ -742,16 +742,6 @@ body {
         height: 46px;
     }
 
-    #left-panel-content button {
-        padding: 8px 12px;
-        font-size: 12px;
-    }
-
-    #left-panel-content {
-        padding: 10px 10px;
-        padding-left: calc(10px + env(safe-area-inset-left, 0px));
-    }
-
     #right-panel-content {
         padding: 10px 10px;
         padding-right: calc(10px + env(safe-area-inset-right, 0px));
