@@ -91,6 +91,7 @@ function init() {
     camera.lookAt(0, 0, 0);
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer = new THREE.WebGLRenderer({ antialias: true });
     document.getElementById('game-container').appendChild(renderer.domElement);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -135,7 +136,8 @@ function init() {
 
     // Event listeners
     window.addEventListener('resize', onWindowResize);
-    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    // Use capture phase so our handler fires BEFORE OrbitControls
+    renderer.domElement.addEventListener('pointerdown', onPointerDown, true);
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
 
@@ -908,6 +910,19 @@ const CLICK_THRESHOLD = 8; // pixels
 
 function onPointerDown(event) {
     pointerDownPos = { x: event.clientX, y: event.clientY };
+
+    // If the click starts on a move proposal highlight, stop event propagation
+    // so OrbitControls never sees the pointerdown and won't start rotating/zooming.
+    if (!gameOver && !flowAnimating && !isDragging && !aiThinking) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        const hIntersects = raycaster.intersectObjects(highlightsGroup.children);
+        if (hIntersects.length > 0 && hIntersects[0].object.userData.moveX !== undefined) {
+            event.stopPropagation();
+        }
+    }
 }
 
 function onPointerMove(event) {
@@ -1076,7 +1091,7 @@ function updateHUD() {
 function showWinner(player) {
     const text = document.getElementById('winner-text');
     const icon = player === 1 ? '🔴' : '🟢';
-    text.textContent = `?? ${icon} Player ${player} Wins!`;
+    text.textContent = `🏆 ${icon} Player ${player} Wins!`;
     document.getElementById('winner-modal').classList.remove('hidden');
 }
 
