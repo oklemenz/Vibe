@@ -52,11 +52,25 @@ Render the board exactly in this format — every cell is 3 characters wide, bor
 
 ### Fence Rendering Rules
 
-A horizontal fence at anchor `Xr` (column X, row r) blocks movement between row r and row r+1 at columns X and the next column. On the board, replace the two `---` segments on the border line *above* row r+1 (i.e., between row r and row r+1) at the anchor column and the column to its right with `███`.
+**Horizontal fence** at anchor `Xr` (column X, row r) blocks movement between row r and row r+1 at columns X and X+1 (the next column). To render: find the border line between row r and row r+1 (this is the line directly above the row r cell). On that line, replace the `---` segment for column X with `███` and replace the `---` segment for column X+1 with `███`. The `+` intersections on either side of those segments remain unchanged.
 
-A vertical fence at anchor `Xr` blocks movement between column X and the next column at rows r and r+1. On the board, replace the two `|` separators between those columns on row r and row r+1 with `█`.
+Example: `d2h` → anchor column d, row 2. The border line between row 2 and row 3 gets `███` at the column-d segment and `███` at the column-e segment:
+```
+  3 |   |   |   |   |   |   |   |   |   |
+    +---+---+---+███+███+---+---+---+---+
+  2 |   |   |   |   |   |   |   |   |   |
+```
+(Counting from left: a=`---`, b=`---`, c=`---`, d=`███`, e=`███`, f=`---`, …)
 
-Example — horizontal fence at e5 and vertical fence at d3:
+**Vertical fence** at anchor `Xr` blocks movement between column X and column X+1 at rows r and r+1. To render: replace the `|` separator between column X and column X+1 on both the row r cell line and the row r+1 cell line with `█`.
+
+Example: `d3v` → anchor column d, row 3. The `|` between columns d and e on rows 3 and 4 becomes `█`:
+```
+  4 |   |   |   |   █   |   |   |   |   |
+  3 |   |   |   |   █   |   |   |   |   |
+```
+
+Full board example — horizontal fence at e5 and vertical fence at d3:
 
 ```
     a   b   c   d   e   f   g   h   i
