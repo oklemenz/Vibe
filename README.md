@@ -12,6 +12,11 @@
 - GitHub: [Click to Start](https://oklemenz.github.io/Vibe/FlowPath/index.html)
 - Source: [Directory](./FlowPath)
 
+## QSkill
+
+- `cd QSkill`
+- Claude: `claude`
+- Play: `/quoridor`
 
 ## The Red Devil
 

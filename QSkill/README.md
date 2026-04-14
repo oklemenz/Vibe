@@ -11,12 +11,6 @@ Open Claude Code in this directory and type:
 /quoridor
 ```
 
-or the shorthand:
-
-```
-/q
-```
-
 No installation or setup required.
 
 ## How to Play
