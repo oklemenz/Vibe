@@ -1,0 +1,12 @@
+{
+  "type": "animation",
+  "prompt": "walking animation",
+  "width": 56,
+  "height": 98,
+  "frame_w": 56,
+  "frame_h": 98,
+  "frame_count": 8,
+  "fps": 8,
+  "preview": "preview.webp",
+  "spritesheet": "spritesheet.png"
+}

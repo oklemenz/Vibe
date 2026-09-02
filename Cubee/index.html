@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cubee</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #1a1a2e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, -apple-system, sans-serif;
+      color: #cfcfe6;
+    }
+    #wrap {
+      text-align: center;
+    }
+    #game {
+      border: 2px solid #33334d;
+      border-radius: 6px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+      image-rendering: pixelated;
+    }
+    p.hint {
+      margin: 12px 0 0;
+      font-size: 14px;
+      opacity: 0.7;
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div id="game"></div>
+    <p class="hint">← / → to walk &nbsp;•&nbsp; Cubee</p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+  <script>
+    // Spritesheet: 8 walk frames, each 56 x 98, laid out horizontally (448 x 98).
+    const FRAME_W = 56;
+    const FRAME_H = 98;
+    const FRAME_COUNT = 8;
+    const FPS = 8;
+
+    const GAME_W = 800;
+    const GAME_H = 400;
+    const GROUND_Y = GAME_H - 20;   // top of the ground strip
+    const SPEED = 200;              // px / second
+
+    class MainScene extends Phaser.Scene {
+      constructor() {
+        super('main');
+      }
+
+      preload() {
+        this.load.spritesheet('cubee', 'spritesheet.png', {
+          frameWidth: FRAME_W,
+          frameHeight: FRAME_H,
+        });
+      }
+
+      create() {
+        // --- Simple scenery -------------------------------------------------
+        // Sky gradient using a couple of filled rects.
+        this.add.rectangle(0, 0, GAME_W, GAME_H, 0x87ceeb).setOrigin(0, 0);
+        this.add.rectangle(0, GAME_H * 0.55, GAME_W, GAME_H * 0.45, 0xa8d8a0).setOrigin(0, 0);
+
+        // A few clouds for depth.
+        const cloud = (x, y, s) => {
+          const c = this.add.container(x, y);
+          c.add(this.add.ellipse(0, 0, 60 * s, 30 * s, 0xffffff, 0.9));
+          c.add(this.add.ellipse(28 * s, 6 * s, 44 * s, 24 * s, 0xffffff, 0.9));
+          c.add(this.add.ellipse(-26 * s, 6 * s, 40 * s, 22 * s, 0xffffff, 0.9));
+          return c;
+        };
+        cloud(140, 70, 1.0);
+        cloud(520, 110, 0.8);
+        cloud(680, 55, 1.2);
+
+        // Ground strip.
+        this.add.rectangle(0, GROUND_Y, GAME_W, GAME_H - GROUND_Y, 0x5a4632).setOrigin(0, 0);
+
+        // --- Player ---------------------------------------------------------
+        this.player = this.add.sprite(GAME_W / 2, GROUND_Y, 'cubee');
+        this.player.setOrigin(0.5, 1); // feet on the ground line
+
+        // Walk animation from the 8 frames.
+        this.anims.create({
+          key: 'walk',
+          frames: this.anims.generateFrameNumbers('cubee', { start: 0, end: FRAME_COUNT - 1 }),
+          frameRate: FPS,
+          repeat: -1,
+        });
+
+        // The first frame is a decent idle pose.
+        this.player.setFrame(0);
+
+        // --- Input ----------------------------------------------------------
+        this.cursors = this.input.keyboard.createCursorKeys();
+      }
+
+      update(time, delta) {
+        const dt = delta / 1000;
+        const left = this.cursors.left.isDown;
+        const right = this.cursors.right.isDown;
+
+        let moving = false;
+
+        if (left && !right) {
+          this.player.x -= SPEED * dt;
+          this.player.setFlipX(true);   // face left
+          moving = true;
+        } else if (right && !left) {
+          this.player.x += SPEED * dt;
+          this.player.setFlipX(false);  // face right
+          moving = true;
+        }
+
+        // Keep Cubee on screen.
+        const halfW = FRAME_W / 2;
+        this.player.x = Phaser.Math.Clamp(this.player.x, halfW, GAME_W - halfW);
+
+        if (moving) {
+          if (!this.player.anims.isPlaying) this.player.play('walk');
+        } else {
+          this.player.anims.stop();
+          this.player.setFrame(0); // idle pose
+        }
+      }
+    }
+
+    window.__game = new Phaser.Game({
+      type: Phaser.AUTO,
+      width: GAME_W,
+      height: GAME_H,
+      parent: 'game',
+      pixelArt: true,
+      backgroundColor: '#87ceeb',
+      scene: MainScene,
+    });
+  </script>
+</body>
+</html>
