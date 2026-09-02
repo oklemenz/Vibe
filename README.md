@@ -1,5 +1,10 @@
 # Vibe
 
+## Cubee
+
+- Play: [Click to Start](https://oklemenz.github.io/Vibe/Cubee/index.html)
+- Source: [Directory](./Cubee)
+
 ## Quoridor
 
 - Play: [Click to Start](https://quoridor.oklemenz.de)
