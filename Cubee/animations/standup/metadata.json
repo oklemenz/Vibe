@@ -1,0 +1,12 @@
+{
+  "type": "animation",
+  "prompt": "standing up animation from Rouches position to stand",
+  "width": 69,
+  "height": 111,
+  "frame_w": 69,
+  "frame_h": 111,
+  "frame_count": 8,
+  "fps": 8,
+  "preview": "preview.webp",
+  "spritesheet": "spritesheet.png"
+}

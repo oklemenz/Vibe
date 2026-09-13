@@ -1,0 +1,12 @@
+{
+  "type": "animation",
+  "prompt": "shooting Fire ball animation",
+  "width": 41,
+  "height": 23,
+  "frame_w": 41,
+  "frame_h": 23,
+  "frame_count": 8,
+  "fps": 8,
+  "preview": "preview.webp",
+  "spritesheet": "spritesheet.png"
+}

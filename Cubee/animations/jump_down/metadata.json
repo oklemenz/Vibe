@@ -1,0 +1,12 @@
+{
+  "type": "animation",
+  "prompt": "Fly Downwards animation, smooth, second half of jump. no loop",
+  "width": 72,
+  "height": 111,
+  "frame_w": 72,
+  "frame_h": 111,
+  "frame_count": 8,
+  "fps": 8,
+  "preview": "preview.webp",
+  "spritesheet": "spritesheet.png"
+}

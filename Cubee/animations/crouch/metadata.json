@@ -1,0 +1,12 @@
+{
+  "type": "animation",
+  "prompt": "Animate from standing position to the crouched position. On knee on floor, left arm resting on other leg, right hand touching floor",
+  "width": 56,
+  "height": 111,
+  "frame_w": 56,
+  "frame_h": 111,
+  "frame_count": 8,
+  "fps": 8,
+  "preview": "preview.webp",
+  "spritesheet": "spritesheet.png"
+}

@@ -1,0 +1,12 @@
+{
+  "type": "animation",
+  "prompt": "Attack animation, pushing hands",
+  "width": 79,
+  "height": 106,
+  "frame_w": 79,
+  "frame_h": 106,
+  "frame_count": 8,
+  "fps": 8,
+  "preview": "preview.webp",
+  "spritesheet": "spritesheet.png"
+}
