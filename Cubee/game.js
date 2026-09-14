@@ -23,6 +23,12 @@ const GROUND_Y = Math.round(GAME_H * GROUND_FRAC);   // walking surface, in worl
 
 const WALK_SPEED = 160;         // px / second
 const RUN_SPEED = 300;          // px / second
+
+// Parallax scroll factors per layer, back (1) → front (4). The world scroll
+// offset (advanced when Cubee walks/runs/dashes) is multiplied by these to get
+// each layer's tile scroll, so nearer layers slide faster and give depth.
+// Layer 4 == 1.0 moves in lockstep with the player's ground speed.
+const PARALLAX = [0.2, 0.45, 0.7, 1.0];
 const JUMP_VELOCITY = -520;     // initial upward velocity (px/s)
 const GRAVITY = 1400;           // px/s^2
 const MAX_JUMPS = 2;            // ground jump + one air (double) jump
@@ -37,6 +43,9 @@ const DASH_GHOST_ALPHA = 0.5;   // starting opacity of each afterimage
 const FIREBALL_SPEED = 460;     // px / second the fireball travels
 const FIREBALL_Y_OFFSET = 60;   // height above feet where it spawns
 const FIREBALL_MUZZLE = 34;     // px in front of the player it spawns
+// Minimum time between shots when airborne/crouched (where there's no attack
+// animation to gate repeats). Matches the fire anim length (8 frames @ 12 fps).
+const FIRE_COOLDOWN = 8 / 12;   // seconds
 
 class MainScene extends Phaser.Scene {
   constructor() {
@@ -44,7 +53,12 @@ class MainScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.image('background', 'background.png');
+    // Four parallax layers, back (1) to front (4). Layer 1 is the opaque
+    // sky/backdrop; 2–4 are transparent overlays composited on top. Each tiles
+    // horizontally (repeating pattern) so the world can scroll forever.
+    for (let i = 1; i <= 4; i++) {
+      this.load.image(`bg${i}`, `background/background-layer${i}.png`);
+    }
     for (const [name, cfg] of Object.entries(ANIMS)) {
       this.load.spritesheet(name, `animations/${name}/spritesheet.png`, {
         frameWidth: cfg.frame_w,
@@ -54,12 +68,28 @@ class MainScene extends Phaser.Scene {
   }
 
   create() {
-    // --- Background -----------------------------------------------------
-    // The street scene fills the whole game world. It is authored so its
-    // sidewalk sits at GROUND_FRAC of its height, which we align to GROUND_Y.
-    const bg = this.add.image(0, 0, 'background').setOrigin(0, 0);
-    bg.setDisplaySize(GAME_W, GAME_H);
-    bg.setDepth(0);
+    // --- Background (parallax) ------------------------------------------
+    // Four tiling layers stacked back→front, each filling the whole world.
+    // They never move on screen; instead their tilePositionX scrolls as the
+    // world offset advances, so the street streams past while Cubee walks in
+    // place. Each layer scrolls at its own PARALLAX factor for depth.
+    // The source art is 2095×768 with sidewalk at GROUND_FRAC; we scale each
+    // layer's tile so that authored height maps onto GAME_H (keeps the ground
+    // line aligned) and fill the 800×400 view fully.
+    this.bgLayers = [];
+    const srcH = 768;
+    const tileScale = GAME_H / srcH;   // fit authored height into the view
+    for (let i = 1; i <= 4; i++) {
+      const layer = this.add.tileSprite(0, 0, GAME_W, GAME_H, `bg${i}`)
+        .setOrigin(0, 0)
+        .setDepth(i - 1);              // 0..3, all below the player (depth 10)
+      layer.setTileScale(tileScale, tileScale);
+      this.bgLayers.push(layer);
+    }
+
+    // World scroll offset in px; walking/running/dashing advances it and the
+    // parallax layers read from it each frame.
+    this.worldScroll = 0;
 
     // --- Animations -----------------------------------------------------
     for (const [name, cfg] of Object.entries(ANIMS)) {
@@ -84,7 +114,7 @@ class MainScene extends Phaser.Scene {
       if (anim.key === 'crouch') {
         // Reached the bottom of the crouch: hold crouched if Down is still
         // held, otherwise stand right back up.
-        this.crouchState = this.cursors.down.isDown ? 'crouched' : 'standing';
+        this.crouchState = (this.cursors.down.isDown || this.touch.crouchHeld) ? 'crouched' : 'standing';
         if (this.crouchState === 'standing') this.player.play('standup');
       }
       if (anim.key === 'standup') {
@@ -108,6 +138,7 @@ class MainScene extends Phaser.Scene {
     // Attack state.
     this.isAttacking = false;
     this.fireballs = [];         // active fireball sprites in flight
+    this.fireCooldownLeft = 0;   // remaining lockout before next airborne/crouched shot
 
     // Crouch state machine: 'none' (upright), 'crouching' (playing crouch),
     // 'crouched' (held down), 'standing' (playing standup). While not 'none'
@@ -125,8 +156,8 @@ class MainScene extends Phaser.Scene {
     // attack) that mirror keyboard JustDown. Pointer coords come in already
     // mapped to the 0..GAME_W / 0..GAME_H space under Scale.FIT.
     this.touch = {
-      left: false, right: false, running: false,
-      jumpPressed: false, dashPressed: false, attackPressed: false,
+      left: false, right: false, running: false, crouchHeld: false,
+      jumpPressed: false, dashPressed: false, attackPressed: false, crouchPressed: false,
     };
     this.input.addPointer(3); // allow several simultaneous touches
 
@@ -141,20 +172,25 @@ class MainScene extends Phaser.Scene {
   }
 
   // Classify a pointer position into a control zone.
-  //   top band          -> jump
-  //   middle far-edges   -> run (in that direction)
-  //   middle inner       -> walk (in that direction)
-  //   bottom-left        -> dash
-  //   bottom-right       -> attack
+  //   top band            -> jump (shortened)
+  //   middle band flanks  -> walk/run (bigger, taller band)
+  //   middle band center  -> attack / fire
+  //   bottom-left/right    -> dash
+  //   bottom-center        -> crouch
   touchZone(x, y) {
     const fx = x / GAME_W, fy = y / GAME_H;
-    if (fy < 0.45) return { jump: true };
-    if (fy > 0.70) return fx < 0.5 ? { dash: true } : { attack: true };
-    // middle band → horizontal movement
+    if (fy < 0.32) return { jump: true };                  // top band = jump (smaller)
+    if (fy > 0.80) {                                        // bottom row
+      if (fx < 0.30) return { dash: true };                // bottom-left  = dash
+      if (fx > 0.70) return { dash: true };                // bottom-right = dash
+      return { crouch: true };                             // bottom-middle = crouch
+    }
+    // wide middle band (0.32–0.80) → movement on the flanks, attack in the center
     if (fx < 0.18) return { left: true, running: true };   // far left = run
-    if (fx < 0.50) return { left: true };                  // inner left = walk
+    if (fx < 0.38) return { left: true };                  // inner left = walk
     if (fx > 0.82) return { right: true, running: true };  // far right = run
-    return { right: true };                                // inner right = walk
+    if (fx > 0.62) return { right: true };                 // inner right = walk
+    return { attack: true };                               // center = attack / fire
   }
 
   // Edge action on a fresh press (jump / dash / attack).
@@ -163,21 +199,24 @@ class MainScene extends Phaser.Scene {
     if (z.jump) this.touch.jumpPressed = true;
     if (z.dash) this.touch.dashPressed = true;
     if (z.attack) this.touch.attackPressed = true;
+    if (z.crouch) this.touch.crouchPressed = true;
   }
 
   // Recompute held movement/run from every currently-down pointer, so a
   // finger held in a walk/run zone keeps Cubee moving (and multi-touch works).
   refreshTouchHold() {
-    let left = false, right = false, running = false;
+    let left = false, right = false, running = false, crouchHeld = false;
     for (const p of this.input.manager.pointers) {
       if (!p.isDown) continue;
       const z = this.touchZone(p.x, p.y);
       if (z.left) { left = true; if (z.running) running = true; }
       if (z.right) { right = true; if (z.running) running = true; }
+      if (z.crouch) crouchHeld = true;
     }
     this.touch.left = left;
     this.touch.right = right;
     this.touch.running = running;
+    this.touch.crouchHeld = crouchHeld;
   }
 
   // Spawn a fading, semi-transparent clone of the player at its current
@@ -229,16 +268,17 @@ class MainScene extends Phaser.Scene {
     const running = this.shiftKey.isDown || this.touch.running;
 
     if (this.dashCooldownLeft > 0) this.dashCooldownLeft -= dt;
+    if (this.fireCooldownLeft > 0) this.fireCooldownLeft -= dt;
 
     // Read each edge trigger exactly once — Phaser's JustDown() consumes the
     // just-pressed flag, so calling it twice in a frame swallows the input.
     const upJust = Phaser.Input.Keyboard.JustDown(this.cursors.up) || this.touch.jumpPressed;
-    const downJust = Phaser.Input.Keyboard.JustDown(this.cursors.down);
+    const downJust = Phaser.Input.Keyboard.JustDown(this.cursors.down) || this.touch.crouchPressed;
     const dashJust = Phaser.Input.Keyboard.JustDown(this.dashKey) || this.touch.dashPressed;
     const attackJust = Phaser.Input.Keyboard.JustDown(this.attackKey) || this.touch.attackPressed;
 
     // --- Crouch state machine (grounded only) ---------------------------
-    const downHeld = this.cursors.down.isDown;
+    const downHeld = this.cursors.down.isDown || this.touch.crouchHeld;
     // Commands that require the figure to be upright first. Shooting (attack)
     // is intentionally excluded: Cubee can fire from a crouch without rising.
     const wantsToMove = left || right || upJust || dashJust;
@@ -283,16 +323,22 @@ class MainScene extends Phaser.Scene {
     }
 
     // --- Attack / shoot: fire on Space --------------------------------------
-    // Upright on the ground: play the attack animation and shoot. Airborne or
-    // crouched: shoot a fireball only, keeping the current pose (jump / crouch)
-    // — no attack animation and, for a crouch, no standing up.
-    if (attackJust && !this.isAttacking) {
+    // Upright on the ground: play the attack animation and shoot; the animation
+    // gates repeats until it finishes. Airborne or crouched: shoot a fireball
+    // only, keeping the current pose (jump / crouch) — no attack animation and,
+    // for a crouch, no standing up. Since there's no animation to gate repeats
+    // in those poses, a fire cooldown enforces the same "wait between shots".
+    const airborneOrCrouched = this.isJumping || crouchBusy;
+    const canFire = airborneOrCrouched ? this.fireCooldownLeft <= 0 : !this.isAttacking;
+    if (attackJust && canFire) {
       // Face the held direction if any, else keep current facing.
       if (left && !right) this.facing = -1;
       else if (right && !left) this.facing = 1;
       this.player.setFlipX(this.facing < 0);
-      // Attack pose only when upright and grounded.
-      if (!this.isJumping && !crouchBusy) this.isAttacking = true;
+      // Attack pose only when upright and grounded; otherwise start the fire
+      // cooldown so the next airborne/crouched shot must wait.
+      if (!airborneOrCrouched) this.isAttacking = true;
+      else this.fireCooldownLeft = FIRE_COOLDOWN;
       this.spawnFireball(this.facing, crouchBusy);
     }
 
@@ -301,6 +347,7 @@ class MainScene extends Phaser.Scene {
     this.touch.jumpPressed = false;
     this.touch.dashPressed = false;
     this.touch.attackPressed = false;
+    this.touch.crouchPressed = false;
 
     // --- Move any in-flight fireballs, cull off-screen ------------------
     for (let i = this.fireballs.length - 1; i >= 0; i--) {
@@ -313,11 +360,15 @@ class MainScene extends Phaser.Scene {
     }
 
     // --- Horizontal movement --------------------------------------------
+    // Cubee walks "in place": instead of sliding across the screen, movement
+    // advances the world scroll offset and the parallax layers stream past.
+    // Positive worldScroll == the world has moved left (Cubee heading right).
     let moving = false;
+    let scrollDelta = 0;   // px the world advances this frame (signed by facing)
 
     if (this.isDashing) {
       // Dash overrides normal horizontal control with a fixed burst.
-      this.player.x += DASH_SPEED * this.dashDir * dt;
+      scrollDelta = DASH_SPEED * this.dashDir * dt;
       this.dashTimeLeft -= dt;
 
       // Emit afterimages at a steady interval for the trailing effect.
@@ -337,20 +388,25 @@ class MainScene extends Phaser.Scene {
     } else {
       const speed = running ? RUN_SPEED : WALK_SPEED;
       if (left && !right) {
-        this.player.x -= speed * dt;
+        scrollDelta = -speed * dt;
         this.facing = -1;
         this.player.setFlipX(true);   // face left
         moving = true;
       } else if (right && !left) {
-        this.player.x += speed * dt;
+        scrollDelta = speed * dt;
         this.facing = 1;
         this.player.setFlipX(false);  // face right
         moving = true;
       }
     }
 
-    const halfW = this.player.width / 2;
-    this.player.x = Phaser.Math.Clamp(this.player.x, halfW, GAME_W - halfW);
+    // Advance the world and scroll every parallax layer by its own factor.
+    if (scrollDelta !== 0) {
+      this.worldScroll += scrollDelta;
+      for (let i = 0; i < this.bgLayers.length; i++) {
+        this.bgLayers[i].tilePositionX = this.worldScroll * PARALLAX[i];
+      }
+    }
 
     // --- Vertical movement / jump arc -----------------------------------
     if (this.isJumping) {
