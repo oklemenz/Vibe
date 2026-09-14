@@ -450,21 +450,23 @@ class MainScene extends Phaser.Scene {
     // Cubee is up on / over the top it's a floor, not a wall, so it can walk
     // across. scrollDelta > 0 == heading right == pillars slide left on screen
     // by scrollDelta * s, so the max world advance that keeps the box flush is
-    // gap / s (gap in screen px).
+    // gap / s (gap in screen px). A pillar only blocks motion TOWARD it: one on
+    // the player's right blocks rightward travel, one on the left blocks
+    // leftward — so turning around and walking away is never blocked.
     if (scrollDelta !== 0) {
       const s = PILLAR_TILE_SCALE;
-      const pLeft = GAME_W / 2 - PLAYER_HALF_W;
-      const pRight = GAME_W / 2 + PLAYER_HALF_W;
+      const cx = GAME_W / 2;              // player centre (fixed)
+      const pLeft = cx - PLAYER_HALF_W;
+      const pRight = cx + PLAYER_HALF_W;
       for (const r of this.activePillarRects()) {
         if (this.player.y <= r.top) continue;         // over the top: not a wall
-        if (scrollDelta > 0 && r.right > pLeft) {
-          // Pillar is to the right / overlapping; its left edge may not cross
-          // past the player's right edge. gap can be <=0 if already touching.
+        const pillarCx = (r.left + r.right) / 2;
+        if (scrollDelta > 0 && pillarCx > cx && r.right > pLeft) {
+          // Pillar to the right: its left edge may not cross the player's right.
           const gap = Math.max(0, r.left - pRight);
           scrollDelta = Math.min(scrollDelta, gap / s);
-        } else if (scrollDelta < 0 && r.left < pRight) {
-          // Pillar is to the left / overlapping; its right edge may not cross
-          // past the player's left edge.
+        } else if (scrollDelta < 0 && pillarCx < cx && r.left < pRight) {
+          // Pillar to the left: its right edge may not cross the player's left.
           const gap = Math.max(0, pLeft - r.right);
           scrollDelta = Math.max(scrollDelta, -gap / s);
         }
