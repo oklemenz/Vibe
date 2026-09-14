@@ -22,7 +22,7 @@ const GROUND_FRAC = 0.84;
 const GROUND_Y = Math.round(GAME_H * GROUND_FRAC);   // walking surface, in world px
 
 const WALK_SPEED = 160;         // px / second
-const RUN_SPEED = 300;          // px / second
+const RUN_SPEED = 420;          // px / second
 
 // Parallax scroll factors per layer, back (1) → front (4). The world scroll
 // offset (advanced when Cubee walks/runs/dashes) is multiplied by these to get
@@ -33,12 +33,13 @@ const JUMP_VELOCITY = -520;     // initial upward velocity (px/s)
 const GRAVITY = 1400;           // px/s^2
 const MAX_JUMPS = 2;            // ground jump + one air (double) jump
 
-const DASH_SPEED = 720;         // px / second during a dash
-const DASH_DURATION = 0.18;     // seconds the dash burst lasts
+const DASH_SPEED = 1000;        // px / second during a dash
+const DASH_DURATION = 0.32;     // seconds the dash burst lasts
 const DASH_COOLDOWN = 0.35;     // seconds before another dash is allowed
 const DASH_GHOST_INTERVAL = 0.02; // seconds between afterimage spawns
 const DASH_GHOST_FADE = 0.35;   // seconds each afterimage takes to fade out
-const DASH_GHOST_ALPHA = 0.5;   // starting opacity of each afterimage
+const DASH_GHOST_ALPHA = 0.6;  // starting opacity of each afterimage
+const DASH_GHOST_DRIFT = 90;    // px each afterimage lags behind as it fades
 
 const FIREBALL_SPEED = 460;     // px / second the fireball travels
 const FIREBALL_Y_OFFSET = 60;   // height above feet where it spawns
@@ -46,6 +47,22 @@ const FIREBALL_MUZZLE = 34;     // px in front of the player it spawns
 // Minimum time between shots when airborne/crouched (where there's no attack
 // animation to gate repeats). Matches the fire anim length (8 frames @ 12 fps).
 const FIRE_COOLDOWN = 8 / 12;   // seconds
+
+// --- Solid pillars (in the layer-4 background art) ------------------------
+// Layer 4 scrolls in lockstep (PARALLAX == 1.0). Its source texture is 2095px
+// wide and tiles horizontally, so a source pixel sx shows on screen at
+// (sx - worldScroll) * tileScale, wrapping every 2095 source px. Two pillars
+// authored in that texture become solid: they block Cubee horizontally, can be
+// jumped over, and stood on. Because the texture repeats, the pillars recur
+// every tile as the world scrolls.
+const SRC_TILE_W = 2095;                 // layer-4 texture width (px) — the repeat period
+const PILLAR_TILE_SCALE = GAME_H / 768;  // matches the bgLayers tileScale (0.5208)
+// Each pillar in SOURCE px: horizontal span [x0,x1] and top-surface y.
+const PILLARS_SRC = [
+  { x0: 118,  x1: 186,  topY: 529 },     // left pillar
+  { x0: 1854, x1: 1914, topY: 530 },     // right pillar
+];
+const PLAYER_HALF_W = 20;                // tight ~40px collision box around the fixed x=400
 
 class MainScene extends Phaser.Scene {
   constructor() {
@@ -230,9 +247,13 @@ class MainScene extends Phaser.Scene {
     ghost.setAlpha(DASH_GHOST_ALPHA);
     ghost.setTint(0x9fd8ff); // cool tint so the trail reads as motion
     ghost.setDepth(this.player.depth - 1); // behind the real sprite
+    // Drift opposite the dash direction so the afterimage lags behind the kid
+    // (the kid holds screen center while the world scrolls, so a static ghost
+    // would just sit on top of the sprite instead of trailing it).
     this.tweens.add({
       targets: ghost,
       alpha: 0,
+      x: ghost.x - this.dashDir * DASH_GHOST_DRIFT,
       duration: DASH_GHOST_FADE * 1000,
       ease: 'Quad.easeOut',
       onComplete: () => ghost.destroy(),
@@ -259,6 +280,28 @@ class MainScene extends Phaser.Scene {
   setAnim(key) {
     if (this.player.anims.currentAnim && this.player.anims.currentAnim.key === key) return;
     this.player.play(key);
+  }
+
+  // Screen-space rects {left, right, top} for every solid-pillar instance near
+  // the view. Pillars are authored in the layer-4 texture (source px) and that
+  // texture repeats every SRC_TILE_W, so we scan the current tile plus its two
+  // neighbours (k = -1,0,1) to catch a pillar straddling either view edge as it
+  // scrolls in or out. worldScroll is unbounded; the ±1 tile scan handles it
+  // without pre-reducing it modulo the period.
+  activePillarRects() {
+    const s = PILLAR_TILE_SCALE;
+    const rects = [];
+    for (let k = -1; k <= 1; k++) {
+      const shift = k * SRC_TILE_W - this.worldScroll;
+      for (const p of PILLARS_SRC) {
+        const left = (p.x0 + shift) * s;
+        const right = (p.x1 + shift) * s;
+        if (right >= -40 && left <= GAME_W + 40) {
+          rects.push({ left, right, top: p.topY * s });
+        }
+      }
+    }
+    return rects;
   }
 
   update(time, delta) {
@@ -311,8 +354,8 @@ class MainScene extends Phaser.Scene {
       this.player.play('jump_up');
     }
 
-    // --- Dash: start on Ctrl when not already dashing and off cooldown --
-    if (dashJust && !this.isDashing && this.dashCooldownLeft <= 0 && !crouchBusy) {
+    // --- Dash: start on Ctrl, only while airborne (jumping), off cooldown --
+    if (dashJust && this.isJumping && !this.isDashing && this.dashCooldownLeft <= 0 && !crouchBusy) {
       this.isDashing = true;
       this.dashTimeLeft = DASH_DURATION;
       this.dashCooldownLeft = DASH_COOLDOWN;
@@ -400,6 +443,34 @@ class MainScene extends Phaser.Scene {
       }
     }
 
+    // --- Solid-pillar horizontal blocking -------------------------------
+    // Clamp scrollDelta so the world can't advance past the point where the
+    // player's fixed screen box would penetrate a pillar's side. A pillar only
+    // acts as a WALL when the feet are below its top (player.y > top); once
+    // Cubee is up on / over the top it's a floor, not a wall, so it can walk
+    // across. scrollDelta > 0 == heading right == pillars slide left on screen
+    // by scrollDelta * s, so the max world advance that keeps the box flush is
+    // gap / s (gap in screen px).
+    if (scrollDelta !== 0) {
+      const s = PILLAR_TILE_SCALE;
+      const pLeft = GAME_W / 2 - PLAYER_HALF_W;
+      const pRight = GAME_W / 2 + PLAYER_HALF_W;
+      for (const r of this.activePillarRects()) {
+        if (this.player.y <= r.top) continue;         // over the top: not a wall
+        if (scrollDelta > 0 && r.right > pLeft) {
+          // Pillar is to the right / overlapping; its left edge may not cross
+          // past the player's right edge. gap can be <=0 if already touching.
+          const gap = Math.max(0, r.left - pRight);
+          scrollDelta = Math.min(scrollDelta, gap / s);
+        } else if (scrollDelta < 0 && r.left < pRight) {
+          // Pillar is to the left / overlapping; its right edge may not cross
+          // past the player's left edge.
+          const gap = Math.max(0, pLeft - r.right);
+          scrollDelta = Math.max(scrollDelta, -gap / s);
+        }
+      }
+    }
+
     // Advance the world and scroll every parallax layer by its own factor.
     if (scrollDelta !== 0) {
       this.worldScroll += scrollDelta;
@@ -408,24 +479,70 @@ class MainScene extends Phaser.Scene {
       }
     }
 
+    // Pillar rects in their post-scroll positions, reused by the vertical
+    // (landing / walk-off) logic below.
+    const pillars = this.activePillarRects();
+    const overlapsX = (r) =>
+      (GAME_W / 2 + PLAYER_HALF_W) > r.left && (GAME_W / 2 - PLAYER_HALF_W) < r.right;
+
     // --- Vertical movement / jump arc -----------------------------------
     if (this.isJumping) {
-      this.velocityY += GRAVITY * dt;
-      this.player.y += this.velocityY * dt;
+      const prevY = this.player.y;  // for the anti-tunneling landing test
+
+      // While air-dashing, freeze the fall so the dash reads as a clean
+      // forward burst instead of a diagonal drop; gravity resumes after.
+      if (this.isDashing) {
+        this.velocityY = 0;
+      } else {
+        this.velocityY += GRAVITY * dt;
+        this.player.y += this.velocityY * dt;
+      }
 
       // Switch to the descent animation once we start falling.
       if (this.velocityY >= 0) {
         this.setAnim('jump_down');
       }
 
-      // Landed.
-      if (this.player.y >= GROUND_Y) {
-        this.player.y = GROUND_Y;
+      // Landing surface: the ground by default, or a pillar top the feet
+      // crossed while descending (highest such top wins). The crossing test
+      // (prevY above the top, new y at/below it) prevents tunneling through a
+      // thin pillar at speed and handles landing from a double jump too.
+      let landY = GROUND_Y;
+      let landed = this.player.y >= GROUND_Y;
+      if (this.velocityY >= 0) {
+        for (const r of pillars) {
+          if (overlapsX(r) && prevY <= r.top && this.player.y >= r.top) {
+            landY = Math.min(landY, r.top);
+            landed = true;
+          }
+        }
+      }
+
+      if (landed) {
+        this.player.y = landY;
         this.velocityY = 0;
         this.isJumping = false;
         this.jumpsUsed = 0; // refill jumps on touchdown
       }
       return; // jump animations take priority over walk/run/idle
+    }
+
+    // --- Walk off a pillar edge -----------------------------------------
+    // Grounded and standing on a pillar top: if the world scrolled far enough
+    // that no pillar is under the feet anymore, Cubee has stepped off the edge
+    // — start falling. (The ground line is infinite, so standing on it never
+    // triggers this.) jumpsUsed = 1 so the fall grants one air-jump, not two.
+    if (this.player.y < GROUND_Y - 0.5) {
+      const stillSupported = pillars.some(
+        (r) => overlapsX(r) && Math.abs(this.player.y - r.top) < 1,
+      );
+      if (!stillSupported) {
+        this.isJumping = true;
+        this.velocityY = 0;
+        this.jumpsUsed = 1;
+        this.setAnim('jump_down');
+        return;
+      }
     }
 
     // --- Grounded locomotion / action state -----------------------------
