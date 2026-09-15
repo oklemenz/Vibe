@@ -11,6 +11,10 @@ const ANIMS = {
   fire:      { frame_w: 41, frame_h: 23,  frame_count: 8, fps: 12, loop: true  },
   crouch:    { frame_w: 56, frame_h: 111, frame_count: 8, fps: 14, loop: false },
   standup:   { frame_w: 69, frame_h: 111, frame_count: 8, fps: 14, loop: false },
+  // Enemy walk cycle, its thrown water-drop projectile, and its death anim.
+  enemy:     { frame_w: 64, frame_h: 64,  frame_count: 8, fps: 10, loop: true  },
+  water:     { frame_w: 32, frame_h: 32,  frame_count: 8, fps: 12, loop: true  },
+  enemy_die: { frame_w: 64, frame_h: 64,  frame_count: 8, fps: 10, loop: false },
 };
 
 const GAME_W = 800;
@@ -29,6 +33,12 @@ const RUN_SPEED = 420;          // px / second
 // each layer's tile scroll, so nearer layers slide faster and give depth.
 // Layer 4 == 1.0 moves in lockstep with the player's ground speed.
 const PARALLAX = [0.2, 0.45, 0.7, 1.0];
+// The pavement Cubee (and the enemy) walk on is the front-most layer (index 3).
+// Its on-screen scroll per unit of worldScroll is PARALLAX[3] * tileScale, so a
+// sprite "planted" on the pavement must shift by that amount — NOT by the raw
+// worldScroll, which is ~1/tileScale too large (that mismatch made the enemy
+// appear to double/stall relative to the pavement).
+const PAVEMENT_LAYER = 3;
 const JUMP_VELOCITY = -520;     // initial upward velocity (px/s)
 const GRAVITY = 1400;           // px/s^2
 const MAX_JUMPS = 2;            // ground jump + one air (double) jump
@@ -40,13 +50,31 @@ const DASH_GHOST_INTERVAL = 0.02; // seconds between afterimage spawns
 const DASH_GHOST_FADE = 0.35;   // seconds each afterimage takes to fade out
 const DASH_GHOST_ALPHA = 0.6;  // starting opacity of each afterimage
 const DASH_GHOST_DRIFT = 90;    // px each afterimage lags behind as it fades
-
 const FIREBALL_SPEED = 460;     // px / second the fireball travels
 const FIREBALL_Y_OFFSET = 60;   // height above feet where it spawns
 const FIREBALL_MUZZLE = 34;     // px in front of the player it spawns
 // Minimum time between shots when airborne/crouched (where there's no attack
 // animation to gate repeats). Matches the fire anim length (8 frames @ 12 fps).
 const FIRE_COOLDOWN = 8 / 12;   // seconds
+
+// --- Enemy ----------------------------------------------------------------
+// One enemy at a time walks in from the right edge and heads left toward Cubee
+// (who is pinned at screen centre). The enemy is PLANTED on the pavement layer
+// (see pavementScroll()): it rides the street as the world scrolls and walks
+// along it at a constant ground pace, so its speed over the pavement doesn't
+// change with the kid's scrolling. It ignores the solid pillars.
+const ENEMY_SPEED = 90;            // px / second the enemy walks along the pavement
+const ENEMY_SCALE = 1.4;           // scale up the 64px art so it reads at Cubee's size
+const ENEMY_HIT_HALF_W = 22;       // half-width of the enemy's collision box
+const ENEMY_SPAWN_MIN = 1.5;       // seconds min before (re)spawning an enemy
+const ENEMY_SPAWN_MAX = 3.5;       // seconds max before (re)spawning an enemy
+const ENEMY_THROW_MIN = 1.2;       // seconds min between water-drop throws
+const ENEMY_THROW_MAX = 2.6;       // seconds max between water-drop throws
+const ENEMY_DROP_SPEED = 260;      // px / second the water drop flies toward Cubee
+const ENEMY_DROP_Y_OFFSET = 40;    // height above the enemy's feet the drop leaves from
+const PLAYER_HIT_HALF_W = 18;      // half-width of Cubee's hurt box
+const PLAYER_HIT_TOP = 100;        // px above the feet the hurt box reaches
+const HIT_INVULN = 1.2;            // seconds of invulnerability after taking a hit
 
 // --- Solid pillars (in the layer-4 background art) ------------------------
 // Layer 4 scrolls in lockstep (PARALLAX == 1.0). Its source texture is 2095px
@@ -82,6 +110,8 @@ class MainScene extends Phaser.Scene {
         frameHeight: cfg.frame_h,
       });
     }
+    // Life icon for the HUD, drawn at its original resolution.
+    this.load.image('life', 'img/life.png');
   }
 
   create() {
@@ -96,6 +126,7 @@ class MainScene extends Phaser.Scene {
     this.bgLayers = [];
     const srcH = 768;
     const tileScale = GAME_H / srcH;   // fit authored height into the view
+    this.tileScale = tileScale;        // saved so world sprites (enemy) can match layer scroll
     for (let i = 1; i <= 4; i++) {
       const layer = this.add.tileSprite(0, 0, GAME_W, GAME_H, `bg${i}`)
         .setOrigin(0, 0)
@@ -124,6 +155,43 @@ class MainScene extends Phaser.Scene {
     this.player.setDepth(10);      // above scenery; dash ghosts sit just below
     this.player.play('idle');
 
+    // --- HUD: lives (top-left) ------------------------------------------
+    // Three life icons (life.png) drawn at original resolution, pinned to the
+    // top-left corner. setScrollFactor(0) keeps them fixed on screen, and a
+    // high depth keeps them above everything. this.lives tracks the count;
+    // refreshLives() shows/hides icons to match.
+    this.maxLives = 3;
+    this.lives = this.maxLives;
+    const LIFE_TEX = this.textures.get('life').getSourceImage();
+    const LIFE_W = LIFE_TEX.width;            // original resolution
+    const LIFE_PAD = 6;                       // gap between icons
+    const LIFE_X0 = 10, LIFE_Y0 = 8;          // top-left margin
+    this.lifeIcons = [];
+    for (let i = 0; i < this.maxLives; i++) {
+      const icon = this.add.image(LIFE_X0 + i * (LIFE_W + LIFE_PAD), LIFE_Y0, 'life')
+        .setOrigin(0, 0)
+        .setScrollFactor(0)
+        .setDepth(1000);
+      this.lifeIcons.push(icon);
+    }
+
+    // --- HUD: score (top-right) -----------------------------------------
+    // Score is awarded for defeating enemies (+100 per kill); shown as a
+    // zero-padded number in a pixel font, right-aligned in the top-right
+    // corner. Starts at 0 and resets with the game.
+    this.score = 0;
+    this.scoreText = this.add.text(GAME_W - 10, 10, '', {
+      fontFamily: '"Press Start 2P", monospace',
+      fontSize: '16px',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 4,
+    })
+      .setOrigin(1, 0)         // right-aligned to the top-right margin
+      .setScrollFactor(0)
+      .setDepth(1000);
+    this.refreshScore();
+
     // Clear the attacking flag when the (non-looping) attack anim ends.
     // Advance the crouch state machine as its transition anims finish.
     this.player.on('animationcomplete', (anim) => {
@@ -146,6 +214,7 @@ class MainScene extends Phaser.Scene {
 
     // Dash state.
     this.isDashing = false;
+    this.dashUsed = false;       // a dash was spent this airborne stretch; blocks re-dashing until landing
     this.dashTimeLeft = 0;       // remaining dash burst time
     this.dashCooldownLeft = 0;   // remaining cooldown before next dash
     this.dashDir = 1;            // -1 left, +1 right
@@ -156,6 +225,22 @@ class MainScene extends Phaser.Scene {
     this.isAttacking = false;
     this.fireballs = [];         // active fireball sprites in flight
     this.fireCooldownLeft = 0;   // remaining lockout before next airborne/crouched shot
+
+    // --- Enemy state ----------------------------------------------------
+    // At most one enemy exists at a time. `enemy` is the live sprite (or null).
+    // The enemy and its water drops are PLANTED on the pavement layer via
+    // `worldX` (screen x = worldX - pavementScroll()), so they ride the street
+    // as it scrolls and move along it at a constant pace independent of the
+    // scrolling the kid causes. `waterDrops` are its in-flight projectiles.
+    // Timers drive (re)spawning and throwing; `enemyDying` guards the death anim
+    // so it can't be re-triggered.
+    this.enemy = null;
+    this.enemyDying = false;
+    this.waterDrops = [];
+    this.enemySpawnTimer = this.randRange(ENEMY_SPAWN_MIN, ENEMY_SPAWN_MAX);
+    this.enemyThrowTimer = 0;
+    this.hitInvulnLeft = 0;      // invulnerability window after being hit
+    this.pendingReset = false;   // set on death; the full reset is applied next frame
 
     // Crouch state machine: 'none' (upright), 'crouching' (playing crouch),
     // 'crouched' (held down), 'standing' (playing standup). While not 'none'
@@ -275,6 +360,137 @@ class MainScene extends Phaser.Scene {
     this.fireballs.push(ball);
   }
 
+  // Random float in [min, max).
+  randRange(min, max) {
+    return min + Math.random() * (max - min);
+  }
+
+  // Screen-space scroll offset of the pavement layer, in screen px. A sprite
+  // planted on the pavement at world position worldX appears at
+  // worldX - pavementScroll(). This matches how the layer-4 tile art actually
+  // moves on screen (tilePositionX is texture-space and drawn at tileScale).
+  pavementScroll() {
+    return this.worldScroll * PARALLAX[PAVEMENT_LAYER] * this.tileScale;
+  }
+
+  // Spawn a single enemy just off the right edge, facing/walking left toward
+  // Cubee. The enemy is planted on the PAVEMENT layer: `worldX` is its position
+  // along the street, and screen x = worldX - pavementScroll(), so it rides the
+  // pavement exactly as it scrolls. On top of that it walks left at a constant
+  // ENEMY_SPEED along the pavement — its pace over the street is independent of
+  // the scrolling the kid causes.
+  spawnEnemy() {
+    const spawnScreenX = GAME_W + 60;
+    const e = this.add.sprite(spawnScreenX, GROUND_Y, 'enemy');
+    e.setOrigin(0.5, 1);          // feet on the ground line, like the player
+    e.setDepth(9);                // just below Cubee (depth 10)
+    e.setScale(ENEMY_SCALE);
+    e.setFlipX(true);             // face left (walking toward the kid)
+    e.play('enemy');
+    e.worldX = spawnScreenX + this.pavementScroll();   // plant on the pavement at this spot
+    this.enemy = e;
+    this.enemyDying = false;
+    this.enemyThrowTimer = this.randRange(ENEMY_THROW_MIN, ENEMY_THROW_MAX);
+  }
+
+  // Enemy hurls a water drop toward Cubee. Like the enemy, the drop is planted
+  // on the PAVEMENT layer: `worldX` is its position along the street and screen
+  // x = worldX - pavementScroll(), so it rides the pavement as it scrolls. Its
+  // velocity is aimed at the kid's world position (screen centre + scroll, torso
+  // height) at throw time, so it flies a straight line over the street toward
+  // where the kid is standing — independent of the scrolling the kid causes.
+  throwWaterDrop() {
+    if (!this.enemy || this.enemyDying) return;
+    const sx = this.enemy.x;
+    const sy = this.enemy.y - ENEMY_DROP_Y_OFFSET;
+    const worldX = sx + this.pavementScroll();     // start position on the pavement
+    // Target in the same world/pavement frame as worldX.
+    const targetWorldX = GAME_W / 2 + this.pavementScroll();
+    const targetY = GROUND_Y - 50;                 // aim at Cubee's torso
+    const dx = targetWorldX - worldX, dy = targetY - sy;
+    const len = Math.hypot(dx, dy) || 1;
+    const drop = this.add.sprite(sx, sy, 'water');
+    drop.setOrigin(0.5, 0.5);
+    drop.setDepth(9);
+    drop.play('water');
+    drop.vx = (dx / len) * ENEMY_DROP_SPEED;       // pavement-space velocity (px/s)
+    drop.vy = (dy / len) * ENEMY_DROP_SPEED;
+    drop.worldX = worldX;
+    drop.setFlipX(drop.vx < 0);                    // mirror when flying right→left
+    this.waterDrops.push(drop);
+  }
+
+  // Cubee took a hit: drop a life, start the invulnerability window, and flag a
+  // full reset once lives run out. The reset is deferred (applied at the start
+  // of the next update) so we never wipe the enemy/projectile arrays while a
+  // collision loop is still iterating them.
+  loseLife() {
+    if (this.hitInvulnLeft > 0 || this.pendingReset) return;  // invulnerable / already resetting
+    this.lives -= 1;
+    this.refreshLives();
+    this.hitInvulnLeft = HIT_INVULN;
+    if (this.lives <= 0) {
+      this.pendingReset = true;
+    }
+  }
+
+  // Full reset: destroy enemy/projectiles, restore lives and score, and put the
+  // world back to the start. Called when all lives are lost.
+  resetGame() {
+    if (this.enemy) { this.enemy.destroy(); this.enemy = null; }
+    this.enemyDying = false;
+    for (const d of this.waterDrops) d.destroy();
+    this.waterDrops = [];
+    for (const b of this.fireballs) b.destroy();
+    this.fireballs = [];
+    this.lives = this.maxLives;
+    this.refreshLives();
+    this.score = 0;
+    this.refreshScore();
+    this.worldScroll = 0;
+    for (let i = 0; i < this.bgLayers.length; i++) {
+      this.bgLayers[i].tilePositionX = 0;
+    }
+    this.hitInvulnLeft = 0;
+    this.pendingReset = false;
+    // Return Cubee to a clean grounded idle pose — death can occur mid-jump,
+    // mid-dash, or crouched, so clear all transient movement/action state and
+    // put the feet back on the ground line.
+    this.player.setAlpha(1);
+    this.player.y = GROUND_Y;
+    this.velocityY = 0;
+    this.isJumping = false;
+    this.jumpsUsed = 0;
+    this.isDashing = false;
+    this.dashUsed = false;
+    this.dashTimeLeft = 0;
+    this.dashCooldownLeft = 0;
+    this.isAttacking = false;
+    this.fireCooldownLeft = 0;
+    this.crouchState = 'none';
+    this.player.play('idle');
+    this.enemySpawnTimer = this.randRange(ENEMY_SPAWN_MIN, ENEMY_SPAWN_MAX);
+  }
+
+  // A player fireball hit the enemy: switch to the (non-looping) die animation,
+  // stop it moving/attacking, and remove it once the animation finishes. The
+  // next enemy is scheduled to spawn after the usual random delay.
+  killEnemy() {
+    if (!this.enemy || this.enemyDying) return;
+    this.enemyDying = true;
+    const dying = this.enemy;
+    dying.play('enemy_die');
+    dying.once('animationcomplete', () => {
+      dying.destroy();
+      if (this.enemy === dying) this.enemy = null;
+      this.enemyDying = false;
+      this.enemySpawnTimer = this.randRange(ENEMY_SPAWN_MIN, ENEMY_SPAWN_MAX);
+    });
+    // Score reward for a kill.
+    this.score += 100;
+    this.refreshScore();
+  }
+
   // Play an animation only if it isn't already the current one, so loops
   // aren't restarted every frame.
   setAnim(key) {
@@ -282,16 +498,36 @@ class MainScene extends Phaser.Scene {
     this.player.play(key);
   }
 
+  // Show exactly this.lives icons in the HUD (hide the rest). Call after
+  // changing this.lives.
+  refreshLives() {
+    for (let i = 0; i < this.lifeIcons.length; i++) {
+      this.lifeIcons[i].setVisible(i < this.lives);
+    }
+  }
+
+  // Render the current score as a zero-padded number. Call after changing
+  // this.score.
+  refreshScore() {
+    this.scoreText.setText(String(Math.floor(this.score)).padStart(6, '0'));
+  }
+
   // Screen-space rects {left, right, top} for every solid-pillar instance near
   // the view. Pillars are authored in the layer-4 texture (source px) and that
-  // texture repeats every SRC_TILE_W, so we scan the current tile plus its two
-  // neighbours (k = -1,0,1) to catch a pillar straddling either view edge as it
-  // scrolls in or out. worldScroll is unbounded; the ±1 tile scan handles it
-  // without pre-reducing it modulo the period.
+  // texture repeats every SRC_TILE_W, so we scan the tile currently under the
+  // view plus its two neighbours to catch a pillar straddling either view edge
+  // as it scrolls in or out. worldScroll is unbounded, so we can't scan a fixed
+  // window around tile 0 — instead we derive the base tile index from
+  // worldScroll (which tile's origin sits nearest the left view edge) and scan
+  // baseTile-1..baseTile+1 around it. This makes collision respect ALL repeats,
+  // not just the handful near source origin.
   activePillarRects() {
     const s = PILLAR_TILE_SCALE;
     const rects = [];
-    for (let k = -1; k <= 1; k++) {
+    // Tile index whose origin (k*SRC_TILE_W) is just left of the view's left
+    // edge in source px. worldScroll is in source px (screen = (sx-scroll)*s).
+    const baseTile = Math.floor(this.worldScroll / SRC_TILE_W);
+    for (let k = baseTile - 1; k <= baseTile + 1; k++) {
       const shift = k * SRC_TILE_W - this.worldScroll;
       for (const p of PILLARS_SRC) {
         const left = (p.x0 + shift) * s;
@@ -354,9 +590,17 @@ class MainScene extends Phaser.Scene {
       this.player.play('jump_up');
     }
 
-    // --- Dash: start on Ctrl, only while airborne (jumping), off cooldown --
-    if (dashJust && this.isJumping && !this.isDashing && this.dashCooldownLeft <= 0 && !crouchBusy) {
+    // --- Dash: start on Ctrl -------------------------------------------------
+    // Allowed either (a) while airborne — one dash per airborne stretch, gated
+    // by dashUsed (cleared on touchdown) — or (b) on the ground while moving in
+    // a held direction (walking OR running), for a fast forward burst; the
+    // ground dash is gated only by the cooldown. A held direction is required so
+    // a standing Ctrl press doesn't dash in place.
+    const airDashOk = this.isJumping && !this.dashUsed;
+    const groundDashOk = !this.isJumping && (left || right);
+    if (dashJust && (airDashOk || groundDashOk) && !this.isDashing && this.dashCooldownLeft <= 0 && !crouchBusy) {
       this.isDashing = true;
+      if (this.isJumping) this.dashUsed = true;   // consume the single air-dash
       this.dashTimeLeft = DASH_DURATION;
       this.dashCooldownLeft = DASH_COOLDOWN;
       this.dashGhostTimer = 0;
@@ -481,6 +725,111 @@ class MainScene extends Phaser.Scene {
       }
     }
 
+    // --- Enemy: spawn, walk, throw, collide -----------------------------
+    // Runs every frame (before the jump early-return below) so enemies keep
+    // moving and attacking while Cubee is airborne.
+    if (this.pendingReset) {
+      // A hit dropped the last life on a previous frame; apply the full reset
+      // now, at a safe point, before touching any enemy/projectile arrays.
+      this.resetGame();
+      return;
+    }
+    if (this.hitInvulnLeft > 0) this.hitInvulnLeft -= dt;
+
+    if (!this.enemy) {
+      // No enemy alive: count down and spawn the next one.
+      this.enemySpawnTimer -= dt;
+      if (this.enemySpawnTimer <= 0) this.spawnEnemy();
+    } else if (!this.enemyDying) {
+      // Walk left along the pavement at a constant pace (ENEMY_SPEED), then place
+      // the sprite at worldX - pavementScroll() so it rides the pavement layer as
+      // it scrolls. Because pavementScroll() uses the layer's real on-screen
+      // scroll (PARALLAX * tileScale), the enemy stays glued to the street and
+      // its walking pace over the street is independent of the kid's scrolling.
+      this.enemy.worldX -= ENEMY_SPEED * dt;
+      this.enemy.x = this.enemy.worldX - this.pavementScroll();
+
+      // Throw water drops from time to time — but only when the enemy is on
+      // screen AND the kid is IN FRONT of it. The enemy faces left, so "in front"
+      // means the kid (screen centre) is to its left, i.e. the enemy is to the
+      // right of centre but still within the view. Once the kid slips behind
+      // (enemy passes screen centre) it stops shooting rather than firing
+      // backwards, and it never shoots from off-screen. The timer still counts
+      // down so it throws promptly when a target is back in view.
+      this.enemyThrowTimer -= dt;
+      const onScreen = this.enemy.x <= GAME_W;
+      const kidInFront = this.enemy.x > GAME_W / 2;
+      if (this.enemyThrowTimer <= 0 && onScreen && kidInFront) {
+        this.throwWaterDrop();
+        this.enemyThrowTimer = this.randRange(ENEMY_THROW_MIN, ENEMY_THROW_MAX);
+      }
+
+      // Despawn once the enemy leaves the view on EITHER side, then schedule the
+      // next spawn. It normally exits left (walking past Cubee), but if the kid
+      // travels left fast the pavement scroll can carry the enemy back off the
+      // right edge — cull both so it can never get stuck off-screen (which would
+      // block new spawns and keep it throwing from out of view).
+      if (this.enemy.x < -80 || this.enemy.x > GAME_W + 80) {
+        this.enemy.destroy();
+        this.enemy = null;
+        this.enemySpawnTimer = this.randRange(ENEMY_SPAWN_MIN, ENEMY_SPAWN_MAX);
+      } else {
+        // Touch damage: enemy box overlapping Cubee's hurt box costs a life.
+        // While dashing, Cubee is intangible and passes safely through the
+        // enemy (dash is an evasive move); the invulnerability blink after a
+        // hit likewise blocks further touch damage until it expires.
+        const cx = GAME_W / 2;
+        const exOverlap = Math.abs(this.enemy.x - cx) < (ENEMY_HIT_HALF_W + PLAYER_HIT_HALF_W);
+        const feetClose = Math.abs(this.enemy.y - this.player.y) < PLAYER_HIT_TOP;
+        if (exOverlap && feetClose && !this.isDashing) this.loseLife();
+
+        // Fireball hit: a player fireball reaching the enemy kills it (die anim).
+        for (let i = this.fireballs.length - 1; i >= 0; i--) {
+          const b = this.fireballs[i];
+          if (Math.abs(b.x - this.enemy.x) < ENEMY_HIT_HALF_W &&
+              Math.abs(b.y - (this.enemy.y - this.enemy.displayHeight / 2)) < this.enemy.displayHeight / 2) {
+            b.destroy();
+            this.fireballs.splice(i, 1);
+            this.killEnemy();
+            break;
+          }
+        }
+      }
+    } else {
+      // Dying: keep the corpse riding the pavement while the death anim plays.
+      this.enemy.x = this.enemy.worldX - this.pavementScroll();
+    }
+
+    // --- Water drops: fly toward target, cull, and hit Cubee ------------
+    for (let i = this.waterDrops.length - 1; i >= 0; i--) {
+      const d = this.waterDrops[i];
+      // Advance along the pavement, then place on screen relative to the layer's
+      // scroll so the drop rides the pavement exactly like the enemy that threw
+      // it (its flight over the street is independent of the kid's scrolling).
+      d.worldX += d.vx * dt;
+      d.y += d.vy * dt;
+      d.x = d.worldX - this.pavementScroll();
+      const cx = GAME_W / 2;
+      // Dashing makes Cubee intangible — a water drop passes through without a
+      // hit (but keeps flying so it can still be dodged/expire normally).
+      const hitKid = !this.isDashing &&
+        Math.abs(d.x - cx) < (PLAYER_HIT_HALF_W + 12) &&
+        d.y > this.player.y - PLAYER_HIT_TOP && d.y < this.player.y;
+      const offscreen = d.x < -40 || d.x > GAME_W + 40 || d.y > GAME_H + 40;
+      if (hitKid) {
+        d.destroy();
+        this.waterDrops.splice(i, 1);
+        this.loseLife();
+        if (this.pendingReset) break;  // resetGame() will clear the array next frame
+      } else if (offscreen) {
+        d.destroy();
+        this.waterDrops.splice(i, 1);
+      }
+    }
+
+    // Blink Cubee during the invulnerability window as a hit indicator.
+    this.player.setAlpha(this.hitInvulnLeft > 0 && Math.floor(this.hitInvulnLeft * 12) % 2 === 0 ? 0.4 : 1);
+
     // Pillar rects in their post-scroll positions, reused by the vertical
     // (landing / walk-off) logic below.
     const pillars = this.activePillarRects();
@@ -525,6 +874,7 @@ class MainScene extends Phaser.Scene {
         this.velocityY = 0;
         this.isJumping = false;
         this.jumpsUsed = 0; // refill jumps on touchdown
+        this.dashUsed = false; // allow a fresh dash on the next jump
       }
       return; // jump animations take priority over walk/run/idle
     }
@@ -565,24 +915,39 @@ class MainScene extends Phaser.Scene {
   }
 }
 
-window.__game = new Phaser.Game({
-  type: Phaser.AUTO,
-  parent: 'game',
-  pixelArt: true,
-  backgroundColor: '#87ceeb',
-  // Scale the fixed 800×400 world to fit any screen (desktop or mobile),
-  // centered, letterboxed as needed. Pointer coords stay in world space.
-  // Fill the whole screen while preserving the 800×400 aspect ratio (letterbox
-  // as needed), matching FlashbackJS. Scale.FIT measures the parent — which CSS
-  // pins to the full viewport — so expandParent is off to stop Phaser shrinking
-  // it back to the game's own size.
-  scale: {
-    mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
+// Boot Phaser once the pixel font is loaded so HUD text renders in it from the
+// first frame (falls back to a timeout if the Font Loading API is unavailable).
+function bootGame() {
+  window.__game = new Phaser.Game({
+    type: Phaser.AUTO,
     parent: 'game',
-    expandParent: false,
-    width: GAME_W,
-    height: GAME_H,
-  },
-  scene: MainScene,
-});
+    pixelArt: true,
+    backgroundColor: '#87ceeb',
+    // Scale the fixed 800×400 world to fit any screen (desktop or mobile),
+    // centered, letterboxed as needed. Pointer coords stay in world space.
+    // Fill the whole screen while preserving the 800×400 aspect ratio (letterbox
+    // as needed), matching FlashbackJS. Scale.FIT measures the parent — which CSS
+    // pins to the full viewport — so expandParent is off to stop Phaser shrinking
+    // it back to the game's own size.
+    scale: {
+      mode: Phaser.Scale.FIT,
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+      parent: 'game',
+      expandParent: false,
+      width: GAME_W,
+      height: GAME_H,
+    },
+    scene: MainScene,
+  });
+}
+
+if (document.fonts && document.fonts.load) {
+  // Kick off the load, then boot on ready (with a safety timeout).
+  document.fonts.load('16px "Press Start 2P"').catch(() => {});
+  Promise.race([
+    document.fonts.ready,
+    new Promise((resolve) => setTimeout(resolve, 3000)),
+  ]).then(bootGame);
+} else {
+  bootGame();
+}
