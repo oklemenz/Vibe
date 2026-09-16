@@ -2,7 +2,8 @@
 
 ## Cubee
 
-- Play: [Click to Start](https://oklemenz.github.io/Vibe/Cubee/index.html)
+- Play: [Click to Start](https://cubee.oklemenz.de)
+- GitHub: [Click to Start](https://oklemenz.github.io/Vibe/Cubee/index.html)
 - Source: [Directory](./Cubee)
 
 ## Quoridor
